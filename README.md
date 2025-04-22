@@ -15,6 +15,28 @@ A Virtual LAN (VLAN) solution for gaming that allows players to connect as if th
 - **Server**: Signaling server for connection establishment
 - **Client**: GUI application for creating and joining game networks
 
+## Server Environment Variables
+
+The server component can be configured using the following environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Port number for the server to listen on | `8080` |
+| `ALLOW_ALL_ORIGINS` | Allow WebSocket connections from any origin | `true` |
+| `PASSWORD_PATTERN` | Regular expression for validating room passwords | `^\d{4}$` |
+| `MAX_ROOMS` | Maximum number of rooms allowed | `100` |
+| `MAX_CLIENTS_PER_ROOM` | Maximum number of clients allowed in a room | `10` |
+| `LOG_LEVEL` | Level of logging (info, debug) | `info` |
+| `IDLE_TIMEOUT_SECONDS` | Timeout for inactive connections in seconds | `60` |
+| `PING_INTERVAL_SECONDS` | WebSocket ping interval in seconds | `30` |
+| `READ_BUFFER_SIZE` | WebSocket read buffer size | `1024` |
+| `WRITE_BUFFER_SIZE` | WebSocket write buffer size | `1024` |
+| `SUPABASE_URL` | Supabase URL for room persistence (required) | `""` |
+| `SUPABASE_KEY` | Supabase API key for authentication (required) | `""` |
+| `SUPABASE_ROOMS_TABLE` | Supabase table name for storing rooms | `rooms` |
+
+**Note:** `SUPABASE_URL` and `SUPABASE_KEY` are required for the server to function properly.
+
 ## Release Process
 
 This project uses GitHub Actions to automatically build and release both the server and client components.

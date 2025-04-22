@@ -39,6 +39,8 @@ type Config struct {
 	SupabaseURL         string
 	SupabaseKey         string
 	SupabaseRoomsTable  string
+	CleanupInterval     time.Duration
+	RoomExpiryDays      int
 }
 
 // loadConfig loads configuration from environment variables
@@ -57,6 +59,8 @@ func loadConfig() Config {
 		SupabaseURL:       getEnv("SUPABASE_URL", ""),
 		SupabaseKey:       getEnv("SUPABASE_KEY", ""),
 		SupabaseRoomsTable: getEnv("SUPABASE_ROOMS_TABLE", "rooms"),
+		CleanupInterval:   time.Hour * time.Duration(getEnvInt("CLEANUP_INTERVAL_HOURS", 24)),
+		RoomExpiryDays:    getEnvInt("ROOM_EXPIRY_DAYS", 30),
 	}
 	
 	log.Printf("Server configuration loaded: %+v", config)
@@ -658,6 +662,27 @@ func (s *Server) removeClient(conn *websocket.Conn, roomID string) {
 	log.Printf("Client %s left room %s", conn.RemoteAddr().String(), roomID)
 }
 
+func (s *Server) deleteStaleRooms() {
+	expiryDuration := time.Hour * 24 * time.Duration(s.config.RoomExpiryDays)
+	cutoffTime := time.Now().Add(-expiryDuration)
+
+	var staleRooms []SupabaseRoom
+	err := s.supabase.DB.From(s.config.SupabaseRoomsTable).Select("*").Lt("last_active", cutoffTime).Execute(&staleRooms)
+	if err != nil {
+		log.Printf("Error fetching stale rooms: %v", err)
+		return
+	}
+
+	for _, room := range staleRooms {
+		err := s.deleteRoomFromSupabase(room.ID)
+		if err != nil {
+			log.Printf("Error deleting stale room %s: %v", room.ID, err)
+		} else {
+			log.Printf("Deleted stale room %s", room.ID)
+		}
+	}
+}
+
 func main() {
 	// Load configuration from environment variables
 	config = loadConfig()
@@ -696,6 +721,15 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
+
+	// Periodically delete stale rooms
+	go func() {
+		ticker := time.NewTicker(config.CleanupInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			server.deleteStaleRooms()
+		}
+	}()
 	
 	log.Printf("Server starting on :%s", config.Port)
 	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
