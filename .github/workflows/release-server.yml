@@ -1,0 +1,61 @@
+name: Release Server
+
+on:
+  push:
+    tags:
+      - 'server-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          
+      - name: Install dependencies
+        run: go get -v ./...
+        
+      - name: Build for multiple platforms
+        run: |
+          # Build for Linux
+          GOOS=linux GOARCH=amd64 go build -v -o govpn-server-linux-amd64 ./server.go
+          
+          # Build for Windows
+          GOOS=windows GOARCH=amd64 go build -v -o govpn-server-windows-amd64.exe ./server.go
+          
+          # Build for macOS
+          GOOS=darwin GOARCH=amd64 go build -v -o govpn-server-darwin-amd64 ./server.go
+          GOOS=darwin GOARCH=arm64 go build -v -o govpn-server-darwin-arm64 ./server.go
+          
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            govpn-server-linux-amd64
+            govpn-server-windows-amd64.exe
+            govpn-server-darwin-amd64
+            govpn-server-darwin-arm64
+          name: Server Release ${{ github.ref_name }}
+          body: |
+            # Server Release ${{ github.ref_name }}
+            
+            GoVPN server component release
+            
+            ## Downloads
+            - Linux (amd64): `govpn-server-linux-amd64`
+            - Windows (amd64): `govpn-server-windows-amd64.exe`
+            - macOS (Intel/amd64): `govpn-server-darwin-amd64`
+            - macOS (Apple Silicon/arm64): `govpn-server-darwin-arm64`
+          draft: false
+          prerelease: false

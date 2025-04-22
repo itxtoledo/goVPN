@@ -1,0 +1,101 @@
+name: Release Client
+
+on:
+  push:
+    tags:
+      - 'client-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release Client
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      
+      - name: Install dependencies
+        run: |
+          go get -v ./...
+          go install fyne.io/fyne/v2/cmd/fyne@latest
+      
+      - name: Install required system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+
+      - name: Build Linux version
+        run: |
+          go build -o govpn-client-linux ./client.go
+          tar -czf govpn-client-linux.tar.gz govpn-client-linux
+      
+      - name: Package Linux app
+        run: fyne package -os linux -icon icon.png -name GoVPN -release
+        continue-on-error: true
+      
+      - name: Build Windows version
+        run: |
+          GOOS=windows GOARCH=amd64 go build -o govpn-client-windows.exe ./client.go
+          zip -r govpn-client-windows.zip govpn-client-windows.exe
+      
+      - name: Package Windows app
+        run: fyne package -os windows -icon icon.png -name GoVPN -release
+        continue-on-error: true
+        
+      - name: Setup macOS cross-compilation
+        run: |
+          # Install dependencies for macOS cross-compilation
+          brew install FiloSottile/musl-cross/musl-cross
+          brew install mingw-w64
+        continue-on-error: true
+      
+      - name: Build macOS versions
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -o govpn-client-darwin-amd64 ./client.go
+          GOOS=darwin GOARCH=arm64 go build -o govpn-client-darwin-arm64 ./client.go
+          tar -czf govpn-client-darwin-amd64.tar.gz govpn-client-darwin-amd64
+          tar -czf govpn-client-darwin-arm64.tar.gz govpn-client-darwin-arm64
+        continue-on-error: true
+        
+      - name: Create placeholder icon if needed
+        run: |
+          if [ ! -f icon.png ]; then
+            # Create a simple placeholder icon if none exists
+            convert -size 256x256 xc:red -fill white -gravity center -draw "text 0,0 'GoVPN'" icon.png
+          fi
+        continue-on-error: true
+        
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            govpn-client-linux.tar.gz
+            govpn-client-windows.zip
+            govpn-client-darwin-amd64.tar.gz
+            govpn-client-darwin-arm64.tar.gz
+            *.AppImage
+            *.exe
+            *.dmg
+            *.app.zip
+          name: Client Release ${{ github.ref_name }}
+          body: |
+            # Client Release ${{ github.ref_name }}
+            
+            GoVPN client component release
+            
+            ## Downloads
+            - Linux: `govpn-client-linux.tar.gz` or `.AppImage` file
+            - Windows: `govpn-client-windows.zip` or `.exe` installer
+            - macOS (Intel): `govpn-client-darwin-amd64.tar.gz` or `.dmg`
+            - macOS (Apple Silicon): `govpn-client-darwin-arm64.tar.gz`
+          draft: false
+          prerelease: false
