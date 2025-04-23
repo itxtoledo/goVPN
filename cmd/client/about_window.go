@@ -2,6 +2,7 @@ package main
 
 import (
 	"image/color"
+	"net/url"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -23,6 +24,11 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 		Window: ui.createWindow("About - goVPN", 400, 300, false),
 	}
 
+	// Add handler for when the window is closed
+	aboutWindow.Window.SetOnClosed(func() {
+		aboutWindow.Window = nil
+	})
+
 	return aboutWindow
 }
 
@@ -31,6 +37,10 @@ func (aw *AboutWindow) Show() {
 	// If the window has been destroyed, create a new one
 	if aw.Window == nil {
 		aw.Window = aw.UI.createWindow("About - goVPN", 400, 300, false)
+		// Re-add the handler for when the window is closed
+		aw.Window.SetOnClosed(func() {
+			aw.Window = nil
+		})
 	}
 
 	// Initialize necessary components before showing the window
@@ -67,6 +77,21 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 		fyne.TextStyle{},
 	)
 
+	// Social links
+	githubURL, _ := url.Parse("https://github.com/itxtoledo/goVPN")
+	twitterURL, _ := url.Parse("https://x.com/itxtoledo")
+
+	githubLink := widget.NewHyperlink("GitHub: github.com/itxtoledo/goVPN", githubURL)
+	githubLink.Alignment = fyne.TextAlignCenter
+
+	twitterLink := widget.NewHyperlink("X: @itxtoledo", twitterURL)
+	twitterLink.Alignment = fyne.TextAlignCenter
+
+	linksContainer := container.NewVBox(
+		githubLink,
+		twitterLink,
+	)
+
 	// Logo (colored text as a placeholder for an image)
 	logo := canvas.NewText("goVPN", color.NRGBA{R: 0, G: 180, B: 100, A: 255})
 	logo.TextSize = 48
@@ -89,6 +114,8 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 		description,
 		widget.NewSeparator(),
 		authors,
+		widget.NewSeparator(),
+		linksContainer,
 		closeButton,
 	)
 

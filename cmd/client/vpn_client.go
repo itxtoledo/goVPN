@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/itxtoledo/govpn/libs/crypto_utils"
 	_ "github.com/mattn/go-sqlite3"
@@ -83,6 +84,27 @@ func (v *VPNClient) loadSettings() {
 // Run inicia o cliente VPN
 func (v *VPNClient) Run() {
 	log.Println("Iniciando cliente goVPN")
+
+	// Attempt to connect to the backend in a background goroutine
+	go func() {
+		log.Println("Attempting to connect to backend server...")
+		err := v.NetworkManager.Connect()
+		if err != nil {
+			log.Printf("Background connection attempt failed: %v", err)
+		} else {
+			log.Println("Successfully connected to backend server in background")
+			v.NetworkManager.GetRoomList() // Fetch the room list while we're at it
+
+			// Update the UI power button state after successful connection
+			// This is safe because the Fyne UI uses a queue system that handles UI updates from goroutines
+			if v.UI != nil {
+				// A small delay to ensure UI is fully initialized
+				// This is important as UI might not be ready immediately after app start
+				time.Sleep(500 * time.Millisecond)
+				v.UI.refreshNetworkList()
+			}
+		}
+	}()
 
 	// Inicia a interface gráfica
 	v.UI.Start()

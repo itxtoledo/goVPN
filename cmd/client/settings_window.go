@@ -24,8 +24,13 @@ type SettingsWindow struct {
 func NewSettingsWindow(ui *UIManager) *SettingsWindow {
 	settingsWindow := &SettingsWindow{
 		UI:     ui,
-		Window: ui.createWindow("Configurações - goVPN", 400, 300, false),
+		Window: ui.createWindow("Settings - goVPN", 500, 350, false),
 	}
+
+	// Adiciona o manipulador para quando a janela for fechada
+	settingsWindow.Window.SetOnClosed(func() {
+		settingsWindow.Window = nil
+	})
 
 	return settingsWindow
 }
@@ -34,12 +39,10 @@ func NewSettingsWindow(ui *UIManager) *SettingsWindow {
 func (sw *SettingsWindow) Show() {
 	// Se a janela já foi fechada, recria
 	if sw.Window == nil {
-		sw.Window = sw.UI.createWindow("Configurações - goVPN", 500, 350, false)
-
-		// Configura o manipulador de fechamento da janela
-		sw.Window.SetCloseIntercept(func() {
-			// Apenas esconde a janela em vez de fechá-la completamente
-			sw.Window.Hide()
+		sw.Window = sw.UI.createWindow("Settings - goVPN", 500, 350, false)
+		// Re-adiciona o manipulador para quando a janela for fechada
+		sw.Window.SetOnClosed(func() {
+			sw.Window = nil
 		})
 	}
 

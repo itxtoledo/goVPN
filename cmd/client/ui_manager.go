@@ -201,8 +201,7 @@ func (ui *UIManager) setupTabs() {
 	ui.TabContainer = container.NewAppTabs(
 		container.NewTabItem("Home", ui.HomeTabComponent.GetContainer()),
 		container.NewTabItem("Network", ui.NetworkTabComponent.GetContainer()),
-		container.NewTabItem("Sobre", ui.AboutTabComponent.GetContainer()),
-		container.NewTabItem("Configurações", ui.SettingsTabComponent.GetContainer()),
+		// About and Settings tabs removed as they're now accessible from header buttons
 	)
 
 	// Limita o tamanho máximo do contêiner de tabs

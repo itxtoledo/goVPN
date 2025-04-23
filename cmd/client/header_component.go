@@ -2,9 +2,11 @@
 package main
 
 import (
+	"image/color"
 	"log"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
@@ -13,10 +15,14 @@ import (
 
 // HeaderComponent represents the application header
 type HeaderComponent struct {
-	UI            *UIManager
-	PowerButton   *widget.Button
-	IPInfoLabel   *widget.Label
-	RoomNameLabel *widget.Label
+	UI             *UIManager
+	PowerButton    *widget.Button
+	AboutButton    *widget.Button
+	SettingsButton *widget.Button
+	IPInfoLabel    *widget.Label
+	RoomNameLabel  *widget.Label
+	BackendStatus  *canvas.Rectangle // Using rectangle instead of circle for better visibility
+	StatusLabel    *widget.Label     // Text label showing connection state
 }
 
 // NewHeaderComponent creates a new instance of the header component
@@ -36,6 +42,33 @@ func (h *HeaderComponent) init() {
 		h.handlePowerButtonClick()
 	})
 	h.PowerButton.Importance = widget.DangerImportance
+
+	// Create About button
+	h.AboutButton = widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
+		h.handleAboutButtonClick()
+	})
+	h.AboutButton.Importance = widget.LowImportance
+
+	// Create Settings button
+	h.SettingsButton = widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
+		h.handleSettingsButtonClick()
+	})
+	h.SettingsButton.Importance = widget.LowImportance
+
+	// Create backend connection status indicator (using rectangle for better visibility)
+	h.BackendStatus = &canvas.Rectangle{
+		FillColor:   color.RGBA{255, 0, 0, 255}, // Red for disconnected
+		StrokeColor: color.RGBA{200, 0, 0, 255},
+		StrokeWidth: 1,
+	}
+
+	// Create status label with smaller text
+	h.StatusLabel = widget.NewLabel("Disconnected")
+	h.StatusLabel.TextStyle = fyne.TextStyle{Bold: false} // Remove bold for smaller appearance
+	h.StatusLabel.Alignment = fyne.TextAlignLeading
+	h.StatusLabel.TextStyle.Monospace = true // Using monospace for compact text
+
+	h.updateBackendStatus() // Initialize status
 
 	// Label for IP information
 	h.IPInfoLabel = widget.NewLabel("YOUR IPV4")
@@ -68,15 +101,54 @@ func (h *HeaderComponent) handlePowerButtonClick() {
 	}
 }
 
+// handleAboutButtonClick handles the click on the About button
+func (h *HeaderComponent) handleAboutButtonClick() {
+	// Ensure About window is initialized
+	if h.UI.AboutWindow == nil {
+		h.UI.AboutWindow = NewAboutWindow(h.UI)
+	}
+	h.UI.AboutWindow.Show()
+}
+
+// handleSettingsButtonClick handles the click on the Settings button
+func (h *HeaderComponent) handleSettingsButtonClick() {
+	// Ensure Settings window is initialized
+	if h.UI.SettingsWindow == nil {
+		h.UI.SettingsWindow = NewSettingsWindow(h.UI)
+	}
+	h.UI.SettingsWindow.Show()
+}
+
 // CreateHeaderContainer creates the header container
 func (h *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 	// Defining a fixed height for the header
 	headerHeight := 60.0
 	maxWidth := 300.0
 
-	// Container for the power button centered vertically
+	// Container for the power button centered vertically with left margin
 	powerContainer := container.New(layout.NewCenterLayout(), h.PowerButton)
 	powerContainer.Resize(fyne.NewSize(40, float32(headerHeight)))
+
+	// Configure backend status indicator with better visibility
+	h.BackendStatus.Resize(fyne.NewSize(10, 10)) // Small rectangle
+	h.updateBackendStatus()                      // Update colors based on current state
+
+	// Create a container for the status indicator with label in horizontal layout
+	statusContainer := container.NewHBox(
+		h.BackendStatus,      // The rectangle comes first in a horizontal layout
+		widget.NewLabel(" "), // Small space between rectangle and text
+		h.StatusLabel,        // Then the text
+	)
+	statusContainer.Resize(fyne.NewSize(100, 20)) // Smaller width to prevent taking too much space
+
+	// Container for buttons at the top
+	buttonBar := container.NewHBox(
+		statusContainer, // Status indicator with text at the left side
+		layout.NewSpacer(),
+		h.AboutButton,
+		h.SettingsButton,
+	)
+	buttonBar.Resize(fyne.NewSize(float32(maxWidth-40), 30)) // Adjusted for padding
 
 	// Container for the IP information centered vertically
 	// Reducing width to ensure it doesn't exceed the limit
@@ -89,31 +161,39 @@ func (h *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 
 	// Main header container with horizontal layout and padding
 	headerTop := container.New(
-		layout.NewHBoxLayout(),
-		powerContainer,
-		layout.NewSpacer(),
-		ipContainer,
+		layout.NewPaddedLayout(), // Using padded layout for horizontal spacing
+		container.New(
+			layout.NewHBoxLayout(),
+			powerContainer,
+			layout.NewSpacer(),
+			ipContainer,
+		),
 	)
-	headerTop.Resize(fyne.NewSize(float32(maxWidth), float32(headerHeight)))
+	headerTop.Resize(fyne.NewSize(float32(maxWidth-40), float32(headerHeight))) // Adjusted for padding
 
 	// Room name label with controlled size
 	h.RoomNameLabel.Wrapping = fyne.TextTruncate
-	h.RoomNameLabel.Resize(fyne.NewSize(280, 20))
+	h.RoomNameLabel.Resize(fyne.NewSize(260, 20)) // Adjusted for padding
 
 	roomNameContainer := container.NewHBox(
 		layout.NewSpacer(),
 		h.RoomNameLabel,
 	)
-	roomNameContainer.Resize(fyne.NewSize(float32(maxWidth), 20))
+	roomNameContainer.Resize(fyne.NewSize(float32(maxWidth-40), 20)) // Adjusted for padding
 
 	// Complete header container with fixed size
-	header := container.NewVBox(
+	innerHeader := container.NewVBox(
+		buttonBar,
 		headerTop,
 		roomNameContainer,
 	)
-	header.Resize(fyne.NewSize(float32(maxWidth), float32(headerHeight+20)))
+	innerHeader.Resize(fyne.NewSize(float32(maxWidth-40), float32(headerHeight+50))) // Adjusted for padding
 
-	return container.NewMax(header)
+	// Create padding container with 20px padding on all sides
+	paddedContainer := container.NewPadded(innerHeader)
+	paddedContainer.Resize(fyne.NewSize(float32(maxWidth), float32(headerHeight+50+40))) // Added padding height
+
+	return container.NewMax(paddedContainer)
 }
 
 // updatePowerButtonState updates the visual state of the power button
@@ -148,6 +228,38 @@ func (h *HeaderComponent) updateRoomName() {
 
 	h.RoomNameLabel.SetText("Room: " + roomName)
 	h.RoomNameLabel.Refresh()
+}
+
+// updateBackendStatus updates the backend connection status indicator
+func (h *HeaderComponent) updateBackendStatus() {
+	// Get connection state from network manager
+	if h.UI.VPN.NetworkManager == nil {
+		// Network manager not initialized yet
+		h.BackendStatus.FillColor = color.RGBA{128, 128, 128, 255} // Gray for unknown state
+		h.BackendStatus.StrokeColor = color.RGBA{128, 128, 128, 255}
+		h.StatusLabel.SetText("Initializing...")
+		return
+	}
+
+	switch h.UI.VPN.NetworkManager.GetConnectionState() {
+	case ConnectionStateConnected:
+		// Connected - Green
+		h.BackendStatus.FillColor = color.RGBA{0, 255, 0, 255}
+		h.BackendStatus.StrokeColor = color.RGBA{0, 200, 0, 255}
+		h.StatusLabel.SetText("Connected")
+	case ConnectionStateConnecting:
+		// Connecting - Yellow
+		h.BackendStatus.FillColor = color.RGBA{255, 255, 0, 255}
+		h.BackendStatus.StrokeColor = color.RGBA{200, 200, 0, 255}
+		h.StatusLabel.SetText("Connecting...")
+	case ConnectionStateDisconnected:
+		// Disconnected - Red
+		h.BackendStatus.FillColor = color.RGBA{255, 0, 0, 255}
+		h.BackendStatus.StrokeColor = color.RGBA{200, 0, 0, 255}
+		h.StatusLabel.SetText("Disconnected")
+	}
+	h.BackendStatus.Refresh()
+	h.StatusLabel.Refresh()
 }
 
 // loadPowerButtonResource loads the power button SVG icon

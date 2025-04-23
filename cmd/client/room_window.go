@@ -173,6 +173,9 @@ func (rw *RoomWindow) refreshRoomList() {
 func (rw *RoomWindow) showCreateRoomDialog() {
 	// Check if connected to the backend
 	if !rw.UI.VPN.NetworkManager.IsConnected {
+		// Show alert immediately informing the user they're not connected
+		rw.UI.ShowMessage("Not Connected", "You are not connected to the backend server. Connection is required to create a network.")
+
 		// Try to connect to the server in a separate goroutine
 		go func() {
 			err := rw.UI.VPN.NetworkManager.Connect()

@@ -13,6 +13,13 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
+// Connection state constants
+const (
+	ConnectionStateDisconnected = iota
+	ConnectionStateConnecting
+	ConnectionStateConnected
+)
+
 // NetworkManager gerencia as conexões de rede do cliente
 type NetworkManager struct {
 	VPN               *VPNClient
@@ -378,4 +385,20 @@ func (n *NetworkManager) GetFormattedPublicKey(publicKey string) string {
 
 	// Trunca a chave para exibição: primeiros 8 caracteres + ... + últimos 8 caracteres
 	return publicKey[:8] + "..." + publicKey[len(publicKey)-8:]
+}
+
+// IsBackendConnected returns whether the network manager is connected to the backend server
+func (n *NetworkManager) IsBackendConnected() bool {
+	return n.WSConn != nil && n.IsConnected
+}
+
+// GetConnectionState returns the current connection state
+func (n *NetworkManager) GetConnectionState() int {
+	if n.WSConn == nil {
+		return ConnectionStateDisconnected
+	}
+	if n.IsConnected {
+		return ConnectionStateConnected
+	}
+	return ConnectionStateConnecting
 }
