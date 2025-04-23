@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"encoding/json"
@@ -6,29 +6,28 @@ import (
 
 // Room representa uma sala virtual na rede VPN
 type Room struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Password   string `json:"password,omitempty"` // Omitido em respostas públicas
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Password    string `json:"password,omitempty"` // Omitido em respostas públicas
 	ClientCount int    `json:"clientCount"`
-	Status     string `json:"status,omitempty"`    // Campo apenas para o cliente
-	IsCreator  bool   `json:"isCreator,omitempty"` // Campo apenas para o cliente
+	Status      string `json:"status,omitempty"`    // Campo apenas para o cliente
+	IsCreator   bool   `json:"isCreator,omitempty"` // Campo apenas para o cliente
 }
 
 // Message representa uma mensagem websocket
 type Message struct {
-	Type           string          `json:"type"`
-	RoomID         string          `json:"roomID,omitempty"`
-	RoomName       string          `json:"roomName,omitempty"`
-	Password       string          `json:"password,omitempty"`
-	PublicKey      string          `json:"publicKey,omitempty"`
-	TargetID       string          `json:"targetID,omitempty"`
-	Signature      string          `json:"signature,omitempty"`
-	Data           json.RawMessage `json:"data,omitempty"`
-	Candidate      json.RawMessage `json:"candidate,omitempty"`
-	Offer          json.RawMessage `json:"offer,omitempty"`
-	Answer         json.RawMessage `json:"answer,omitempty"`
-	ClientID       string          `json:"clientID,omitempty"`
-	DestinationID  string          `json:"destinationID,omitempty"`
+	Type          string          `json:"type"`
+	RoomID        string          `json:"roomID,omitempty"`
+	RoomName      string          `json:"roomName,omitempty"`
+	Password      string          `json:"password,omitempty"`
+	PublicKey     string          `json:"publicKey,omitempty"`
+	TargetID      string          `json:"targetID,omitempty"`
+	Signature     string          `json:"signature,omitempty"`
+	Data          json.RawMessage `json:"data,omitempty"`
+	Candidate     json.RawMessage `json:"candidate,omitempty"`
+	Offer         json.RawMessage `json:"offer,omitempty"`
+	Answer        json.RawMessage `json:"answer,omitempty"`
+	DestinationID string          `json:"destinationID,omitempty"`
 }
 
 // NetworkPacket representa um pacote de rede tunelado pela VPN

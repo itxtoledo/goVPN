@@ -10,14 +10,83 @@ A Virtual LAN (VLAN) solution for gaming that allows players to connect as if th
 - Cross-platform support (Windows, macOS, Linux)
 - Local data storage using SQLite
 
+## Arquitetura do Sistema
+
+O GoVPN é organizado em uma arquitetura cliente-servidor modular, com comunicação P2P entre os clientes para minimizar a latência. A arquitetura está estruturada da seguinte forma:
+
+### Bibliotecas Compartilhadas
+
+- **libs/crypto_utils**: Implementa funções criptográficas para garantir a segurança da comunicação, incluindo:
+  - Geração de chaves RSA
+  - Assinatura e verificação de mensagens
+  - Criptografia AES-GCM para os dados transmitidos
+  - Geração de identificadores seguros
+
+- **libs/models**: Define as estruturas de dados compartilhadas entre cliente e servidor:
+  - Room: Representa uma sala de jogo virtual
+  - Message: Define o formato das mensagens trocadas via WebSocket
+  - NetworkPacket: Estrutura para pacotes de rede tunelados pela VPN
+  - ClientInfo: Informações sobre os clientes conectados
+
+- **libs/network**: Gerencia a rede virtual entre os clientes:
+  - VirtualNetwork: Classe principal que coordena a comunicação entre peers
+  - Mapeamento de endereços IP virtuais
+  - Encapsulamento e roteamento de pacotes entre clientes
+
+### Serviços
+
+- **services/server**: Servidor de sinalização que facilita:
+  - Criação e gerenciamento de salas
+  - Autenticação das operações via assinaturas RSA
+  - Estabelecimento de conexões WebRTC entre clientes
+  - Persistência de dados em Supabase
+
+- **services/client**: Aplicação cliente com interface gráfica que permite:
+  - Criação e entrada em salas de jogo
+  - Gerenciamento da conexão P2P via WebRTC
+  - Armazenamento local de configurações em SQLite
+  - Interface gráfica construída com Fyne
+
+### Fluxo de Comunicação
+
+1. **Fase de Sinalização**:
+   - O servidor atua como intermediário para estabelecer conexões iniciais
+   - Clientes se autenticam e trocam informações sobre salas disponíveis
+   
+2. **Estabelecimento de Conexão P2P**:
+   - Troca de ofertas WebRTC, respostas e candidatos ICE via servidor
+   - Uso de servidores STUN para descoberta de endereços públicos
+   - Fallback para servidores TURN quando a conexão direta falha
+
+3. **Comunicação Direta**:
+   - Após estabelecida, a comunicação ocorre diretamente entre os clientes
+   - Dados são criptografados ponta a ponta (chave derivada da senha da sala)
+
+4. **Rede Virtual**:
+   - Cada cliente recebe um endereço IP virtual (formato 10.0.0.x)
+   - Pacotes de rede são encapsulados, criptografados e enviados pelo canal de dados WebRTC
+
+## Project Structure
+
+GoVPN is organized into a library-and-services structure for better maintainability:
+
+- **libs/**: Contains shared libraries used by both client and server components
+  - **libs/crypto_utils/**: Cryptographic utilities for secure communication
+  - **libs/models/**: Shared data structures used throughout the application
+  - **libs/network/**: Network management functionality for virtual networking
+
+- **services/**: Contains the main applications
+  - **services/server/**: Server implementation for handling signaling and room management
+  - **services/client/**: Client application with GUI for creating and joining game networks
+
+This organization allows the server and client components to be built, deployed, and versioned independently while sharing common functionality through the libraries.
+
 ## Components
 
 - **Server**: Signaling server for connection establishment
 - **Client**: GUI application for creating and joining game networks
 
 ## Server Environment Variables
-
-The server component can be configured using the following environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -33,7 +102,6 @@ The server component can be configured using the following environment variables
 | `WRITE_BUFFER_SIZE` | WebSocket write buffer size | `1024` |
 | `SUPABASE_URL` | Supabase URL for room persistence (required) | `""` |
 | `SUPABASE_KEY` | Supabase API key for authentication (required) | `""` |
-| `SUPABASE_ROOMS_TABLE` | Supabase table name for storing rooms | `rooms` |
 
 **Note:** `SUPABASE_URL` and `SUPABASE_KEY` are required for the server to function properly.
 
@@ -76,21 +144,45 @@ This will trigger the client release workflow which builds:
 ### Server
 
 ```bash
-go build -o govpn-server ./server.go
+# Build the server executable
+go build -o govpn-server ./cmd/server/main.go
 ```
 
 ### Client
 
 ```bash
-go build -o govpn-client ./client.go
+# Build the client executable
+go build -o govpn-client ./cmd/client/main.go
 ```
 
 For packaged applications using Fyne:
 
 ```bash
 go install fyne.io/fyne/v2/cmd/fyne@latest
-fyne package -os windows -icon icon.png -name GoVPN
+# Make sure you're in the project root directory
+cd cmd/client
+fyne package -os windows -icon ../../icon.png -name GoVPN
 # Or for other platforms: linux, darwin
+```
+
+## Running the Application
+
+### Server
+
+```bash
+# Set required environment variables
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-key"
+
+# Run the server
+./govpn-server
+```
+
+### Client
+
+```bash
+# Run the client
+./govpn-client
 ```
 
 ## License

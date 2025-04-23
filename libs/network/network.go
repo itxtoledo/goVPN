@@ -1,4 +1,4 @@
-package main
+package network
 
 import (
 	"encoding/json"
@@ -7,10 +7,22 @@ import (
 	"net"
 	"sync"
 
-	"golang.org/x/crypto/pbkdf2"
 	"crypto/sha256"
+
+	"github.com/itxtoledo/govpn/libs/crypto_utils"
 	"github.com/pion/webrtc/v3"
+	"golang.org/x/crypto/pbkdf2"
 )
+
+// NetworkPacket representa um pacote de dados na rede virtual
+type NetworkPacket struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Protocol    string `json:"protocol"`
+	Port        int    `json:"port"`
+	Data        []byte `json:"data"`
+	Encrypted   bool   `json:"encrypted"`
+}
 
 // VirtualNetwork gerencia a rede virtual entre os clientes
 type VirtualNetwork struct {
@@ -33,6 +45,11 @@ func NewVirtualNetwork(roomID, password string) *VirtualNetwork {
 		roomPassword:   password,
 		encryptTraffic: true,
 	}
+}
+
+// GetLocalIP retorna o endereço IP local da rede virtual
+func (v *VirtualNetwork) GetLocalIP() string {
+	return v.localIP
 }
 
 // AddPeer adiciona um novo peer à rede virtual
@@ -71,7 +88,7 @@ func (v *VirtualNetwork) AddPeer(peerID string, dataChannel *webrtc.DataChannel)
 	// Se a VPN estiver configurada para criptografar o tráfego, criptografa o pacote
 	if v.encryptTraffic {
 		key := pbkdf2.Key([]byte(v.roomPassword), []byte(v.roomID), 4096, 32, sha256.New)
-		data, err = encrypt(data, key)
+		data, err = crypto_utils.Encrypt(data, key)
 		if err != nil {
 			return fmt.Errorf("erro ao criptografar pacote: %v", err)
 		}
@@ -104,7 +121,7 @@ func (v *VirtualNetwork) SendPacket(destIP string, protocol string, port int, da
 
 	// Encontra o peer com o IP de destino
 	var targetPeerID string
-	for peerID, iface := range v.interfaces {
+	for peerID := range v.interfaces {
 		// Normalmente teríamos que consultar o IP da interface, mas estamos usando uma simplificação
 		// onde o ID do peer é mapeado para um IP gerado de forma sequencial
 		ifaceIP := fmt.Sprintf("10.0.0.%s", peerID[len(peerID)-1:])
@@ -136,7 +153,7 @@ func (v *VirtualNetwork) SendPacket(destIP string, protocol string, port int, da
 	// Se necessário, criptografa o pacote
 	if v.encryptTraffic {
 		key := pbkdf2.Key([]byte(v.roomPassword), []byte(v.roomID), 4096, 32, sha256.New)
-		packetData, err = encrypt(packetData, key)
+		packetData, err = crypto_utils.Encrypt(packetData, key)
 		if err != nil {
 			return fmt.Errorf("erro ao criptografar pacote: %v", err)
 		}
@@ -157,7 +174,7 @@ func (v *VirtualNetwork) HandleIncomingPacket(peerID string, data []byte) ([]byt
 	if v.encryptTraffic {
 		key := pbkdf2.Key([]byte(v.roomPassword), []byte(v.roomID), 4096, 32, sha256.New)
 		var err error
-		data, err = decrypt(data, key)
+		data, err = crypto_utils.Decrypt(data, key)
 		if err != nil {
 			return nil, fmt.Errorf("erro ao descriptografar pacote: %v", err)
 		}

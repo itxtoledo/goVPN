@@ -21,30 +21,47 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/nedpals/supabase-go"
+	"github.com/itxtoledo/govpn/libs/models" // Import the models package
+	"github.com/joho/godotenv"               // Import godotenv package
+	"github.com/supabase-community/supabase-go"
 )
+
+// loadEnvFile attempts to load environment variables from a .env file if it exists
+func loadEnvFile() {
+	// Try to load from .env file
+	err := godotenv.Load()
+	if err != nil {
+		// Only log at debug level since the .env file might not exist, which is normal
+		log.Printf("No .env file found or error loading .env file: %v", err)
+	} else {
+		log.Println("Loaded environment variables from .env file")
+	}
+}
 
 // Config structure to hold our server configuration
 type Config struct {
-	Port                string
-	AllowAllOrigins     bool
-	PasswordPattern     string
-	MaxRooms            int
-	MaxClientsPerRoom   int
-	LogLevel            string
-	IdleTimeout         time.Duration
-	PingInterval        time.Duration
-	ReadBufferSize      int
-	WriteBufferSize     int
-	SupabaseURL         string
-	SupabaseKey         string
-	SupabaseRoomsTable  string
-	CleanupInterval     time.Duration
-	RoomExpiryDays      int
+	Port               string
+	AllowAllOrigins    bool
+	PasswordPattern    string
+	MaxRooms           int
+	MaxClientsPerRoom  int
+	LogLevel           string
+	IdleTimeout        time.Duration
+	PingInterval       time.Duration
+	ReadBufferSize     int
+	WriteBufferSize    int
+	SupabaseURL        string
+	SupabaseKey        string
+	SupabaseRoomsTable string
+	CleanupInterval    time.Duration
+	RoomExpiryDays     int
 }
 
 // loadConfig loads configuration from environment variables
 func loadConfig() Config {
+	// First try to load environment variables from a .env file
+	loadEnvFile()
+
 	config := Config{
 		Port:              getEnv("PORT", "8080"),
 		AllowAllOrigins:   getEnvBool("ALLOW_ALL_ORIGINS", true),
@@ -58,11 +75,10 @@ func loadConfig() Config {
 		WriteBufferSize:   getEnvInt("WRITE_BUFFER_SIZE", 1024),
 		SupabaseURL:       getEnv("SUPABASE_URL", ""),
 		SupabaseKey:       getEnv("SUPABASE_KEY", ""),
-		SupabaseRoomsTable: getEnv("SUPABASE_ROOMS_TABLE", "rooms"),
 		CleanupInterval:   time.Hour * time.Duration(getEnvInt("CLEANUP_INTERVAL_HOURS", 24)),
 		RoomExpiryDays:    getEnvInt("ROOM_EXPIRY_DAYS", 30),
 	}
-	
+
 	log.Printf("Server configuration loaded: %+v", config)
 	return config
 }
@@ -98,46 +114,27 @@ func getEnvBool(key string, fallback bool) bool {
 	return value == "true" || value == "1" || value == "yes" || value == "y"
 }
 
-var config Config
+var serverConfig Config
 var upgrader websocket.Upgrader
 var passwordRegex *regexp.Regexp
 
-// Room represents a virtual room
-type Room struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Password    string         `json:"password"`
-	PublicKey   *rsa.PublicKey `json:"-"` // Not stored in Supabase directly
-	PublicKeyB64 string        `json:"public_key"` // Stored as base64 string in Supabase
-	CreatedAt   time.Time      `json:"created_at"`
-	LastActive  time.Time      `json:"last_active"`
+// ServerRoom extends the basic Room model with server-specific fields
+type ServerRoom struct {
+	models.Room                 // Embed the Room from models package
+	PublicKey    *rsa.PublicKey `json:"-"`          // Not stored in Supabase directly
+	PublicKeyB64 string         `json:"public_key"` // Stored as base64 string in Supabase
+	CreatedAt    time.Time      `json:"created_at"`
+	LastActive   time.Time      `json:"last_active"`
 }
 
 // SupabaseRoom is a struct for room data stored in Supabase
 type SupabaseRoom struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Password    string    `json:"password"`
-	PublicKey   string    `json:"public_key"` // Base64 encoded public key
-	CreatedAt   time.Time `json:"created_at"`
-	LastActive  time.Time `json:"last_active"`
-}
-
-// Message represents a WebSocket message
-type Message struct {
-	Type           string          `json:"type"`
-	RoomID         string          `json:"roomID,omitempty"`
-	RoomName       string          `json:"roomName,omitempty"`
-	Password       string          `json:"password,omitempty"`
-	PublicKey      string          `json:"publicKey,omitempty"`
-	TargetID       string          `json:"targetID,omitempty"`
-	Signature      string          `json:"signature,omitempty"`
-	Data           json.RawMessage `json:"data,omitempty"`
-	Candidate      json.RawMessage `json:"candidate,omitempty"`      // ICE candidate
-	Offer          json.RawMessage `json:"offer,omitempty"`         // WebRTC offer
-	Answer         json.RawMessage `json:"answer,omitempty"`        // WebRTC answer
-	ClientID       string          `json:"clientID,omitempty"`      // Unique client ID
-	DestinationID  string          `json:"destinationID,omitempty"` // Target client for signaling
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Password   string    `json:"password"`
+	PublicKey  string    `json:"public_key"` // Base64 encoded public key
+	CreatedAt  time.Time `json:"created_at"`
+	LastActive time.Time `json:"last_active"`
 }
 
 // Server manages clients and rooms
@@ -145,6 +142,7 @@ type Server struct {
 	clients      map[*websocket.Conn]string
 	networks     map[string][]*websocket.Conn
 	roomCreators map[string]*websocket.Conn
+	publicKeys   map[string]string // Maps public key to roomID
 	mu           sync.RWMutex
 	config       Config
 	supabase     *supabase.Client
@@ -152,17 +150,22 @@ type Server struct {
 
 func NewServer(cfg Config) (*Server, error) {
 	if cfg.SupabaseURL == "" || cfg.SupabaseKey == "" {
-		return nil, errors.New("Supabase URL and API key are required")
+		return nil, errors.New("supabase URL and API key are required")
 	}
 
-	supaClient := supabase.CreateClient(cfg.SupabaseURL, cfg.SupabaseKey)
-	
+	supaClient, err := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseKey, nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Supabase client: %w", err)
+	}
+
 	return &Server{
 		clients:      make(map[*websocket.Conn]string),
 		networks:     make(map[string][]*websocket.Conn),
 		roomCreators: make(map[string]*websocket.Conn),
+		publicKeys:   make(map[string]string),
 		config:       cfg,
-		supabase:     &supaClient,
+		supabase:     supaClient,
 	}, nil
 }
 
@@ -184,7 +187,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	for {
-		var msg Message
+		var msg models.Message
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			s.handleDisconnect(conn)
@@ -215,65 +218,72 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 // Fetch a room from Supabase
-func (s *Server) fetchRoom(roomID string) (*Room, error) {
+func (s *Server) fetchRoom(roomID string) (*ServerRoom, error) {
 	var results []SupabaseRoom
-	err := s.supabase.DB.From(s.config.SupabaseRoomsTable).Select("*").Eq("id", roomID).Execute(&results)
+	data, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Select("*", "", false).Eq("id", roomID).Execute()
 	if err != nil {
 		return nil, err
 	}
-	
-	if len(results) == 0 {
-		return nil, errors.New("Room not found")
+
+	err = json.Unmarshal(data, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal room data: %w", err)
 	}
-	
+
+	if len(results) == 0 {
+		return nil, errors.New("room not found")
+	}
+
 	// Parse the public key from the base64 string
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(results[0].PublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid public key format: %v", err)
+		return nil, fmt.Errorf("invalid public key format: %v", err)
 	}
-	
+
 	pubKey, err := x509.ParsePKIXPublicKey(pubKeyBytes)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse public key: %v", err)
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
 	}
-	
+
 	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
 	if !ok {
-		return nil, errors.New("Public key is not RSA")
+		return nil, errors.New("public key is not RSA")
 	}
-	
-	room := &Room{
-		ID:          results[0].ID,
-		Name:        results[0].Name,
-		Password:    results[0].Password,
-		PublicKey:   rsaPubKey,
+
+	room := &ServerRoom{
+		Room: models.Room{
+			ID:       results[0].ID,
+			Name:     results[0].Name,
+			Password: results[0].Password,
+		},
+		PublicKey:    rsaPubKey,
 		PublicKeyB64: results[0].PublicKey,
-		CreatedAt:   results[0].CreatedAt,
-		LastActive:  results[0].LastActive,
+		CreatedAt:    results[0].CreatedAt,
+		LastActive:   results[0].LastActive,
 	}
-	
+
 	return room, nil
 }
 
 // Create a room in Supabase
-func (s *Server) createRoomInSupabase(room Room) error {
+func (s *Server) createRoomInSupabase(room ServerRoom) error {
 	supaRoom := SupabaseRoom{
-		ID:        room.ID,
-		Name:      room.Name,
-		Password:  room.Password,
-		PublicKey: room.PublicKeyB64,
-		CreatedAt: room.CreatedAt,
+		ID:         room.ID,
+		Name:       room.Name,
+		Password:   room.Password,
+		PublicKey:  room.PublicKeyB64,
+		CreatedAt:  room.CreatedAt,
 		LastActive: room.LastActive,
 	}
-	
-	var result SupabaseRoom
-	err := s.supabase.DB.From(s.config.SupabaseRoomsTable).Insert(supaRoom).Execute(&result)
+
+	_, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Insert(supaRoom, false, "", "", "").Execute()
 	return err
 }
 
 // Delete a room from Supabase
 func (s *Server) deleteRoomFromSupabase(roomID string) error {
-	return s.supabase.DB.From(s.config.SupabaseRoomsTable).Delete().Eq("id", roomID).Execute(nil)
+	_, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Delete("", "").Eq("id", roomID).Execute()
+	return err
 }
 
 // Update room last activity time in Supabase
@@ -281,110 +291,103 @@ func (s *Server) updateRoomActivity(roomID string) error {
 	updates := map[string]interface{}{
 		"last_active": time.Now(),
 	}
-	return s.supabase.DB.From(s.config.SupabaseRoomsTable).Update(updates).Eq("id", roomID).Execute(nil)
+	_, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Update(updates, "", "").Eq("id", roomID).Execute()
+	return err
 }
 
 // Update room name in Supabase
 func (s *Server) updateRoomName(roomID string, newName string) error {
 	updates := map[string]interface{}{
-		"name": newName,
+		"name":        newName,
 		"last_active": time.Now(),
 	}
-	return s.supabase.DB.From(s.config.SupabaseRoomsTable).Update(updates).Eq("id", roomID).Execute(nil)
+	_, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Update(updates, "", "").Eq("id", roomID).Execute()
+	return err
 }
 
-// Count total rooms in Supabase
-func (s *Server) countRoomsInSupabase() (int, error) {
-	type CountResult struct {
-		Count int `json:"count"`
-	}
-	
-	var result []CountResult
-	err := s.supabase.DB.From(s.config.SupabaseRoomsTable).Select("count", "exact").Execute(&result)
-	if err != nil {
-		return 0, err
-	}
-	
-	if len(result) == 0 {
-		return 0, errors.New("Failed to get room count")
-	}
-	
-	return result[0].Count, nil
-}
-
-func (s *Server) handleCreateRoom(conn *websocket.Conn, msg Message) {
+func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check room limit
-	roomCount, err := s.countRoomsInSupabase()
-	if err != nil {
-		log.Printf("Error counting rooms: %v", err)
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Error accessing database"`)})
-		return
-	}
-	
-	if roomCount >= s.config.MaxRooms {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Maximum room limit reached"`)})
-		return
-	}
-
-	if msg.RoomName == "" || msg.Password == "" || msg.PublicKey == "" || msg.ClientID == "" {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room name, password, public key, and client ID are required"`)})
+	if msg.RoomName == "" || msg.Password == "" || msg.PublicKey == "" {
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room name, password, and public key are required"`)})
 		return
 	}
 
 	if !passwordRegex.MatchString(msg.Password) {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Password does not match required pattern"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Password does not match required pattern"`)})
 		return
 	}
 
+	// Check if this public key has already created a room
+	if existingRoomID, found := s.publicKeys[msg.PublicKey]; found {
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(fmt.Sprintf(`"This public key has already created room: %s"`, existingRoomID))})
+		return
+	}
+
+	// Query Supabase for rooms with this public key
+	var results []SupabaseRoom
+	data, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Select("id", "", false).Eq("public_key", msg.PublicKey).Execute()
+	if err == nil {
+		err = json.Unmarshal(data, &results)
+		if err == nil && len(results) > 0 {
+			// Public key already has a room
+			conn.WriteJSON(models.Message{Type: "Error", Data: []byte(fmt.Sprintf(`"This public key has already created room: %s"`, results[0].ID))})
+			return
+		}
+	}
+
 	roomID := generateRoomID(msg.RoomName)
-	
+
 	// Check if room exists
 	_, err = s.fetchRoom(roomID)
 	if err == nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room ID conflict"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room ID conflict"`)})
 		return
 	}
 
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(msg.PublicKey)
 	if err != nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Invalid public key"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Invalid public key"`)})
 		return
 	}
 	pubKey, err := x509.ParsePKIXPublicKey(pubKeyBytes)
 	if err != nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Failed to parse public key"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Failed to parse public key"`)})
 		return
 	}
 	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
 	if !ok {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Public key is not RSA"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Public key is not RSA"`)})
 		return
 	}
 
-	room := Room{
-		ID:          roomID,
-		Name:        msg.RoomName,
-		Password:    msg.Password,
-		PublicKey:   rsaPubKey,
+	room := ServerRoom{
+		Room: models.Room{
+			ID:          roomID,
+			Name:        msg.RoomName,
+			Password:    msg.Password,
+			ClientCount: 1, // Creator is the first client
+		},
+		PublicKey:    rsaPubKey,
 		PublicKeyB64: msg.PublicKey,
-		CreatedAt:   time.Now(),
-		LastActive:  time.Now(),
+		CreatedAt:    time.Now(),
+		LastActive:   time.Now(),
 	}
-	
+
 	// Store room in Supabase
 	err = s.createRoomInSupabase(room)
 	if err != nil {
 		log.Printf("Error creating room in Supabase: %v", err)
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Error creating room in database"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Error creating room in database"`)})
 		return
 	}
-	
-	// Store creator connection 
+
+	// Store creator connection and public key mapping
 	s.roomCreators[roomID] = conn
 	s.clients[conn] = roomID
+	s.publicKeys[msg.PublicKey] = roomID // Track that this public key has created a room
+
 	if _, exists := s.networks[roomID]; !exists {
 		s.networks[roomID] = []*websocket.Conn{}
 	}
@@ -393,33 +396,33 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg Message) {
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
 		log.Printf("Room %s (%s) created by %s", roomID, msg.RoomName, conn.RemoteAddr().String())
 	}
-	conn.WriteJSON(Message{Type: "RoomCreated", RoomID: roomID, RoomName: msg.RoomName, Password: msg.Password, ClientID: msg.ClientID})
+	conn.WriteJSON(models.Message{Type: "RoomCreated", RoomID: roomID, RoomName: msg.RoomName, Password: msg.Password, PublicKey: msg.PublicKey})
 }
 
-func (s *Server) handleJoinRoom(conn *websocket.Conn, msg Message) {
+func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Fetch room from Supabase
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
 	if msg.Password != room.Password {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Incorrect password"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Incorrect password"`)})
 		return
 	}
 
-	if msg.ClientID == "" {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Client ID is required"`)})
+	if msg.PublicKey == "" {
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Public key is required"`)})
 		return
 	}
-	
+
 	// Check if room is full
 	if len(s.networks[msg.RoomID]) >= s.config.MaxClientsPerRoom {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room is full"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room is full"`)})
 		return
 	}
 
@@ -428,7 +431,8 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg Message) {
 		s.networks[msg.RoomID] = []*websocket.Conn{}
 	}
 	s.networks[msg.RoomID] = append(s.networks[msg.RoomID], conn)
-	
+	room.ClientCount = len(s.networks[msg.RoomID])
+
 	// Update last activity time
 	err = s.updateRoomActivity(msg.RoomID)
 	if err != nil && (s.config.LogLevel == "debug") {
@@ -436,29 +440,43 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg Message) {
 	}
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		log.Printf("Client %s (%s) joined room %s", conn.RemoteAddr().String(), msg.ClientID, msg.RoomID)
+		log.Printf("Client %s joined room %s", conn.RemoteAddr().String(), msg.RoomID)
 	}
 
-	// Notify peers and share client IDs
+	// Notifica a entrada do cliente para os peers existentes
+	// e informa ao novo cliente sobre os peers atuais
 	for _, peer := range s.networks[msg.RoomID] {
 		if peer != conn {
-			peer.WriteJSON(Message{Type: "PeerJoined", RoomID: msg.RoomID, ClientID: msg.ClientID})
-			conn.WriteJSON(Message{Type: "PeerJoined", RoomID: msg.RoomID, ClientID: s.clients[peer]})
+			// Informa aos peers que um novo cliente entrou
+			peer.WriteJSON(models.Message{
+				Type:      "PeerJoined",
+				RoomID:    msg.RoomID,
+				PublicKey: msg.PublicKey,
+			})
+
+			// Informa ao novo cliente sobre os peers existentes
+			// Precisamos de um mapa para armazenar as chaves públicas por conexão
+			// Como uma simplificação, enviamos apenas o IP remoto
+			conn.WriteJSON(models.Message{
+				Type:      "PeerJoined",
+				RoomID:    msg.RoomID,
+				PublicKey: peer.RemoteAddr().String(), // Simplificação: ideal seria ter um mapa de chaves públicas
+			})
 		}
 	}
 }
 
-func (s *Server) handleOffer(conn *websocket.Conn, msg Message) {
+func (s *Server) handleOffer(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	roomID := s.clients[conn]
 	for _, peer := range s.networks[roomID] {
 		if peer.RemoteAddr().String() == msg.DestinationID {
-			peer.WriteJSON(Message{
+			peer.WriteJSON(models.Message{
 				Type:          "Offer",
 				RoomID:        msg.RoomID,
-				ClientID:      msg.ClientID,
+				PublicKey:     msg.PublicKey,
 				DestinationID: msg.DestinationID,
 				Offer:         msg.Offer,
 			})
@@ -467,17 +485,17 @@ func (s *Server) handleOffer(conn *websocket.Conn, msg Message) {
 	}
 }
 
-func (s *Server) handleAnswer(conn *websocket.Conn, msg Message) {
+func (s *Server) handleAnswer(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	roomID := s.clients[conn]
 	for _, peer := range s.networks[roomID] {
 		if peer.RemoteAddr().String() == msg.DestinationID {
-			peer.WriteJSON(Message{
+			peer.WriteJSON(models.Message{
 				Type:          "Answer",
 				RoomID:        msg.RoomID,
-				ClientID:      msg.ClientID,
+				PublicKey:     msg.PublicKey,
 				DestinationID: msg.DestinationID,
 				Answer:        msg.Answer,
 			})
@@ -486,17 +504,17 @@ func (s *Server) handleAnswer(conn *websocket.Conn, msg Message) {
 	}
 }
 
-func (s *Server) handleCandidate(conn *websocket.Conn, msg Message) {
+func (s *Server) handleCandidate(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	roomID := s.clients[conn]
 	for _, peer := range s.networks[roomID] {
 		if peer.RemoteAddr().String() == msg.DestinationID {
-			peer.WriteJSON(Message{
+			peer.WriteJSON(models.Message{
 				Type:          "Candidate",
 				RoomID:        msg.RoomID,
-				ClientID:      msg.ClientID,
+				PublicKey:     msg.PublicKey,
 				DestinationID: msg.DestinationID,
 				Candidate:     msg.Candidate,
 			})
@@ -505,7 +523,7 @@ func (s *Server) handleCandidate(conn *websocket.Conn, msg Message) {
 	}
 }
 
-func (s *Server) verifySignature(msg Message, room Room) bool {
+func (s *Server) verifySignature(msg models.Message, room ServerRoom) bool {
 	if msg.Signature == "" {
 		return false
 	}
@@ -529,88 +547,88 @@ func (s *Server) verifySignature(msg Message, room Room) bool {
 	return err == nil
 }
 
-func (s *Server) handleKick(conn *websocket.Conn, msg Message) {
+func (s *Server) handleKick(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
 	if !s.verifySignature(msg, *room) {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
 		return
 	}
 
 	for _, peer := range s.networks[msg.RoomID] {
 		if peer.RemoteAddr().String() == msg.TargetID {
-			peer.WriteJSON(Message{Type: "Kicked", RoomID: msg.RoomID})
+			peer.WriteJSON(models.Message{Type: "Kicked", RoomID: msg.RoomID})
 			peer.Close()
 			s.removeClient(peer, msg.RoomID)
 			log.Printf("Client %s kicked from room %s", msg.TargetID, msg.RoomID)
-			conn.WriteJSON(Message{Type: "KickSuccess", RoomID: msg.RoomID, TargetID: msg.TargetID})
+			conn.WriteJSON(models.Message{Type: "KickSuccess", RoomID: msg.RoomID, TargetID: msg.TargetID})
 			return
 		}
 	}
-	conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Target client not found"`)})
+	conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Target client not found"`)})
 }
 
-func (s *Server) handleRename(conn *websocket.Conn, msg Message) {
+func (s *Server) handleRename(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
 	if !s.verifySignature(msg, *room) {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
 		return
 	}
 
 	err = s.updateRoomName(msg.RoomID, msg.RoomName)
 	if err != nil {
 		log.Printf("Error updating room name: %v", err)
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Error updating room name in database"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Error updating room name in database"`)})
 		return
 	}
-	
+
 	log.Printf("Room %s renamed to %s", msg.RoomID, msg.RoomName)
 
 	for _, peer := range s.networks[msg.RoomID] {
-		peer.WriteJSON(Message{Type: "RoomRenamed", RoomID: msg.RoomID, RoomName: msg.RoomName})
+		peer.WriteJSON(models.Message{Type: "RoomRenamed", RoomID: msg.RoomID, RoomName: msg.RoomName})
 	}
-	conn.WriteJSON(Message{Type: "RenameSuccess", RoomID: msg.RoomID, RoomName: msg.RoomName})
+	conn.WriteJSON(models.Message{Type: "RenameSuccess", RoomID: msg.RoomID, RoomName: msg.RoomName})
 }
 
-func (s *Server) handleDelete(conn *websocket.Conn, msg Message) {
+func (s *Server) handleDelete(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
 	if !s.verifySignature(msg, *room) {
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
 		return
 	}
 
 	err = s.deleteRoomFromSupabase(msg.RoomID)
 	if err != nil {
 		log.Printf("Error deleting room from Supabase: %v", err)
-		conn.WriteJSON(Message{Type: "Error", Data: []byte(`"Error deleting room from database"`)})
+		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Error deleting room from database"`)})
 		return
 	}
 
 	for _, peer := range s.networks[msg.RoomID] {
-		peer.WriteJSON(Message{Type: "RoomDeleted", RoomID: msg.RoomID})
+		peer.WriteJSON(models.Message{Type: "RoomDeleted", RoomID: msg.RoomID})
 		peer.Close()
 	}
 
@@ -623,7 +641,7 @@ func (s *Server) handleDelete(conn *websocket.Conn, msg Message) {
 	}
 
 	log.Printf("Room %s deleted", msg.RoomID)
-	conn.WriteJSON(Message{Type: "DeleteSuccess", RoomID: msg.RoomID})
+	conn.WriteJSON(models.Message{Type: "DeleteSuccess", RoomID: msg.RoomID})
 }
 
 func (s *Server) handleDisconnect(conn *websocket.Conn) {
@@ -666,10 +684,19 @@ func (s *Server) deleteStaleRooms() {
 	expiryDuration := time.Hour * 24 * time.Duration(s.config.RoomExpiryDays)
 	cutoffTime := time.Now().Add(-expiryDuration)
 
+	// Format the cutoffTime to ISO 8601 format which is compatible with Supabase timestamp
+	cutoffTimeStr := cutoffTime.Format(time.RFC3339)
+
 	var staleRooms []SupabaseRoom
-	err := s.supabase.DB.From(s.config.SupabaseRoomsTable).Select("*").Lt("last_active", cutoffTime).Execute(&staleRooms)
+	data, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Select("*", "", false).Lt("last_active", cutoffTimeStr).Execute()
 	if err != nil {
 		log.Printf("Error fetching stale rooms: %v", err)
+		return
+	}
+
+	err = json.Unmarshal(data, &staleRooms)
+	if err != nil {
+		log.Printf("Error unmarshalling stale rooms data: %v", err)
 		return
 	}
 
@@ -683,39 +710,40 @@ func (s *Server) deleteStaleRooms() {
 	}
 }
 
-func main() {
+// RunServer starts the VPN server on the specified port
+func RunServer() {
 	// Load configuration from environment variables
-	config = loadConfig()
-	
+	serverConfig = loadConfig()
+
 	// Check if Supabase configuration is provided
-	if config.SupabaseURL == "" || config.SupabaseKey == "" {
+	if serverConfig.SupabaseURL == "" || serverConfig.SupabaseKey == "" {
 		log.Fatal("Supabase URL and API key are required. Please set SUPABASE_URL and SUPABASE_KEY environment variables")
 	}
-	
+
 	// Configure WebSocket upgrader
 	upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { 
-			return config.AllowAllOrigins
+		CheckOrigin: func(r *http.Request) bool {
+			return serverConfig.AllowAllOrigins
 		},
-		ReadBufferSize:  config.ReadBufferSize,
-		WriteBufferSize: config.WriteBufferSize,
+		ReadBufferSize:  serverConfig.ReadBufferSize,
+		WriteBufferSize: serverConfig.WriteBufferSize,
 	}
-	
+
 	// Compile password regex
 	var err error
-	passwordRegex, err = regexp.Compile(config.PasswordPattern)
+	passwordRegex, err = regexp.Compile(serverConfig.PasswordPattern)
 	if err != nil {
-		log.Fatalf("Invalid password pattern '%s': %v", config.PasswordPattern, err)
+		log.Fatalf("Invalid password pattern '%s': %v", serverConfig.PasswordPattern, err)
 	}
-	
+
 	// Create and start the server
-	server, err := NewServer(config)
+	server, err := NewServer(serverConfig)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
 
 	http.HandleFunc("/ws", server.handleWebSocket)
-	
+
 	// Add health check endpoint
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -724,13 +752,17 @@ func main() {
 
 	// Periodically delete stale rooms
 	go func() {
-		ticker := time.NewTicker(config.CleanupInterval)
+		ticker := time.NewTicker(serverConfig.CleanupInterval)
 		defer ticker.Stop()
 		for range ticker.C {
 			server.deleteStaleRooms()
 		}
 	}()
-	
-	log.Printf("Server starting on :%s", config.Port)
-	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
+
+	log.Printf("Server starting on :%s", serverConfig.Port)
+	log.Fatal(http.ListenAndServe(":"+serverConfig.Port, nil))
+}
+
+func main() {
+	RunServer()
 }
