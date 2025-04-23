@@ -7,7 +7,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// HomeTabComponent representa o conteúdo da aba Home
+// HomeTabComponent represents the content of the Home tab
 type HomeTabComponent struct {
 	UI           *UIManager
 	Container    *fyne.Container
@@ -15,7 +15,7 @@ type HomeTabComponent struct {
 	EmptyContent *fyne.Container
 }
 
-// NewHomeTabComponent cria uma nova instância do componente da aba Home
+// NewHomeTabComponent creates a new instance of the Home tab component
 func NewHomeTabComponent(ui *UIManager, networkTree *NetworkTreeComponent) *HomeTabComponent {
 	comp := &HomeTabComponent{
 		UI:          ui,
@@ -23,8 +23,8 @@ func NewHomeTabComponent(ui *UIManager, networkTree *NetworkTreeComponent) *Home
 		Container:   container.NewMax(),
 	}
 
-	// Define tamanho máximo para o container
-	comp.Container.Resize(fyne.NewSize(280, 500)) // Um pouco menos que o tamanho da janela
+	// Define maximum size for the container
+	comp.Container.Resize(fyne.NewSize(280, 500)) // A bit smaller than the window size
 
 	comp.createEmptyContent()
 	comp.updateContent()
@@ -32,10 +32,10 @@ func NewHomeTabComponent(ui *UIManager, networkTree *NetworkTreeComponent) *Home
 	return comp
 }
 
-// createEmptyContent cria o conteúdo a ser exibido quando não há redes disponíveis
+// createEmptyContent creates the content to be displayed when no networks are available
 func (h *HomeTabComponent) createEmptyContent() {
-	// Criação dos botões para quando não há redes
-	createNetButton := widget.NewButton("Criar uma Rede", func() {
+	// Creating buttons for when there are no networks
+	createNetButton := widget.NewButton("Create a Network", func() {
 		if h.UI.RoomWindow == nil {
 			h.UI.RoomWindow = NewRoomWindow(h.UI)
 		}
@@ -43,18 +43,18 @@ func (h *HomeTabComponent) createEmptyContent() {
 	})
 	createNetButton.Importance = widget.HighImportance
 
-	connectNetButton := widget.NewButton("Conectar a uma Rede", func() {
+	connectNetButton := widget.NewButton("Connect to a Network", func() {
 		if h.UI.ConnectWindow == nil {
 			h.UI.ConnectWindow = NewConnectWindow(h.UI)
 		}
 		h.UI.ConnectWindow.Show()
 	})
 
-	// Limita o tamanho máximo dos botões
+	// Limits the maximum size of buttons
 	createNetButton.Resize(fyne.NewSize(260, 40))
 	connectNetButton.Resize(fyne.NewSize(260, 40))
 
-	// Criando um texto informativo com status online/offline dinâmico
+	// Creating an informative text with dynamic online/offline status
 	infoText := "This area will list your networks and peers. You are now " +
 		func() string {
 			if h.UI.VPN.IsConnected {
@@ -64,33 +64,33 @@ func (h *HomeTabComponent) createEmptyContent() {
 		}() +
 		", but this computer is not yet a member in a goVPN network."
 
-	// Texto informativo com alinhamento centralizado
+	// Informative text with centered alignment
 	statusText := widget.NewLabelWithStyle(
 		infoText,
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Italic: true},
 	)
 
-	// Limita o tamanho dos textos para evitar quebra de linha não intencional
+	// Limits the size of texts to avoid unintentional line breaking
 	statusText.Wrapping = fyne.TextWrapWord
 	statusText.Resize(fyne.NewSize(260, 80))
 
-	// Centralizando todos os textos horizontalmente
-	title := widget.NewLabelWithStyle("Sem redes disponíveis", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	// Centering all texts horizontally
+	title := widget.NewLabelWithStyle("No networks available", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	title.Resize(fyne.NewSize(260, 30))
 
-	description := widget.NewLabelWithStyle("Você não está conectado a nenhuma rede. Escolha uma opção:",
+	description := widget.NewLabelWithStyle("You are not connected to any network. Choose an option:",
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	description.Resize(fyne.NewSize(260, 40))
 	description.Wrapping = fyne.TextWrapWord
 
-	// Container de botões mais compacto
+	// More compact button container
 	buttonContainer := container.NewVBox(
 		createNetButton,
 		connectNetButton,
 	)
 
-	// Conteúdo principal com tamanho controlado
+	// Main content with controlled size
 	h.EmptyContent = container.NewVBox(
 		title,
 		widget.NewSeparator(),
@@ -100,26 +100,26 @@ func (h *HomeTabComponent) createEmptyContent() {
 		statusText,
 	)
 
-	// Define um tamanho fixo para o container vazio
+	// Define a fixed size for the empty container
 	h.EmptyContent.Resize(fyne.NewSize(280, 400))
 }
 
-// updateContent atualiza o conteúdo da aba Home com base no status da conexão
+// updateContent updates the content of the Home tab based on the connection status
 func (h *HomeTabComponent) updateContent() {
 	h.Container.Objects = nil // Remove all objects
 
 	if len(h.UI.NetworkUsers) == 0 && !h.UI.VPN.IsConnected {
-		// Usando um layout mais simples para evitar expansão indesejada da janela
+		// Using a simpler layout to avoid unwanted window expansion
 		h.Container.Add(container.NewCenter(h.EmptyContent))
 	} else {
-		// Exibe a árvore de rede quando há redes ou está conectado
+		// Display the network tree when there are networks or is connected
 		h.Container.Add(h.NetworkTree.GetNetworkTree())
 	}
 
 	h.Container.Refresh()
 }
 
-// GetContainer retorna o container da aba Home
+// GetContainer returns the Home tab container
 func (h *HomeTabComponent) GetContainer() *fyne.Container {
 	return h.Container
 }

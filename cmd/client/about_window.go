@@ -9,78 +9,78 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// AboutWindow gerencia a interface "Sobre"
+// AboutWindow manages the "About" interface
 type AboutWindow struct {
 	UI        *UIManager
 	Window    fyne.Window
 	Container *fyne.Container
 }
 
-// NewAboutWindow cria uma nova janela "Sobre"
+// NewAboutWindow creates a new "About" window
 func NewAboutWindow(ui *UIManager) *AboutWindow {
 	aboutWindow := &AboutWindow{
 		UI:     ui,
-		Window: ui.createWindow("Sobre - goVPN", 400, 300, false),
+		Window: ui.createWindow("About - goVPN", 400, 300, false),
 	}
 
 	return aboutWindow
 }
 
-// Show exibe a janela "Sobre"
+// Show displays the "About" window
 func (aw *AboutWindow) Show() {
-	// Se a janela já foi destruída, cria uma nova
+	// If the window has been destroyed, create a new one
 	if aw.Window == nil {
-		aw.Window = aw.UI.createWindow("Sobre - goVPN", 400, 300, false)
+		aw.Window = aw.UI.createWindow("About - goVPN", 400, 300, false)
 	}
 
-	// Inicializa os componentes necessários antes de exibir a janela
+	// Initialize necessary components before showing the window
 	content := aw.CreateContent()
 
-	// Define o conteúdo da janela
+	// Set the window content
 	aw.Window.SetContent(content)
 
-	// Exibe a janela centralizada
+	// Display the window centered
 	aw.Window.CenterOnScreen()
 	aw.Window.Show()
 }
 
-// CreateContent cria o conteúdo da janela "Sobre"
+// CreateContent creates the content for the "About" window
 func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
-	// Título
+	// Title
 	title := widget.NewLabelWithStyle("goVPN", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 
-	// Versão
-	version := widget.NewLabelWithStyle("Versão 1.0.0", fyne.TextAlignCenter, fyne.TextStyle{})
+	// Version
+	version := widget.NewLabelWithStyle("Version 1.0.0", fyne.TextAlignCenter, fyne.TextStyle{})
 
-	// Descrição
+	// Description
 	description := widget.NewLabelWithStyle(
-		"Cliente de VPN ponto a ponto (P2P) utilizando WebRTC para comunicação segura.",
+		"Peer-to-peer (P2P) VPN client using WebRTC for secure communication.",
 		fyne.TextAlignCenter,
 		fyne.TextStyle{},
 	)
 	description.Wrapping = fyne.TextWrapWord
 
-	// Autor
+	// Author
 	authors := widget.NewLabelWithStyle(
-		"Desenvolvido por: Equipe goVPN",
+		"Developed by: goVPN Team",
 		fyne.TextAlignCenter,
 		fyne.TextStyle{},
 	)
 
-	// Logo (texto colorido como placeholder para uma imagem)
+	// Logo (colored text as a placeholder for an image)
 	logo := canvas.NewText("goVPN", color.NRGBA{R: 0, G: 180, B: 100, A: 255})
 	logo.TextSize = 48
 	logo.Alignment = fyne.TextAlignCenter
 
-	// Botão de fechar
-	closeButton := widget.NewButton("Fechar", func() {
+	// Close button
+	closeButton := widget.NewButton("Close", func() {
 		if aw.Window != nil {
-			// Fechar a janela completamente em vez de apenas escondê-la
+			// Completely close the window instead of just hiding it
 			aw.Window.Close()
 		}
 	})
 
-	// Container principal
+	// Main container
 	content := container.NewVBox(
 		logo,
 		title,

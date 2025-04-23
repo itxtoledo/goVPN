@@ -10,7 +10,7 @@ import (
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
-// RoomWindow gerencia a interface de salas da VPN
+// RoomWindow manages the VPN rooms interface
 type RoomWindow struct {
 	UI                *UIManager
 	Window            fyne.Window
@@ -20,61 +20,61 @@ type RoomWindow struct {
 	JoinBtn           *widget.Button
 	RefreshBtn        *widget.Button
 	Container         *fyne.Container
-	selectedRoomIndex int // Armazena o índice da sala selecionada
+	selectedRoomIndex int // Stores the index of the selected room
 }
 
-// NewRoomWindow cria uma nova janela de salas
+// NewRoomWindow creates a new rooms window
 func NewRoomWindow(ui *UIManager) *RoomWindow {
 	roomWindow := &RoomWindow{
 		UI:                ui,
 		Rooms:             []models.Room{},
-		Window:            ui.createWindow("Salas - goVPN", 600, 400, false),
-		selectedRoomIndex: -1, // Nenhuma sala selecionada inicialmente
+		Window:            ui.createWindow("Rooms - goVPN", 600, 400, false),
+		selectedRoomIndex: -1, // No room selected initially
 	}
 
-	// Configura a atualização da lista de salas
+	// Sets up the room list update
 	ui.VPN.NetworkManager.OnRoomListUpdate = roomWindow.updateRoomList
 
 	return roomWindow
 }
 
-// Show exibe a janela de salas
+// Show displays the rooms window
 func (rw *RoomWindow) Show() {
-	// Se a janela já foi fechada, recria
+	// If the window has been closed, recreate it
 	if rw.Window == nil {
-		rw.Window = rw.UI.createWindow("Salas - goVPN", 600, 400, false)
+		rw.Window = rw.UI.createWindow("Rooms - goVPN", 600, 400, false)
 	}
 
-	// Certifica-se de que a janela está com o conteúdo atualizado
+	// Ensures that the window content is updated
 	if rw.Window.Content() == nil {
 		rw.Window.SetContent(rw.CreateContent())
 	}
 
-	// Atualiza a lista de salas
+	// Updates the room list
 	rw.refreshRoomList()
 
 	rw.Window.Show()
 	rw.Window.CenterOnScreen()
 }
 
-// CreateContent cria o conteúdo da janela de salas
+// CreateContent creates the content for the rooms window
 func (rw *RoomWindow) CreateContent() fyne.CanvasObject {
-	// Lista de salas
+	// Room list
 	rw.RoomList = widget.NewList(
 		func() int { return len(rw.Rooms) },
 		func() fyne.CanvasObject {
 			return container.NewHBox(
-				widget.NewLabel("Nome da sala"),
-				widget.NewLabel("Usuários"),
+				widget.NewLabel("Room Name"),
+				widget.NewLabel("Users"),
 				widget.NewLabel("Status"),
 			)
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			room := rw.Rooms[id]
 			labels := item.(*fyne.Container).Objects
-			statusText := "Disponível"
+			statusText := "Available"
 			if room.IsCreator {
-				statusText = "Criada por você"
+				statusText = "Created by you"
 			}
 
 			labels[0].(*widget.Label).SetText(room.Name)
@@ -83,26 +83,26 @@ func (rw *RoomWindow) CreateContent() fyne.CanvasObject {
 		},
 	)
 
-	// Adiciona seleção à lista de salas
+	// Adds selection to the room list
 	rw.RoomList.OnSelected = func(id widget.ListItemID) {
-		// Armazena o índice selecionado
+		// Stores the selected index
 		rw.selectedRoomIndex = id
-		// Habilita o botão de entrar quando uma sala é selecionada
+		// Enables the join button when a room is selected
 		rw.JoinBtn.Enable()
 	}
 
-	// Adiciona um handler para retirar a seleção
+	// Adds a handler to remove selection
 	rw.RoomList.OnUnselected = func(id widget.ListItemID) {
 		rw.selectedRoomIndex = -1
 		rw.JoinBtn.Disable()
 	}
 
-	// Botões de ação
-	rw.CreateBtn = widget.NewButton("Criar Sala", rw.showCreateRoomDialog)
-	rw.JoinBtn = widget.NewButton("Entrar", rw.showJoinRoomDialog)
-	rw.JoinBtn.Disable() // Inicialmente desabilitado até que uma sala seja selecionada
+	// Action buttons
+	rw.CreateBtn = widget.NewButton("Create Room", rw.showCreateRoomDialog)
+	rw.JoinBtn = widget.NewButton("Join", rw.showJoinRoomDialog)
+	rw.JoinBtn.Disable() // Initially disabled until a room is selected
 
-	rw.RefreshBtn = widget.NewButton("Atualizar Lista", rw.refreshRoomList)
+	rw.RefreshBtn = widget.NewButton("Refresh List", rw.refreshRoomList)
 
 	buttonBar := container.NewHBox(
 		rw.CreateBtn,
@@ -110,9 +110,9 @@ func (rw *RoomWindow) CreateContent() fyne.CanvasObject {
 		rw.RefreshBtn,
 	)
 
-	// Container principal
+	// Main container
 	rw.Container = container.NewBorder(
-		widget.NewLabel("Salas disponíveis:"),
+		widget.NewLabel("Available rooms:"),
 		buttonBar,
 		nil, nil,
 		container.NewScroll(rw.RoomList),
@@ -121,120 +121,120 @@ func (rw *RoomWindow) CreateContent() fyne.CanvasObject {
 	return rw.Container
 }
 
-// updateRoomList atualiza a lista de salas na interface
+// updateRoomList updates the room list in the interface
 func (rw *RoomWindow) updateRoomList(rooms []models.Room) {
 	rw.Rooms = rooms
 	rw.RoomList.Refresh()
-	rw.selectedRoomIndex = -1 // Reinicia o índice selecionado
-	rw.JoinBtn.Disable()      // Reinicia o estado do botão de entrar
+	rw.selectedRoomIndex = -1 // Resets the selected index
+	rw.JoinBtn.Disable()      // Resets the join button state
 }
 
-// refreshRoomList solicita uma atualização da lista de salas ao servidor
+// refreshRoomList requests a room list update from the server
 func (rw *RoomWindow) refreshRoomList() {
-	// Verifique se o gerenciador de rede está pronto
+	// Check if the network manager is ready
 	if rw.UI.VPN.NetworkManager == nil {
-		log.Println("Erro: NetworkManager não foi inicializado")
+		log.Println("Error: NetworkManager has not been initialized")
 		return
 	}
 
-	// Tenta atualizar a lista de salas em uma goroutine separada
+	// Try to update the room list in a separate goroutine
 	go func() {
-		// Tenta conectar caso não esteja conectado
+		// Try to connect if not already connected
 		if !rw.UI.VPN.NetworkManager.IsConnected {
 			err := rw.UI.VPN.NetworkManager.Connect()
 			if err != nil {
-				// Registra o erro no log
-				log.Printf("Erro de conexão: %v", err)
+				// Log the error
+				log.Printf("Connection error: %v", err)
 
-				 // Use fyne.Do para executar o código na thread principal da UI
+				// Use fyne.Do to execute code in the main UI thread
 				fyne.CurrentApp().SendNotification(&fyne.Notification{
-					Title:   "Erro de Conexão",
-					Content: "Não foi possível conectar ao servidor de sinalização",
+					Title:   "Connection Error",
+					Content: "Could not connect to the signaling server",
 				})
 				return
 			}
 		}
 
-		// Realiza a operação de rede
+		// Perform the network operation
 		err := rw.UI.VPN.NetworkManager.GetRoomList()
 		if err != nil {
-			log.Printf("Erro ao obter lista de salas: %v", err)
+			log.Printf("Error getting room list: %v", err)
 
-			 // Use fyne.Do para executar o código na thread principal da UI
+			// Use fyne.Do to execute code in the main UI thread
 			fyne.CurrentApp().SendNotification(&fyne.Notification{
-				Title:   "Erro",
-				Content: "Não foi possível atualizar a lista de salas",
+				Title:   "Error",
+				Content: "Could not update the room list",
 			})
 		}
 	}()
 }
 
-// showCreateRoomDialog exibe o diálogo para criar uma nova sala
+// showCreateRoomDialog displays the dialog to create a new room
 func (rw *RoomWindow) showCreateRoomDialog() {
-	// Verificar se está conectado ao backend
+	// Check if connected to the backend
 	if !rw.UI.VPN.NetworkManager.IsConnected {
-		// Tenta conectar ao servidor em uma goroutine separada
+		// Try to connect to the server in a separate goroutine
 		go func() {
 			err := rw.UI.VPN.NetworkManager.Connect()
-			// Voltar para a thread principal para atualizar a UI
+			// Return to the main thread to update the UI
 			if err != nil {
-				// Use SendNotification para exibir uma notificação de erro
+				// Use SendNotification to display an error notification
 				fyne.CurrentApp().SendNotification(&fyne.Notification{
-					Title:   "Erro de Conexão",
-					Content: "Não foi possível conectar ao servidor de sinalização",
+					Title:   "Connection Error",
+					Content: "Could not connect to the signaling server",
 				})
 			} else {
-				// Se conectou com sucesso, usamos a janela principal para mostrar o diálogo
-				// De volta à thread principal
+				// If successfully connected, use the main window to show the dialog
+				// Back to the main thread
 				fyne.CurrentApp().SendNotification(&fyne.Notification{
-					Title:   "Conexão Estabelecida",
-					Content: "Conexão estabelecida com sucesso",
+					Title:   "Connection Established",
+					Content: "Connection successfully established",
 				})
-				// Precisamos usar a thread principal para UI
-				// Como não podemos usar Driver().Run, vamos tentar criar o diálogo
-				// na próxima vez que o usuário clicar no botão
+				// We need to use the main thread for UI
+				// Since we can't use Driver().Run, we'll try to create the dialog
+				// the next time the user clicks the button
 				fyne.CurrentApp().SendNotification(&fyne.Notification{
-					Title:   "Pronto",
-					Content: "Clique em Criar Sala novamente para continuar",
+					Title:   "Ready",
+					Content: "Click Create Room again to continue",
 				})
 			}
 		}()
 	} else {
-		// Já está conectado, continuar normalmente
+		// Already connected, continue normally
 		rw.showCreateRoomDialogAfterConnect()
 	}
 }
 
-// showCreateRoomDialogAfterConnect exibe o diálogo depois de confirmar conexão ao servidor
+// showCreateRoomDialogAfterConnect displays the dialog after confirming server connection
 func (rw *RoomWindow) showCreateRoomDialogAfterConnect() {
-	// Verificar se o usuário já tem uma chave pública
+	// Check if the user already has a public key
 	if rw.UI.VPN.PublicKeyPEM == "" {
-		// Se não existe chave pública, tenta gerá-la
+		// If there is no public key, try to generate it
 		err := rw.UI.VPN.loadOrGenerateKeys()
 		if err != nil {
-			rw.UI.ShowMessage("Erro", "Não foi possível criar ou carregar suas chaves de identificação: "+err.Error())
+			rw.UI.ShowMessage("Error", "Could not create or load your identification keys: "+err.Error())
 			return
 		}
 	}
 
-	// Implementar diálogo de criação de sala
+	// Implement room creation dialog
 	roomNameEntry := widget.NewEntry()
 	roomPasswordEntry := widget.NewPasswordEntry()
 
-	// Limitar a senha para apenas números com máximo de 4 dígitos
+	// Limit the password to only numbers with a maximum of 4 digits
 	roomPasswordEntry.Validator = func(s string) error {
 		if len(s) > 4 {
-			return fmt.Errorf("a senha deve ter no máximo 4 caracteres")
+			return fmt.Errorf("password must be at most 4 characters")
 		}
 		for _, r := range s {
 			if r < '0' || r > '9' {
-				return fmt.Errorf("a senha deve conter apenas números")
+				return fmt.Errorf("password must contain only numbers")
 			}
 		}
 		return nil
 	}
 
-	// Limitar entrada para 4 caracteres em tempo real
+	// Limit input to 4 characters in real-time
 	roomPasswordEntry.OnChanged = func(s string) {
 		if len(s) > 4 {
 			roomPasswordEntry.SetText(s[:4])
@@ -242,53 +242,53 @@ func (rw *RoomWindow) showCreateRoomDialogAfterConnect() {
 	}
 
 	content := container.NewVBox(
-		widget.NewLabel("Nome da Sala:"),
+		widget.NewLabel("Room Name:"),
 		roomNameEntry,
-		widget.NewLabel("Senha (4 dígitos):"),
+		widget.NewLabel("Password (4 digits):"),
 		roomPasswordEntry,
-		widget.NewLabel("Nota: Cada usuário só pode criar uma sala.\nSe você já criou uma sala, não poderá criar outra."),
+		widget.NewLabel("Note: Each user can create only one room.\nIf you have already created a room, you cannot create another one."),
 	)
 
-	// Criamos o popup modal
+	// Create the modal popup
 	popup := widget.NewModalPopUp(
 		container.NewVBox(
 			content,
 			container.NewHBox(
-				widget.NewButton("Cancelar", func() {
+				widget.NewButton("Cancel", func() {
 					if rw.Window.Canvas().Overlays().Top() != nil {
 						rw.Window.Canvas().Overlays().Top().Hide()
 					}
 				}),
-				widget.NewButton("Criar", func() {
-					// Validar campos
+				widget.NewButton("Create", func() {
+					// Validate fields
 					if roomNameEntry.Text == "" || roomPasswordEntry.Text == "" {
-						rw.UI.ShowMessage("Erro", "Preencha todos os campos")
+						rw.UI.ShowMessage("Error", "Please fill in all fields")
 						return
 					}
 
-					// Validar tamanho da senha
+					// Validate password length
 					if len(roomPasswordEntry.Text) < 4 {
-						rw.UI.ShowMessage("Erro", "A senha deve ter exatamente 4 dígitos")
+						rw.UI.ShowMessage("Error", "The password must be exactly 4 digits")
 						return
 					}
 
-					// Criar sala em uma goroutine separada
+					// Create room in a separate goroutine
 					go func() {
 						err := rw.UI.VPN.NetworkManager.CreateRoom(roomNameEntry.Text, roomPasswordEntry.Text)
 						if err != nil {
-							// Registra o erro e mostra uma notificação
-							log.Printf("Erro ao criar sala: %v", err)
+							// Log the error and show a notification
+							log.Printf("Error creating room: %v", err)
 							fyne.CurrentApp().SendNotification(&fyne.Notification{
-								Title:   "Erro",
-								Content: "Não foi possível criar a sala",
+								Title:   "Error",
+								Content: "Could not create the room",
 							})
 						} else {
-							// Sucesso - apenas atualiza a lista na thread principal
-							// Como não podemos usar Driver().Run diretamente,
-							// usamos SendNotification e faremos o cliente clicar em Atualizar
+							// Success - just update the list in the main thread
+							// Since we can't use Driver().Run directly,
+							// we use SendNotification and will have the client click Refresh
 							fyne.CurrentApp().SendNotification(&fyne.Notification{
-								Title:   "Sucesso",
-								Content: "Sala criada com sucesso! Clique em Atualizar Lista.",
+								Title:   "Success",
+								Content: "Room created successfully! Click Refresh List.",
 							})
 						}
 					}()
@@ -301,11 +301,11 @@ func (rw *RoomWindow) showCreateRoomDialogAfterConnect() {
 	popup.Show()
 }
 
-// showJoinRoomDialog exibe o diálogo para entrar em uma sala
+// showJoinRoomDialog displays the dialog to join a room
 func (rw *RoomWindow) showJoinRoomDialog() {
-	// Verificar se uma sala foi selecionada
+	// Check if a room has been selected
 	if rw.selectedRoomIndex < 0 || rw.selectedRoomIndex >= len(rw.Rooms) {
-		rw.UI.ShowMessage("Erro", "Selecione uma sala primeiro")
+		rw.UI.ShowMessage("Error", "Please select a room first")
 		return
 	}
 
@@ -313,34 +313,34 @@ func (rw *RoomWindow) showJoinRoomDialog() {
 	roomPasswordEntry := widget.NewPasswordEntry()
 
 	content := container.NewVBox(
-		widget.NewLabel(fmt.Sprintf("Entrar na sala: %s", selectedRoom.Name)),
-		widget.NewLabel("Senha:"),
+		widget.NewLabel(fmt.Sprintf("Join room: %s", selectedRoom.Name)),
+		widget.NewLabel("Password:"),
 		roomPasswordEntry,
 	)
 
-	// Criamos o popup modal
+	// Create the modal popup
 	popup := widget.NewModalPopUp(
 		container.NewVBox(
 			content,
 			container.NewHBox(
-				widget.NewButton("Cancelar", func() {
+				widget.NewButton("Cancel", func() {
 					if rw.Window.Canvas().Overlays().Top() != nil {
 						rw.Window.Canvas().Overlays().Top().Hide()
 					}
 				}),
-				widget.NewButton("Entrar", func() {
-					// Validar campos
+				widget.NewButton("Join", func() {
+					// Validate fields
 					if roomPasswordEntry.Text == "" {
-						rw.UI.ShowMessage("Erro", "Informe a senha da sala")
+						rw.UI.ShowMessage("Error", "Please enter the room password")
 						return
 					}
 
-					// Entrar na sala
+					// Join the room
 					err := rw.UI.VPN.NetworkManager.JoinRoom(selectedRoom.ID, roomPasswordEntry.Text)
 					if err != nil {
-						rw.UI.ShowMessage("Erro", "Não foi possível entrar na sala: "+err.Error())
+						rw.UI.ShowMessage("Error", "Could not join the room: "+err.Error())
 					} else {
-						// Atualiza o status de conexão
+						// Update connection status
 						rw.UI.VPN.CurrentRoom = selectedRoom.ID
 						rw.UI.VPN.IsConnected = true
 						rw.UI.updatePowerButtonState()

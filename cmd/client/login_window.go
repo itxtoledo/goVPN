@@ -6,7 +6,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// LoginWindow gerencia a interface de login
+// LoginWindow manages the login interface
 type LoginWindow struct {
 	UI            *UIManager
 	Window        fyne.Window
@@ -17,7 +17,7 @@ type LoginWindow struct {
 	Container     *fyne.Container
 }
 
-// NewLoginWindow cria uma nova janela de login
+// NewLoginWindow creates a new login window
 func NewLoginWindow(ui *UIManager) *LoginWindow {
 	loginWindow := &LoginWindow{
 		UI:     ui,
@@ -27,59 +27,59 @@ func NewLoginWindow(ui *UIManager) *LoginWindow {
 	return loginWindow
 }
 
-// Show exibe a janela de login
+// Show displays the login window
 func (lw *LoginWindow) Show() {
-	// Se a janela já foi fechada, recria
+	// If the window has been closed, recreate it
 	if lw.Window == nil {
 		lw.Window = lw.UI.createWindow("Login - goVPN", 400, 300, false)
 	}
 
-	// Inicializa os componentes necessários antes de exibir a janela
+	// Initialize the necessary components before showing the window
 	content := lw.CreateContent()
 
-	// Define o conteúdo da janela
+	// Set the window content
 	lw.Window.SetContent(content)
 
-	// Exibe a janela centralizada
+	// Display the window centered
 	lw.Window.CenterOnScreen()
 	lw.Window.Show()
 }
 
-// CreateContent cria o conteúdo da janela de login
+// CreateContent creates the content for the login window
 func (lw *LoginWindow) CreateContent() fyne.CanvasObject {
-	// Campos de entrada
+	// Input fields
 	lw.ServerEntry = widget.NewEntry()
-	lw.ServerEntry.SetPlaceHolder("Endereço do servidor de sinalização")
+	lw.ServerEntry.SetPlaceHolder("Signaling server address")
 	lw.ServerEntry.SetText(lw.UI.VPN.NetworkManager.SignalServer)
 
 	lw.UsernameEntry = widget.NewEntry()
-	lw.UsernameEntry.SetPlaceHolder("Nome de usuário")
+	lw.UsernameEntry.SetPlaceHolder("Username")
 
 	lw.PasswordEntry = widget.NewPasswordEntry()
-	lw.PasswordEntry.SetPlaceHolder("Senha")
+	lw.PasswordEntry.SetPlaceHolder("Password")
 
-	// Botão de login
-	lw.LoginButton = widget.NewButton("Conectar", func() {
+	// Login button
+	lw.LoginButton = widget.NewButton("Connect", func() {
 		lw.login()
 	})
 
-	// Formulário de login
+	// Login form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
-			{Text: "Servidor", Widget: lw.ServerEntry},
-			{Text: "Usuário", Widget: lw.UsernameEntry},
-			{Text: "Senha", Widget: lw.PasswordEntry},
+			{Text: "Server", Widget: lw.ServerEntry},
+			{Text: "Username", Widget: lw.UsernameEntry},
+			{Text: "Password", Widget: lw.PasswordEntry},
 		},
-		SubmitText: "Conectar",
+		SubmitText: "Connect",
 		OnSubmit:   lw.login,
 	}
 
-	// Container principal
+	// Main container
 	lw.Container = container.NewVBox(
-		widget.NewLabel("Login no Servidor goVPN"),
+		widget.NewLabel("Login to goVPN Server"),
 		form,
 		container.NewHBox(
-			widget.NewButton("Cancelar", func() {
+			widget.NewButton("Cancel", func() {
 				lw.Window.Hide()
 			}),
 		),
@@ -88,19 +88,19 @@ func (lw *LoginWindow) CreateContent() fyne.CanvasObject {
 	return lw.Container
 }
 
-// login processa a tentativa de login
+// login processes the login attempt
 func (lw *LoginWindow) login() {
-	// Atualiza o endereço do servidor de sinalização
+	// Update the signaling server address
 	lw.UI.VPN.NetworkManager.SignalServer = lw.ServerEntry.Text
 
-	// Aqui seria implementada a lógica de autenticação real
-	// Para este exemplo, apenas tentamos conectar ao servidor
+	// Here the real authentication logic would be implemented
+	// For this example, we just try to connect to the server
 	err := lw.UI.VPN.NetworkManager.Connect()
 	if err != nil {
-		lw.UI.ShowMessage("Erro", "Não foi possível conectar ao servidor: "+err.Error())
+		lw.UI.ShowMessage("Error", "Could not connect to the server: "+err.Error())
 		return
 	}
 
-	// Esconde a janela de login após sucesso
+	// Hide the login window after success
 	lw.Window.Hide()
 }

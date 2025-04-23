@@ -11,7 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// HeaderComponent representa o cabeçalho da aplicação
+// HeaderComponent represents the application header
 type HeaderComponent struct {
 	UI            *UIManager
 	PowerButton   *widget.Button
@@ -19,7 +19,7 @@ type HeaderComponent struct {
 	RoomNameLabel *widget.Label
 }
 
-// NewHeaderComponent cria uma nova instância do componente de cabeçalho
+// NewHeaderComponent creates a new instance of the header component
 func NewHeaderComponent(ui *UIManager) *HeaderComponent {
 	header := &HeaderComponent{
 		UI: ui,
@@ -29,29 +29,29 @@ func NewHeaderComponent(ui *UIManager) *HeaderComponent {
 	return header
 }
 
-// init inicializa os componentes do cabeçalho
+// init initializes the header components
 func (h *HeaderComponent) init() {
-	// Cria o botão de ligar/desligar
+	// Create power button
 	h.PowerButton = widget.NewButtonWithIcon("", h.loadPowerButtonResource(), func() {
 		h.handlePowerButtonClick()
 	})
 	h.PowerButton.Importance = widget.DangerImportance
 
-	// Label para informações de IP
+	// Label for IP information
 	h.IPInfoLabel = widget.NewLabel("YOUR IPV4")
 
-	// Label para nome da sala
-	h.RoomNameLabel = widget.NewLabel("Sala: Não conectado")
+	// Label for room name
+	h.RoomNameLabel = widget.NewLabel("Room: Not connected")
 	h.RoomNameLabel.Alignment = fyne.TextAlignTrailing
 }
 
-// handlePowerButtonClick lida com o clique no botão de power
+// handlePowerButtonClick handles the click on the power button
 func (h *HeaderComponent) handlePowerButtonClick() {
 	if h.UI.VPN.IsConnected {
-		// Desconectar
+		// Disconnect
 		err := h.UI.VPN.NetworkManager.LeaveRoom()
 		if err != nil {
-			log.Printf("Erro ao desconectar: %v", err)
+			log.Printf("Error while disconnecting: %v", err)
 		}
 		h.UI.VPN.IsConnected = false
 		h.updatePowerButtonState()
@@ -59,8 +59,8 @@ func (h *HeaderComponent) handlePowerButtonClick() {
 		h.updateRoomName()
 		h.UI.refreshNetworkList()
 	} else {
-		// Conectar
-		// Certifique-se de que a janela de conexão está inicializada
+		// Connect
+		// Make sure the connection window is initialized
 		if h.UI.ConnectWindow == nil {
 			h.UI.ConnectWindow = NewConnectWindow(h.UI)
 		}
@@ -68,26 +68,26 @@ func (h *HeaderComponent) handlePowerButtonClick() {
 	}
 }
 
-// CreateHeaderContainer cria o container do cabeçalho
+// CreateHeaderContainer creates the header container
 func (h *HeaderComponent) CreateHeaderContainer() *fyne.Container {
-	// Definindo uma altura fixa para o header
+	// Defining a fixed height for the header
 	headerHeight := 60.0
 	maxWidth := 300.0
 
-	// Container para o botão power centralizado verticalmente
+	// Container for the power button centered vertically
 	powerContainer := container.New(layout.NewCenterLayout(), h.PowerButton)
 	powerContainer.Resize(fyne.NewSize(40, float32(headerHeight)))
 
-	// Container para a informação de IP centralizada verticalmente
-	// Reduzindo largura para garantir que não ultrapasse o limite
+	// Container for the IP information centered vertically
+	// Reducing width to ensure it doesn't exceed the limit
 	ipContainer := container.New(layout.NewCenterLayout(), h.IPInfoLabel)
 	ipContainer.Resize(fyne.NewSize(180, float32(headerHeight)))
 
-	// Configura o layout IP para garantir que o texto seja exibido corretamente
+	// Configure IP layout to ensure text is displayed correctly
 	h.IPInfoLabel.Wrapping = fyne.TextTruncate
 	h.IPInfoLabel.Resize(fyne.NewSize(170, 30))
 
-	// Container principal do header com layout horizontal e padding
+	// Main header container with horizontal layout and padding
 	headerTop := container.New(
 		layout.NewHBoxLayout(),
 		powerContainer,
@@ -96,7 +96,7 @@ func (h *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 	)
 	headerTop.Resize(fyne.NewSize(float32(maxWidth), float32(headerHeight)))
 
-	// Room name label com tamanho controlado
+	// Room name label with controlled size
 	h.RoomNameLabel.Wrapping = fyne.TextTruncate
 	h.RoomNameLabel.Resize(fyne.NewSize(280, 20))
 
@@ -106,7 +106,7 @@ func (h *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 	)
 	roomNameContainer.Resize(fyne.NewSize(float32(maxWidth), 20))
 
-	// Container do cabeçalho completo com tamanho fixo
+	// Complete header container with fixed size
 	header := container.NewVBox(
 		headerTop,
 		roomNameContainer,
@@ -116,17 +116,17 @@ func (h *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 	return container.NewMax(header)
 }
 
-// updatePowerButtonState atualiza o estado visual do botão de ligar/desligar
+// updatePowerButtonState updates the visual state of the power button
 func (h *HeaderComponent) updatePowerButtonState() {
 	if h.UI.VPN.IsConnected {
-		h.PowerButton.Importance = widget.HighImportance // Verde para conectado
+		h.PowerButton.Importance = widget.HighImportance // Green for connected
 	} else {
-		h.PowerButton.Importance = widget.DangerImportance // Vermelho para desconectado
+		h.PowerButton.Importance = widget.DangerImportance // Red for disconnected
 	}
 	h.PowerButton.Refresh()
 }
 
-// updateIPInfo atualiza as informações de IP exibidas
+// updateIPInfo updates the displayed IP information
 func (h *HeaderComponent) updateIPInfo() {
 	ipv4 := "YOUR IPV4"
 
@@ -138,25 +138,25 @@ func (h *HeaderComponent) updateIPInfo() {
 	h.IPInfoLabel.Refresh()
 }
 
-// updateRoomName atualiza o nome da sala exibido
+// updateRoomName updates the displayed room name
 func (h *HeaderComponent) updateRoomName() {
-	roomName := "Não conectado"
+	roomName := "Not connected"
 
 	if h.UI.VPN.IsConnected && h.UI.VPN.NetworkManager.RoomName != "" {
 		roomName = h.UI.VPN.NetworkManager.RoomName
 	}
 
-	h.RoomNameLabel.SetText("Sala: " + roomName)
+	h.RoomNameLabel.SetText("Room: " + roomName)
 	h.RoomNameLabel.Refresh()
 }
 
-// loadPowerButtonResource carrega o ícone SVG do botão de energia
+// loadPowerButtonResource loads the power button SVG icon
 func (h *HeaderComponent) loadPowerButtonResource() fyne.Resource {
-	// Carregar o ícone do arquivo SVG
+	// Load the icon from the SVG file
 	res, err := fyne.LoadResourceFromPath("power-button.svg")
 	if err != nil {
-		log.Printf("Erro ao carregar o ícone do botão de energia: %v", err)
-		return theme.CancelIcon() // Retorna um ícone padrão em caso de falha
+		log.Printf("Error loading power button icon: %v", err)
+		return theme.CancelIcon() // Return a default icon in case of failure
 	}
 	return res
 }

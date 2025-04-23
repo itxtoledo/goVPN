@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// ConnectWindow gerencia a interface de conexão à VPN
+// ConnectWindow manages the VPN connection interface
 type ConnectWindow struct {
 	UI            *UIManager
 	Window        fyne.Window
@@ -20,14 +20,14 @@ type ConnectWindow struct {
 	Status        *widget.Label
 }
 
-// NewConnectWindow cria uma nova janela de conexão
+// NewConnectWindow creates a new connection window
 func NewConnectWindow(ui *UIManager) *ConnectWindow {
 	connectWindow := &ConnectWindow{
 		UI:     ui,
-		Window: ui.createWindow("Conectar à VPN", 400, 300, false),
+		Window: ui.createWindow("Connect to VPN", 400, 300, false),
 	}
 
-	// Adiciona manipulador para quando a janela for fechada
+	// Add handler for when the window is closed
 	connectWindow.Window.SetOnClosed(func() {
 		connectWindow.Window = nil
 	})
@@ -35,89 +35,89 @@ func NewConnectWindow(ui *UIManager) *ConnectWindow {
 	return connectWindow
 }
 
-// Show exibe a janela de conexão
+// Show displays the connection window
 func (cw *ConnectWindow) Show() {
-	// Se a janela já foi fechada, recria
+	// If the window has been closed, recreate it
 	if cw.Window == nil {
-		cw.Window = cw.UI.createWindow("Conectar à VPN", 400, 300, false)
-		// Re-adiciona o manipulador para quando a janela for fechada
+		cw.Window = cw.UI.createWindow("Connect to VPN", 400, 300, false)
+		// Re-add the handler for when the window is closed
 		cw.Window.SetOnClosed(func() {
 			cw.Window = nil
 		})
 	}
 
-	// Garante que o conteúdo é criado antes de exibir a janela
+	// Ensure content is created before displaying the window
 	content := cw.CreateContent()
 
-	// Define o conteúdo da janela
+	// Set the window content
 	cw.Window.SetContent(content)
 
-	// Limpa os campos
+	// Clear the fields
 	cw.RoomIDEntry.SetText("")
 	cw.PasswordEntry.SetText("")
 	cw.Status.SetText("")
 
-	// Exibe a janela centralizada
+	// Display the window centered
 	cw.Window.CenterOnScreen()
 	cw.Window.Show()
 }
 
-// CreateContent cria o conteúdo da janela de conexão
+// CreateContent creates the content for the connection window
 func (cw *ConnectWindow) CreateContent() fyne.CanvasObject {
-	// Campos de entrada
+	// Input fields
 	cw.RoomIDEntry = widget.NewEntry()
-	cw.RoomIDEntry.SetPlaceHolder("ID da Sala")
+	cw.RoomIDEntry.SetPlaceHolder("Room ID")
 
 	cw.PasswordEntry = widget.NewPasswordEntry()
-	cw.PasswordEntry.SetPlaceHolder("Senha da Sala")
+	cw.PasswordEntry.SetPlaceHolder("Room Password")
 
-	// Restringir para apenas números e máximo de 4 caracteres
+	// Restrict to only numbers and maximum of 4 characters
 	cw.PasswordEntry.Validator = func(s string) error {
 		if len(s) > 4 {
-			return fmt.Errorf("a senha deve ter no máximo 4 caracteres")
+			return fmt.Errorf("password must be at most 4 characters")
 		}
 		for _, r := range s {
 			if !unicode.IsDigit(r) {
-				return fmt.Errorf("a senha deve conter apenas números")
+				return fmt.Errorf("password must contain only numbers")
 			}
 		}
 		return nil
 	}
 
-	// Limitar entrada para 4 caracteres em tempo real
+	// Limit input to 4 characters in real-time
 	cw.PasswordEntry.OnChanged = func(s string) {
 		if len(s) > 4 {
 			cw.PasswordEntry.SetText(s[:4])
 		}
 	}
 
-	// Status de conexão
+	// Connection status
 	cw.Status = widget.NewLabel("")
 
-	// Botões de ação
-	cw.ConnectButton = widget.NewButton("Conectar", func() {
+	// Action buttons
+	cw.ConnectButton = widget.NewButton("Connect", func() {
 		cw.connect()
 	})
 
-	// Formulário de conexão
+	// Connection form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
-			{Text: "ID da Sala", Widget: cw.RoomIDEntry},
-			{Text: "Senha", Widget: cw.PasswordEntry},
+			{Text: "Room ID", Widget: cw.RoomIDEntry},
+			{Text: "Password", Widget: cw.PasswordEntry},
 		},
-		SubmitText: "Conectar",
+		SubmitText: "Connect",
 		OnSubmit: func() {
 			cw.connect()
 		},
 	}
 
-	// Container principal
+	// Main container
 	cw.Container = container.NewVBox(
-		widget.NewLabel("Conectar a uma Sala VPN"),
+		widget.NewLabel("Connect to a VPN Room"),
 		form,
 		cw.Status,
 		container.NewHBox(
-			widget.NewButton("Cancelar", func() {
+			widget.NewButton("Cancel", func() {
 				cw.Window.Close()
 			}),
 		),
@@ -126,38 +126,38 @@ func (cw *ConnectWindow) CreateContent() fyne.CanvasObject {
 	return cw.Container
 }
 
-// connect tenta conectar a uma sala VPN
+// connect attempts to connect to a VPN room
 func (cw *ConnectWindow) connect() {
-	// Validação de campos
+	// Field validation
 	if cw.RoomIDEntry.Text == "" || cw.PasswordEntry.Text == "" {
-		cw.Status.SetText("Preencha todos os campos")
+		cw.Status.SetText("Please fill in all fields")
 		return
 	}
 
-	// Tenta conectar ao servidor de sinalização se ainda não estiver conectado
+	// Attempt to connect to the signaling server if not already connected
 	if !cw.UI.VPN.NetworkManager.IsConnected {
-		cw.Status.SetText("Conectando ao servidor...")
+		cw.Status.SetText("Connecting to server...")
 		err := cw.UI.VPN.NetworkManager.Connect()
 		if err != nil {
-			cw.Status.SetText("Falha na conexão: " + err.Error())
+			cw.Status.SetText("Connection failed: " + err.Error())
 			return
 		}
 	}
 
-	// Tenta entrar na sala
-	cw.Status.SetText("Entrando na sala...")
+	// Attempt to join the room
+	cw.Status.SetText("Joining room...")
 	err := cw.UI.VPN.NetworkManager.JoinRoom(cw.RoomIDEntry.Text, cw.PasswordEntry.Text)
 	if err != nil {
-		cw.Status.SetText("Falha ao entrar na sala: " + err.Error())
+		cw.Status.SetText("Failed to join room: " + err.Error())
 		return
 	}
 
-	// Guarda as informações da sala e fecha a janela
+	// Save room information and close the window
 	cw.UI.VPN.CurrentRoom = cw.RoomIDEntry.Text
 	cw.UI.VPN.NetworkManager.RoomName = cw.RoomIDEntry.Text
 	cw.UI.VPN.IsConnected = true
 
-	// Atualiza o estado do botão toggle no header e as informações de conexão
+	// Update the toggle button state in the header and connection information
 	cw.UI.updatePowerButtonState()
 	cw.UI.updateIPInfo()
 	cw.UI.updateRoomName()
