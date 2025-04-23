@@ -42,8 +42,8 @@ func loadEnvFile() {
 type Config struct {
 	Port               string
 	AllowAllOrigins    bool
-	PasswordPattern    string
 	MaxRooms           int
+	PasswordPattern    string
 	MaxClientsPerRoom  int
 	LogLevel           string
 	IdleTimeout        time.Duration
@@ -65,7 +65,7 @@ func loadConfig() Config {
 	config := Config{
 		Port:              getEnv("PORT", "8080"),
 		AllowAllOrigins:   getEnvBool("ALLOW_ALL_ORIGINS", true),
-		PasswordPattern:   getEnv("PASSWORD_PATTERN", `^\d{4}$`),
+		PasswordPattern:   `^\d{4}$`,
 		MaxRooms:          getEnvInt("MAX_ROOMS", 100),
 		MaxClientsPerRoom: getEnvInt("MAX_CLIENTS_PER_ROOM", 10),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),

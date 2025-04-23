@@ -60,8 +60,8 @@ func (sw *SettingsWindow) CreateContent() fyne.CanvasObject {
 	sw.ServerEntry = widget.NewEntry()
 	sw.ServerEntry.SetPlaceHolder("Endereço do servidor de sinalização")
 
-	// Preenche os valores iniciais com tratamento de erros
-	signalServer := "wss://govpn-signal.example.com/ws" // Valor padrão
+	// Obter o valor atual do servidor de sinalização
+	signalServer := "ws://localhost:8080/ws" // Valor padrão
 	if sw.UI != nil && sw.UI.VPN != nil && sw.UI.VPN.NetworkManager != nil {
 		if sw.UI.VPN.NetworkManager.SignalServer != "" {
 			signalServer = sw.UI.VPN.NetworkManager.SignalServer

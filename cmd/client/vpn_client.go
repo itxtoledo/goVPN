@@ -190,3 +190,9 @@ func (v *VPNClient) getPublicKey() string {
 
 	return v.PublicKeyPEM
 }
+
+// GetConfig obtém uma configuração do ambiente ou retorna um valor padrão
+func (c *VPNClient) GetConfig(key string) string {
+	value := os.Getenv(key)
+	return value
+}

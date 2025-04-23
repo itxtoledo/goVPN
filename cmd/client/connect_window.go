@@ -27,6 +27,11 @@ func NewConnectWindow(ui *UIManager) *ConnectWindow {
 		Window: ui.createWindow("Conectar à VPN", 400, 300, false),
 	}
 
+	// Adiciona manipulador para quando a janela for fechada
+	connectWindow.Window.SetOnClosed(func() {
+		connectWindow.Window = nil
+	})
+
 	return connectWindow
 }
 
@@ -35,6 +40,10 @@ func (cw *ConnectWindow) Show() {
 	// Se a janela já foi fechada, recria
 	if cw.Window == nil {
 		cw.Window = cw.UI.createWindow("Conectar à VPN", 400, 300, false)
+		// Re-adiciona o manipulador para quando a janela for fechada
+		cw.Window.SetOnClosed(func() {
+			cw.Window = nil
+		})
 	}
 
 	// Garante que o conteúdo é criado antes de exibir a janela
@@ -109,7 +118,7 @@ func (cw *ConnectWindow) CreateContent() fyne.CanvasObject {
 		cw.Status,
 		container.NewHBox(
 			widget.NewButton("Cancelar", func() {
-				cw.Window.Hide()
+				cw.Window.Close()
 			}),
 		),
 	)
@@ -153,5 +162,5 @@ func (cw *ConnectWindow) connect() {
 	cw.UI.updateIPInfo()
 	cw.UI.updateRoomName()
 
-	cw.Window.Hide()
+	cw.Window.Close()
 }

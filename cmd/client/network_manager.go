@@ -15,15 +15,18 @@ import (
 
 // NetworkManager gerencia as conexões de rede do cliente
 type NetworkManager struct {
-	VPN              *VPNClient
-	WSConn           *websocket.Conn
-	PeerConnections  map[string]*webrtc.PeerConnection // Mapeia PublicKey -> PeerConnection
-	SignalServer     string
-	ICEServers       []webrtc.ICEServer
-	VirtualNetwork   *network.VirtualNetwork
-	IsConnected      bool
-	RoomName         string
-	OnRoomListUpdate func([]models.Room)
+	VPN               *VPNClient
+	WSConn            *websocket.Conn
+	PeerConnections   map[string]*webrtc.PeerConnection // Mapeia PublicKey -> PeerConnection
+	SignalServer      string
+	ICEServers        []webrtc.ICEServer
+	VirtualNetwork    *network.VirtualNetwork
+	IsConnected       bool
+	RoomName          string
+	OnRoomListUpdate  func([]models.Room)
+	OnConnectionError func(error) // Callback para erros de conexão
+	MaxRetries        int         // Número máximo de tentativas de conexão
+	CurrentRetry      int         // Contagem atual de tentativas
 
 	// Mapeamento de peers pela chave pública
 	PeersByPublicKey map[string]bool // Mapeia PublicKey -> status conectado
@@ -31,9 +34,15 @@ type NetworkManager struct {
 
 // NewNetworkManager cria um novo gerenciador de rede
 func NewNetworkManager(vpn *VPNClient) *NetworkManager {
+	// Definir servidor padrão com opção de ambiente
+	signalServer := "ws://localhost:8080/ws"
+	if serverEnv := vpn.GetConfig("SIGNAL_SERVER"); serverEnv != "" {
+		signalServer = serverEnv
+	}
+
 	return &NetworkManager{
 		VPN:             vpn,
-		SignalServer:    "wss://govpn-signal.example.com/ws",
+		SignalServer:    signalServer,
 		PeerConnections: make(map[string]*webrtc.PeerConnection),
 		ICEServers: []webrtc.ICEServer{
 			{
@@ -42,6 +51,8 @@ func NewNetworkManager(vpn *VPNClient) *NetworkManager {
 		},
 		IsConnected:      false,
 		PeersByPublicKey: make(map[string]bool),
+		MaxRetries:       3,
+		CurrentRetry:     0,
 	}
 }
 
@@ -54,18 +65,26 @@ func (n *NetworkManager) Connect() error {
 
 	log.Printf("Conectando ao servidor de sinalização: %s", u.String())
 
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		return err
+	for n.CurrentRetry = 0; n.CurrentRetry < n.MaxRetries; n.CurrentRetry++ {
+		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		if err != nil {
+			log.Printf("Tentativa %d de conexão falhou: %v", n.CurrentRetry+1, err)
+			if n.OnConnectionError != nil {
+				n.OnConnectionError(err)
+			}
+			continue
+		}
+
+		n.WSConn = conn
+		n.IsConnected = true
+
+		// Inicia a rotina para lidar com mensagens do servidor
+		go n.handleWebSocketMessages()
+
+		return nil
 	}
 
-	n.WSConn = conn
-	n.IsConnected = true
-
-	// Inicia a rotina para lidar com mensagens do servidor
-	go n.handleWebSocketMessages()
-
-	return nil
+	return fmt.Errorf("não foi possível conectar ao servidor de sinalização após %d tentativas", n.MaxRetries)
 }
 
 // Disconnect desconecta do servidor de sinalização

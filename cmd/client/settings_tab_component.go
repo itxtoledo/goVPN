@@ -37,7 +37,7 @@ func (s *SettingsTabComponent) createContent() {
 	s.ServerEntry.SetPlaceHolder("Endereço do servidor de sinalização")
 
 	// Obter o valor atual do servidor de sinalização
-	signalServer := "wss://govpn-signal.example.com/ws" // Valor padrão
+	signalServer := "ws://localhost:8080/ws" // Valor padrão
 	if s.UI.VPN.NetworkManager.SignalServer != "" {
 		signalServer = s.UI.VPN.NetworkManager.SignalServer
 	}

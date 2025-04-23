@@ -139,21 +139,74 @@ func (rw *RoomWindow) refreshRoomList() {
 
 	// Tenta atualizar a lista de salas em uma goroutine separada
 	go func() {
+		// Tenta conectar caso não esteja conectado
+		if !rw.UI.VPN.NetworkManager.IsConnected {
+			err := rw.UI.VPN.NetworkManager.Connect()
+			if err != nil {
+				// Registra o erro no log
+				log.Printf("Erro de conexão: %v", err)
+
+				 // Use fyne.Do para executar o código na thread principal da UI
+				fyne.CurrentApp().SendNotification(&fyne.Notification{
+					Title:   "Erro de Conexão",
+					Content: "Não foi possível conectar ao servidor de sinalização",
+				})
+				return
+			}
+		}
+
 		// Realiza a operação de rede
 		err := rw.UI.VPN.NetworkManager.GetRoomList()
 		if err != nil {
 			log.Printf("Erro ao obter lista de salas: %v", err)
-			// Como não podemos atualizar a UI diretamente de uma goroutine,
-			// voltamos para a thread principal para exibir a mensagem
-			// Isso é seguro porque ShowMessage lida com a sincronização internamente
-			rw.UI.MainWindow.Canvas().Refresh(rw.UI.MainWindow.Content())
-			rw.UI.ShowMessage("Erro", "Não foi possível atualizar a lista de salas: "+err.Error())
+
+			 // Use fyne.Do para executar o código na thread principal da UI
+			fyne.CurrentApp().SendNotification(&fyne.Notification{
+				Title:   "Erro",
+				Content: "Não foi possível atualizar a lista de salas",
+			})
 		}
 	}()
 }
 
 // showCreateRoomDialog exibe o diálogo para criar uma nova sala
 func (rw *RoomWindow) showCreateRoomDialog() {
+	// Verificar se está conectado ao backend
+	if !rw.UI.VPN.NetworkManager.IsConnected {
+		// Tenta conectar ao servidor em uma goroutine separada
+		go func() {
+			err := rw.UI.VPN.NetworkManager.Connect()
+			// Voltar para a thread principal para atualizar a UI
+			if err != nil {
+				// Use SendNotification para exibir uma notificação de erro
+				fyne.CurrentApp().SendNotification(&fyne.Notification{
+					Title:   "Erro de Conexão",
+					Content: "Não foi possível conectar ao servidor de sinalização",
+				})
+			} else {
+				// Se conectou com sucesso, usamos a janela principal para mostrar o diálogo
+				// De volta à thread principal
+				fyne.CurrentApp().SendNotification(&fyne.Notification{
+					Title:   "Conexão Estabelecida",
+					Content: "Conexão estabelecida com sucesso",
+				})
+				// Precisamos usar a thread principal para UI
+				// Como não podemos usar Driver().Run, vamos tentar criar o diálogo
+				// na próxima vez que o usuário clicar no botão
+				fyne.CurrentApp().SendNotification(&fyne.Notification{
+					Title:   "Pronto",
+					Content: "Clique em Criar Sala novamente para continuar",
+				})
+			}
+		}()
+	} else {
+		// Já está conectado, continuar normalmente
+		rw.showCreateRoomDialogAfterConnect()
+	}
+}
+
+// showCreateRoomDialogAfterConnect exibe o diálogo depois de confirmar conexão ao servidor
+func (rw *RoomWindow) showCreateRoomDialogAfterConnect() {
 	// Verificar se o usuário já tem uma chave pública
 	if rw.UI.VPN.PublicKeyPEM == "" {
 		// Se não existe chave pública, tenta gerá-la
@@ -219,19 +272,26 @@ func (rw *RoomWindow) showCreateRoomDialog() {
 						return
 					}
 
-					// Criar sala
-					err := rw.UI.VPN.NetworkManager.CreateRoom(roomNameEntry.Text, roomPasswordEntry.Text)
-					if err != nil {
-						rw.UI.ShowMessage("Erro", "Não foi possível criar a sala: "+err.Error())
-					} else {
-						// Fechar o diálogo de criação
-						if rw.Window.Canvas().Overlays().Top() != nil {
-							rw.Window.Canvas().Overlays().Top().Hide()
+					// Criar sala em uma goroutine separada
+					go func() {
+						err := rw.UI.VPN.NetworkManager.CreateRoom(roomNameEntry.Text, roomPasswordEntry.Text)
+						if err != nil {
+							// Registra o erro e mostra uma notificação
+							log.Printf("Erro ao criar sala: %v", err)
+							fyne.CurrentApp().SendNotification(&fyne.Notification{
+								Title:   "Erro",
+								Content: "Não foi possível criar a sala",
+							})
+						} else {
+							// Sucesso - apenas atualiza a lista na thread principal
+							// Como não podemos usar Driver().Run diretamente,
+							// usamos SendNotification e faremos o cliente clicar em Atualizar
+							fyne.CurrentApp().SendNotification(&fyne.Notification{
+								Title:   "Sucesso",
+								Content: "Sala criada com sucesso! Clique em Atualizar Lista.",
+							})
 						}
-
-						// Atualiza a lista de salas após a criação bem-sucedida
-						rw.refreshRoomList()
-					}
+					}()
 				}),
 			),
 		),
