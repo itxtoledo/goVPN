@@ -22,18 +22,19 @@ const (
 
 // NetworkManager gerencia as conexões de rede do cliente
 type NetworkManager struct {
-	VPN               *VPNClient
-	WSConn            *websocket.Conn
-	PeerConnections   map[string]*webrtc.PeerConnection // Mapeia PublicKey -> PeerConnection
-	SignalServer      string
-	ICEServers        []webrtc.ICEServer
-	VirtualNetwork    *network.VirtualNetwork
-	IsConnected       bool
-	RoomName          string
-	OnRoomListUpdate  func([]models.Room)
-	OnConnectionError func(error) // Callback para erros de conexão
-	MaxRetries        int         // Número máximo de tentativas de conexão
-	CurrentRetry      int         // Contagem atual de tentativas
+	VPN                   *VPNClient
+	WSConn                *websocket.Conn
+	PeerConnections       map[string]*webrtc.PeerConnection // Mapeia PublicKey -> PeerConnection
+	SignalServer          string
+	ICEServers            []webrtc.ICEServer
+	VirtualNetwork        *network.VirtualNetwork
+	IsConnected           bool
+	SignalServerConnected bool // Explicit flag for signaling server connection state
+	RoomName              string
+	OnRoomListUpdate      func([]models.Room)
+	OnConnectionError     func(error) // Callback para erros de conexão
+	MaxRetries            int         // Número máximo de tentativas de conexão
+	CurrentRetry          int         // Contagem atual de tentativas
 
 	// Mapeamento de peers pela chave pública
 	PeersByPublicKey map[string]bool // Mapeia PublicKey -> status conectado
@@ -56,10 +57,11 @@ func NewNetworkManager(vpn *VPNClient) *NetworkManager {
 				URLs: []string{"stun:stun.l.google.com:19302"},
 			},
 		},
-		IsConnected:      false,
-		PeersByPublicKey: make(map[string]bool),
-		MaxRetries:       3,
-		CurrentRetry:     0,
+		IsConnected:           false,
+		SignalServerConnected: false,
+		PeersByPublicKey:      make(map[string]bool),
+		MaxRetries:            3,
+		CurrentRetry:          0,
 	}
 }
 
@@ -67,10 +69,12 @@ func NewNetworkManager(vpn *VPNClient) *NetworkManager {
 func (n *NetworkManager) Connect() error {
 	u, err := url.Parse(n.SignalServer)
 	if err != nil {
-		return err
+		n.SignalServerConnected = false
+		return fmt.Errorf("invalid signaling server URL: %w", err)
 	}
 
 	log.Printf("Connecting to signaling server: %s", u.String())
+	n.SignalServerConnected = false
 
 	for n.CurrentRetry = 0; n.CurrentRetry < n.MaxRetries; n.CurrentRetry++ {
 		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -84,6 +88,7 @@ func (n *NetworkManager) Connect() error {
 
 		n.WSConn = conn
 		n.IsConnected = true
+		n.SignalServerConnected = true
 
 		// Inicia a rotina para lidar com mensagens do servidor
 		go n.handleWebSocketMessages()
@@ -91,7 +96,8 @@ func (n *NetworkManager) Connect() error {
 		return nil
 	}
 
-	return fmt.Errorf("could not connect to signaling server after %d attempts", n.MaxRetries)
+	n.SignalServerConnected = false
+	return fmt.Errorf("could not connect to signaling server at %s after %d attempts", n.SignalServer, n.MaxRetries)
 }
 
 // Disconnect desconecta do servidor de sinalização
@@ -101,6 +107,7 @@ func (n *NetworkManager) Disconnect() {
 		n.WSConn = nil
 	}
 	n.IsConnected = false
+	n.SignalServerConnected = false
 }
 
 // GetRoomList obtém a lista de salas disponíveis
@@ -122,9 +129,15 @@ func (n *NetworkManager) GetRoomList() error {
 
 // JoinRoom entra em uma sala existente
 func (n *NetworkManager) JoinRoom(roomID, password string) error {
-	if !n.IsConnected {
+	// Check if we're connected to the signaling server first
+	if !n.SignalServerConnected {
+		// Try to connect
 		if err := n.Connect(); err != nil {
-			return err
+			// Display specific message about signaling server connection failure
+			if n.VPN.UI != nil {
+				n.VPN.UI.ShowMessage("Connection Error", "Could not connect to the signaling server. Please check your internet connection and try again.")
+			}
+			return fmt.Errorf("failed to connect to signaling server: %w", err)
 		}
 	}
 
@@ -148,9 +161,15 @@ func (n *NetworkManager) JoinRoom(roomID, password string) error {
 
 // CreateRoom cria uma nova sala
 func (n *NetworkManager) CreateRoom(name, password string) error {
-	if !n.IsConnected {
+	// Check if we're connected to the signaling server first
+	if !n.SignalServerConnected {
+		// Try to connect
 		if err := n.Connect(); err != nil {
-			return err
+			// Display specific message about signaling server connection failure
+			if n.VPN.UI != nil {
+				n.VPN.UI.ShowMessage("Connection Error", "Could not connect to the signaling server. Please check your internet connection and try again.")
+			}
+			return fmt.Errorf("failed to connect to signaling server: %w", err)
 		}
 	}
 
@@ -215,6 +234,7 @@ func (n *NetworkManager) handleWebSocketMessages() {
 		if err != nil {
 			log.Printf("Error reading message: %v", err)
 			n.IsConnected = false
+			n.SignalServerConnected = false
 			return
 		}
 
@@ -401,4 +421,9 @@ func (n *NetworkManager) GetConnectionState() int {
 		return ConnectionStateConnected
 	}
 	return ConnectionStateConnecting
+}
+
+// IsSignalServerConnected returns whether the network manager is connected to the signaling server
+func (n *NetworkManager) IsSignalServerConnected() bool {
+	return n.SignalServerConnected
 }

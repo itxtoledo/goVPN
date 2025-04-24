@@ -36,18 +36,18 @@ func NewHomeTabComponent(ui *UIManager, networkTree *NetworkTreeComponent) *Home
 func (h *HomeTabComponent) createEmptyContent() {
 	// Creating buttons for when there are no networks
 	createNetButton := widget.NewButton("Create a Network", func() {
-		if h.UI.RoomWindow == nil {
-			h.UI.RoomWindow = NewRoomWindow(h.UI)
+		if h.UI.RoomDialog == nil {
+			h.UI.RoomDialog = NewRoomDialog(h.UI)
 		}
-		h.UI.RoomWindow.Show()
+		h.UI.RoomDialog.Show()
 	})
 	createNetButton.Importance = widget.HighImportance
 
 	connectNetButton := widget.NewButton("Connect to a Network", func() {
-		if h.UI.ConnectWindow == nil {
-			h.UI.ConnectWindow = NewConnectWindow(h.UI)
+		if h.UI.ConnectDialog == nil {
+			h.UI.ConnectDialog = NewConnectDialog(h.UI)
 		}
-		h.UI.ConnectWindow.Show()
+		h.UI.ConnectDialog.Show()
 	})
 
 	// Limits the maximum size of buttons

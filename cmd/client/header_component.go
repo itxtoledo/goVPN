@@ -92,12 +92,11 @@ func (h *HeaderComponent) handlePowerButtonClick() {
 		h.updateRoomName()
 		h.UI.refreshNetworkList()
 	} else {
-		// Connect
-		// Make sure the connection window is initialized
-		if h.UI.ConnectWindow == nil {
-			h.UI.ConnectWindow = NewConnectWindow(h.UI)
+		// Connect - usando o novo ConnectDialog
+		if h.UI.ConnectDialog == nil {
+			h.UI.ConnectDialog = NewConnectDialog(h.UI)
 		}
-		h.UI.ConnectWindow.Show()
+		h.UI.ConnectDialog.Show()
 	}
 }
 

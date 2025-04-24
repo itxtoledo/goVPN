@@ -2,70 +2,97 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
-// UIManager gerencia a interface gráfica do cliente VPN
+// UIManager manages the VPN client's graphical interface
 type UIManager struct {
 	VPN            *VPNClient
 	App            fyne.App
 	MainWindow     fyne.Window
-	RoomWindow     *RoomWindow
+	RoomDialog     *RoomDialog
+	ConnectDialog  *ConnectDialog
 	LoginWindow    *LoginWindow
 	AboutWindow    *AboutWindow
 	SettingsWindow *SettingsWindow
-	ConnectWindow  *ConnectWindow
+	ConfigManager  *ConfigManager
 
-	// Componentes modulares da interface
+	// Modular interface components
 	HeaderComponent      *HeaderComponent
 	NetworkTreeComponent *NetworkTreeComponent
 	HomeTabComponent     *HomeTabComponent
-	NetworkTabComponent  *NetworkTabComponent
-	AboutTabComponent    *AboutTabComponent
-	SettingsTabComponent *SettingsTabComponent
 
-	// Referências diretas para componentes importantes mantidas para compatibilidade
+	// Direct references to important components maintained for compatibility
 	PowerButton   *widget.Button
 	NetworkList   *widget.Tree
 	IPInfoLabel   *widget.Label
 	RoomNameLabel *widget.Label
-	NetworkUsers  map[string]bool // Map das chaves públicas (truncadas) e seu status (online/offline)
+	NetworkUsers  map[string]bool // Map of public keys (truncated) and their status (online/offline)
 
 	// Interface elements for tabbed interface
 	TabContainer *container.AppTabs
 }
 
-// NewUIManager cria um novo gerenciador de interface gráfica
+// NewUIManager creates a new graphical interface manager
 func NewUIManager(vpn *VPNClient) *UIManager {
 	uiManager := &UIManager{
-		VPN:          vpn,
-		App:          app.New(),
-		NetworkUsers: make(map[string]bool),
+		VPN:           vpn,
+		App:           app.New(),
+		NetworkUsers:  make(map[string]bool),
+		ConfigManager: NewConfigManager(),
 	}
 
-	// Configura o tema
-	uiManager.App.Settings().SetTheme(theme.DarkTheme())
+	// Load saved settings
+	config := uiManager.ConfigManager.GetConfig()
 
-	// Cria a janela principal
+	// Configure theme based on saved preferences
+	switch config.ThemePreference {
+	case "Light":
+		uiManager.App.Settings().SetTheme(theme.LightTheme())
+	case "Dark":
+		uiManager.App.Settings().SetTheme(theme.DarkTheme())
+	default:
+		uiManager.App.Settings().SetTheme(theme.DefaultTheme())
+	}
+
+	// Configure signal server
+	if vpn.NetworkManager != nil && config.SignalServer != "" {
+		vpn.NetworkManager.SignalServer = config.SignalServer
+	}
+
+	// Create main window
 	uiManager.MainWindow = uiManager.App.NewWindow("goVPN")
+	
+	// Carregar o ícone do aplicativo após a inicialização completa do UIManager
+	iconPath := uiManager.resolveResourcePath("power-button.svg")
+	appIcon, err := fyne.LoadResourceFromPath(iconPath)
+	if err != nil {
+		log.Printf("Error loading app icon: %v", err)
+	} else {
+		uiManager.App.SetIcon(appIcon)
+		uiManager.MainWindow.SetIcon(appIcon)
+	}
 
-	// Configura tamanho fixo e define como janela principal
+	// Set fixed size and define as main window
 	uiManager.MainWindow.SetFixedSize(true)
 	uiManager.MainWindow.SetMaster()
 
-	// Define o tamanho exato da janela
+	// Set exact window size
 	uiManager.MainWindow.Resize(fyne.NewSize(300, 600))
 
-	// Configura o manipulador de fechamento da janela
+	// Configure window close handler
 	uiManager.MainWindow.SetCloseIntercept(func() {
 		if vpn.IsConnected {
-			// Se estiver conectado, desconecta antes de fechar
+			// If connected, disconnect before closing
 			vpn.NetworkManager.LeaveRoom()
 		}
 		uiManager.MainWindow.Close()
@@ -74,60 +101,133 @@ func NewUIManager(vpn *VPNClient) *UIManager {
 	return uiManager
 }
 
-// Start inicia a interface gráfica
-func (ui *UIManager) Start() {
-	// Inicialização prévia de componentes essenciais
-	ui.preInitializeComponents()
-
-	// Configura o menu principal
-	ui.setupMainMenu()
-
-	// Configura a interface principal
-	ui.setupMainInterface()
-
-	// Mostra a janela principal
-	ui.MainWindow.ShowAndRun()
-}
-
-// preInitializeComponents inicializa previamente componentes essenciais da interface
-func (ui *UIManager) preInitializeComponents() {
-	// Garante que o NetworkManager está pronto antes de prosseguir
-	if ui.VPN == nil || ui.VPN.NetworkManager == nil {
-		log.Println("Aviso: VPN ou NetworkManager não inicializados corretamente")
-		return
+// resolveResourcePath retorna o caminho absoluto para um recurso
+func (ui *UIManager) resolveResourcePath(filename string) string {
+	// Lista de possíveis localizações para o arquivo
+	possiblePaths := []string{
+		filename,                        // Caminho relativo atual
+		"cmd/client/" + filename,        // A partir da raiz do projeto
+		"../client/" + filename,         // Se estiver no diretório cmd
+		"../../cmd/client/" + filename,  // Se estiver em outro subdiretório
 	}
 
-	// Inicializa a janela de criação de sala
-	if ui.RoomWindow == nil {
-		ui.RoomWindow = NewRoomWindow(ui)
+	// Tenta encontrar o arquivo em cada um dos possíveis caminhos
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path // Retorna o primeiro caminho válido
+		}
+	}
+
+	// Se não encontrar, retorna o caminho original
+	return filename
+}
+
+// loadSystemTrayIcon carrega o ícone personalizado para a bandeja do sistema
+func (ui *UIManager) loadSystemTrayIcon() fyne.Resource {
+	// Usa a função resolveResourcePath para encontrar o arquivo do ícone
+	iconPath := ui.resolveResourcePath("power-button.svg")
+	
+	// Tenta carregar o ícone personalizado
+	res, err := fyne.LoadResourceFromPath(iconPath)
+	if err != nil {
+		log.Printf("Error loading system tray icon: %v", err)
+		// Se não conseguir carregar o ícone personalizado, usa o padrão do Fyne
+		return theme.ComputerIcon()
+	}
+	return res
+}
+
+// updateSystemTrayStatus atualiza o status do ícone na bandeja do sistema
+func (ui *UIManager) updateSystemTrayStatus() {
+	// Atualiza o texto de status (tooltip) do ícone
+	if ui.VPN.IsConnected {
+		networkName := "unknown"
+		if ui.VPN.NetworkManager != nil && ui.VPN.NetworkManager.RoomName != "" {
+			networkName = ui.VPN.NetworkManager.RoomName
+		}
+
+		// Mostra o nome da rede e o IP
+		ipAddress := "unknown"
+		if ui.VPN.NetworkManager != nil && ui.VPN.NetworkManager.VirtualNetwork != nil {
+			ipAddress = ui.VPN.NetworkManager.VirtualNetwork.GetLocalIP()
+		}
+
+		ui.MainWindow.SetTitle(
+			"goVPN - Connected\n" +
+				"Network: " + networkName + "\n" +
+				"IP: " + ipAddress)
+	} else {
+		ui.MainWindow.SetTitle("goVPN - Disconnected")
 	}
 }
 
-// setupMainMenu configura o menu da aplicação
+// refreshNetworkList updates the list of users in the network
+func (ui *UIManager) refreshNetworkList() {
+	// Clear current user list
+	ui.NetworkUsers = make(map[string]bool)
+
+	if ui.VPN.IsConnected && ui.VPN.NetworkManager != nil {
+		// Add user's own public key (shown truncated)
+		ownPublicKey := ui.VPN.getPublicKey()
+		if ownPublicKey != "" {
+			formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(ownPublicKey)
+			ui.NetworkUsers[formattedKey] = true
+		}
+
+		// Add all room peers with their public keys
+		for peerPublicKey, isOnline := range ui.VPN.NetworkManager.PeersByPublicKey {
+			formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(peerPublicKey)
+			ui.NetworkUsers[formattedKey] = isOnline
+		}
+	}
+
+	// Update network tree view
+	if ui.NetworkTreeComponent != nil {
+		ui.NetworkTreeComponent.RefreshTree()
+	}
+
+	// Update Home tab content
+	if ui.HomeTabComponent != nil {
+		ui.HomeTabComponent.updateContent()
+	}
+
+	// Atualiza o status na bandeja do sistema
+	ui.updateSystemTrayStatus()
+}
+
+// updatePowerButtonState updates the visual state of the power button
+func (ui *UIManager) updatePowerButtonState() {
+	ui.HeaderComponent.updatePowerButtonState()
+
+	// Também atualiza o status na bandeja do sistema
+	ui.updateSystemTrayStatus()
+}
+
+// setupMainMenu configures the application menu
 func (ui *UIManager) setupMainMenu() {
 	systemMenu := fyne.NewMenu("System",
-		fyne.NewMenuItem("Conectar", func() {
-			// Certifique-se de que a janela de conexão está inicializada
-			if ui.ConnectWindow == nil {
-				ui.ConnectWindow = NewConnectWindow(ui)
+		fyne.NewMenuItem("Connect", func() {
+			// Make sure the connection window is initialized
+			if ui.ConnectDialog == nil {
+				ui.ConnectDialog = NewConnectDialog(ui)
 			}
-			ui.ConnectWindow.Show()
+			ui.ConnectDialog.Show()
 		}),
-		fyne.NewMenuItem("Desconectar", func() {
+		fyne.NewMenuItem("Disconnect", func() {
 			if ui.VPN.IsConnected {
 				err := ui.VPN.NetworkManager.LeaveRoom()
 				if err != nil {
-					log.Printf("Erro ao desconectar: %v", err)
+					log.Printf("Error disconnecting: %v", err)
 				}
 				ui.VPN.IsConnected = false
 				ui.updatePowerButtonState()
-				ui.updateIPInfo()
-				ui.updateRoomName()
+				// ui.updateIPInfo()
+				// ui.updateRoomName()
 				ui.refreshNetworkList()
 			}
 		}),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Sair", func() {
+		fyne.NewMenuItem("Exit", func() {
 			ui.MainWindow.Close()
 		}),
 	)
@@ -139,25 +239,25 @@ func (ui *UIManager) setupMainMenu() {
 	ui.MainWindow.SetMainMenu(mainMenu)
 }
 
-// setupMainInterface configura a interface principal
+// setupMainInterface configures the main interface
 func (ui *UIManager) setupMainInterface() {
-	// Inicializa os componentes da interface de usuário
+	// Initialize user interface components
 	ui.initializeUIComponents()
 
-	// Cria o container de tabs usando os componentes
+	// Create tabs container using components
 	ui.setupTabs()
 
-	// Obtém o cabeçalho do componente Header
+	// Get header from Header component
 	header := ui.HeaderComponent.CreateHeaderContainer()
 
-	// Limita o tamanho máximo dos containers para evitar expansão da janela
+	// Limit maximum size of containers to prevent window expansion
 	maxWidth := float32(300)
 
-	// Define tamanho máximo para o tab container
+	// Set maximum size for tab container
 	tabContainer := container.NewMax(ui.TabContainer)
-	tabContainer.Resize(fyne.NewSize(maxWidth, 540)) // Altura aproximada para tabs
+	tabContainer.Resize(fyne.NewSize(maxWidth, 540)) // Approximate height for tabs
 
-	// Container principal com dimensões fixas
+	// Main container with fixed dimensions
 	mainContent := container.New(
 		layout.NewMaxLayout(),
 		container.NewBorder(
@@ -171,109 +271,143 @@ func (ui *UIManager) setupMainInterface() {
 
 	ui.MainWindow.SetContent(mainContent)
 
-	// Atualiza o estado inicial
+	// Update initial state
 	ui.updatePowerButtonState()
-	ui.updateIPInfo()
-	ui.updateRoomName()
+	// ui.updateIPInfo()
+	// ui.updateRoomName()
 }
 
-// initializeUIComponents inicializa todos os componentes da UI
+// initializeUIComponents initializes all UI components
 func (ui *UIManager) initializeUIComponents() {
-	// Inicializa os componentes na ordem correta de dependência
+	// Initialize components in correct dependency order
 	ui.HeaderComponent = NewHeaderComponent(ui)
 	ui.NetworkTreeComponent = NewNetworkTreeComponent(ui)
 	ui.HomeTabComponent = NewHomeTabComponent(ui, ui.NetworkTreeComponent)
-	ui.NetworkTabComponent = NewNetworkTabComponent(ui)
-	ui.AboutTabComponent = NewAboutTabComponent(ui)
-	ui.SettingsTabComponent = NewSettingsTabComponent(ui)
 
-	// Mantém referências diretas para compatibilidade com código existente
+	// Maintain direct references for compatibility with existing code
 	ui.PowerButton = ui.HeaderComponent.PowerButton
 	ui.NetworkList = ui.NetworkTreeComponent.NetworkList
 	ui.IPInfoLabel = ui.HeaderComponent.IPInfoLabel
 	ui.RoomNameLabel = ui.HeaderComponent.RoomNameLabel
 }
 
-// setupTabs configura as tabs usando os componentes
+// setupTabs configures tabs using components
 func (ui *UIManager) setupTabs() {
-	// Cria o container de tabs com tamanho fixo
+	// Create tabs container with fixed size
 	ui.TabContainer = container.NewAppTabs(
 		container.NewTabItem("Home", ui.HomeTabComponent.GetContainer()),
-		container.NewTabItem("Network", ui.NetworkTabComponent.GetContainer()),
-		// About and Settings tabs removed as they're now accessible from header buttons
+		// About and Settings tabs removed as they're no longer used
 	)
 
-	// Limita o tamanho máximo do contêiner de tabs
+	// Limit maximum size of tabs container
 	ui.TabContainer.SetTabLocation(container.TabLocationTop)
 	maxSize := fyne.NewSize(300, 520)
 	container.NewWithoutLayout(ui.TabContainer).Resize(maxSize)
 }
 
-// updatePowerButtonState atualiza o estado visual do botão de ligar/desligar
-func (ui *UIManager) updatePowerButtonState() {
-	ui.HeaderComponent.updatePowerButtonState()
+// showSystemTrayNotification exibe uma notificação de sistema a partir do ícone na bandeja
+func (ui *UIManager) showSystemTrayNotification(title, content string) {
+	ui.App.SendNotification(&fyne.Notification{
+		Title:   title,
+		Content: content,
+	})
 }
 
-// updateIPInfo atualiza as informações de IP exibidas
-func (ui *UIManager) updateIPInfo() {
-	ui.HeaderComponent.updateIPInfo()
+// Start launches the graphical interface
+func (ui *UIManager) Start() {
+	// Pre-initialization of essential components
+	ui.preInitializeComponents()
+
+	// Configure main menu
+	ui.setupMainMenu()
+
+	// Configura ícone na bandeja do sistema
+	ui.setupSystemTray()
+
+	// Configure main interface
+	ui.setupMainInterface()
+
+	// Modifica o comportamento de fechar a janela para minimizar para a bandeja em vez de sair
+	ui.MainWindow.SetCloseIntercept(func() {
+		// Apenas esconde a janela em vez de fechar completamente
+		ui.MainWindow.Hide()
+	})
+
+	// Show main window
+	ui.MainWindow.ShowAndRun()
 }
 
-// updateRoomName atualiza o nome da sala exibido
-func (ui *UIManager) updateRoomName() {
-	ui.HeaderComponent.updateRoomName()
-}
-
-// refreshNetworkList atualiza a lista de usuários na rede
-func (ui *UIManager) refreshNetworkList() {
-	// Limpa a lista de usuários atual
-	ui.NetworkUsers = make(map[string]bool)
-
-	if ui.VPN.IsConnected && ui.VPN.NetworkManager != nil {
-		// Adiciona a própria chave pública do usuário (mostrada de forma truncada)
-		ownPublicKey := ui.VPN.getPublicKey()
-		if ownPublicKey != "" {
-			formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(ownPublicKey)
-			ui.NetworkUsers[formattedKey] = true
-		}
-
-		// Adiciona todos os peers da sala com suas chaves públicas
-		for peerPublicKey, isOnline := range ui.VPN.NetworkManager.PeersByPublicKey {
-			formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(peerPublicKey)
-			ui.NetworkUsers[formattedKey] = isOnline
-		}
+// preInitializeComponents pre-initializes essential interface components
+func (ui *UIManager) preInitializeComponents() {
+	// Ensure NetworkManager is ready before proceeding
+	if ui.VPN == nil || ui.VPN.NetworkManager == nil {
+		log.Println("Warning: VPN or NetworkManager not properly initialized")
+		return
 	}
 
-	// Atualiza a visualização da árvore de rede
-	if ui.NetworkTreeComponent != nil {
-		ui.NetworkTreeComponent.RefreshTree()
-	}
-
-	// Atualiza o conteúdo da aba Home
-	if ui.HomeTabComponent != nil {
-		ui.HomeTabComponent.updateContent()
-	}
+	// No need to initialize room dialog here - it will be created when needed
 }
 
-// ShowMessage exibe uma mensagem na interface
-func (ui *UIManager) ShowMessage(title, message string) {
-	// Usar o diálogo padrão do Fyne
-	dialog := widget.NewModalPopUp(
-		container.NewVBox(
-			widget.NewLabelWithStyle(title, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabel(message),
-			container.NewHBox(
-				widget.NewButton("OK", func() {
-					if ui.MainWindow.Canvas().Overlays().Top() != nil {
-						ui.MainWindow.Canvas().Overlays().Top().Hide()
+// setupSystemTray configura o ícone na bandeja do sistema e seu menu de contexto
+func (ui *UIManager) setupSystemTray() {
+	// Verifica se o aplicativo suporta ícones na bandeja
+	if deskApp, ok := ui.App.(desktop.App); ok {
+		// Configura o ícone personalizado para a bandeja do sistema
+		deskApp.SetSystemTrayIcon(ui.loadSystemTrayIcon())
+
+		// Show initial notification
+		ui.App.SendNotification(&fyne.Notification{
+			Title:   "goVPN",
+			Content: "Application is running",
+		})
+
+		// Configura menu para o ícone na bandeja
+		deskApp.SetSystemTrayMenu(fyne.NewMenu("",
+			fyne.NewMenuItem("Open goVPN", func() {
+				ui.MainWindow.Show()
+			}),
+			fyne.NewMenuItemSeparator(), // Separador para melhorar a organização
+			fyne.NewMenuItem("Connect to Network", func() {
+				ui.MainWindow.Show() // Mostra a janela principal
+				if ui.ConnectDialog == nil {
+					ui.ConnectDialog = NewConnectDialog(ui)
+				}
+				ui.ConnectDialog.Show()
+			}),
+			fyne.NewMenuItem("Disconnect", func() {
+				if ui.VPN.IsConnected && ui.VPN.NetworkManager != nil {
+					err := ui.VPN.NetworkManager.LeaveRoom()
+					if err != nil {
+						log.Printf("Error disconnecting: %v", err)
 					}
-				}),
-			),
-		),
-		ui.MainWindow.Canvas(),
-	)
+					ui.VPN.IsConnected = false
+					ui.updatePowerButtonState()
+					ui.refreshNetworkList()
 
-	dialog.Show()
+					// Notifica o usuário sobre a desconexão
+					ui.showSystemTrayNotification("goVPN", "Disconnected from VPN network")
+				}
+			}),
+			fyne.NewMenuItemSeparator(), // Outro separador
+			fyne.NewMenuItem("Quit", func() {
+				// Se estiver conectado, desconecta antes de fechar
+				if ui.VPN.IsConnected && ui.VPN.NetworkManager != nil {
+					ui.VPN.NetworkManager.LeaveRoom()
+				}
+
+				// // Força o encerramento da aplicação usando os
+				// ui.App.Quit()
+
+				// Força o encerramento do programa se o Quit não funcionar
+				log.Println("Encerrando a aplicação...")
+				os.Exit(0)
+			}),
+		))
+
+		log.Println("System tray icon initialized successfully")
+	} else {
+		log.Println("System tray is not supported on this platform")
+	}
 }
 
 // createWindow creates and configures a new window with specified parameters
@@ -282,11 +416,16 @@ func (ui *UIManager) createWindow(title string, width, height int, resizable boo
 	window.Resize(fyne.NewSize(float32(width), float32(height)))
 	window.SetFixedSize(!resizable)
 
-	// Apenas garantimos que a janela seja exibida sobre outras, mas não afete o ciclo de vida da aplicação
+	// We only ensure the window is displayed above others, but doesn't affect the application lifecycle
 	window.SetOnClosed(func() {
-		// Janela fechada, mas não encerramos a aplicação
-		// A janela será recriada na próxima vez que for necessária
+		// Window closed, but we don't terminate the application
+		// The window will be recreated the next time it's needed
 	})
 
 	return window
+}
+
+// ShowMessage displays a simple message dialog to the user
+func (ui *UIManager) ShowMessage(title, message string) {
+	dialog.ShowInformation(title, message, ui.MainWindow)
 }
