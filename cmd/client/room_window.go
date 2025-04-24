@@ -80,6 +80,8 @@ func (rd *RoomDialog) Show() {
 
 			if err != nil {
 				dialog.ShowError(fmt.Errorf("Failed to create network: %v", err), rd.UI.MainWindow)
+				// Clear the reference and return early to avoid showing success dialog
+				rd.UI.RoomDialog = nil
 				return
 			}
 
@@ -118,7 +120,8 @@ func (rd *RoomDialog) Show() {
 				// Update UI
 				rd.UI.refreshNetworkList()
 			} else {
-				dialog.ShowInformation("Network Created", "Network created successfully!", rd.UI.MainWindow)
+				// If roomID is empty, it's likely an error occurred but wasn't caught
+				dialog.ShowError(errors.New("Failed to create network: No network ID returned"), rd.UI.MainWindow)
 			}
 
 			// Clear the reference

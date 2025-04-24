@@ -1,168 +1,138 @@
 package main
 
 import (
+	"fmt"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
-// SettingsWindow manages the settings interface
+// SettingsWindow represents the settings dialog
 type SettingsWindow struct {
 	*BaseWindow
-	ServerEntry        *widget.Entry
-	AutoConnectCheck   *widget.Check
-	StartupCheck       *widget.Check
-	NotificationsCheck *widget.Check
-	ThemeSelect        *widget.Select
-	LanguageSelect     *widget.Select
-	Container          *fyne.Container
+	UI             *UIManager
+	serverInput    *widget.Entry
+	themeSelection *widget.Select
+	usernameInput  *widget.Entry // New field for username input
 }
 
 // NewSettingsWindow creates a new settings window
 func NewSettingsWindow(ui *UIManager) *SettingsWindow {
-	settingsWindow := &SettingsWindow{
-		BaseWindow: NewBaseWindow(ui, "Settings - goVPN", 500, 400, false),
+	sw := &SettingsWindow{
+		BaseWindow: NewBaseWindow(ui, "Settings", 400, 300, true),
+		UI:         ui,
 	}
 
-	// Ensure content is created immediately after window initialization
-	settingsWindow.Content = settingsWindow.CreateContent()
-
-	return settingsWindow
-}
-
-// CreateContent creates the content for the settings window
-func (sw *SettingsWindow) CreateContent() fyne.CanvasObject {
-	// Load current settings
-	config := sw.UI.ConfigManager.GetConfig()
-
-	// Server settings
-	sw.ServerEntry = widget.NewEntry()
-	sw.ServerEntry.SetPlaceHolder("Signaling server address")
-	sw.ServerEntry.SetText(config.SignalServer)
-
-	// Behavior settings
-	sw.AutoConnectCheck = widget.NewCheck("Auto-connect to last network", nil)
-	sw.AutoConnectCheck.Checked = config.AutoConnect
-
-	sw.StartupCheck = widget.NewCheck("Start on system startup", nil)
-	sw.StartupCheck.Checked = config.StartOnSystemBoot
-
-	sw.NotificationsCheck = widget.NewCheck("Enable notifications", nil)
-	sw.NotificationsCheck.Checked = config.EnableNotifications
-
-	// Appearance settings
-	sw.ThemeSelect = widget.NewSelect([]string{"System Default", "Light", "Dark"}, nil)
-	sw.ThemeSelect.SetSelected(config.ThemePreference)
-
-	sw.LanguageSelect = widget.NewSelect([]string{"English", "Spanish"}, nil)
-	sw.LanguageSelect.SetSelected(config.Language)
-
-	// Tabs for different settings categories
-	tabs := container.NewAppTabs(
-		container.NewTabItem("Connection", container.NewVBox(
-			widget.NewLabel("Server Settings"),
-			widget.NewForm(
-				widget.NewFormItem("Signal Server", sw.ServerEntry),
-			),
-			sw.AutoConnectCheck,
-		)),
-		container.NewTabItem("Appearance", container.NewVBox(
-			widget.NewForm(
-				widget.NewFormItem("Theme", sw.ThemeSelect),
-				widget.NewFormItem("Language", sw.LanguageSelect),
-			),
-		)),
-		container.NewTabItem("System", container.NewVBox(
-			sw.StartupCheck,
-			sw.NotificationsCheck,
-		)),
-	)
-
-	// Button container
-	buttons := container.NewHBox(
-		widget.NewButton("Cancel", func() {
-			sw.Close()
-		}),
-		widget.NewButton("Save", func() {
-			sw.saveSettings()
-		}),
-	)
-
-	// Main container
-	sw.Container = container.NewBorder(
-		nil,
-		buttons,
-		nil,
-		nil,
-		tabs,
-	)
-
-	return sw.Container
-}
-
-// saveSettings saves the current settings
-func (sw *SettingsWindow) saveSettings() {
-	// Get current settings
-	config := sw.UI.ConfigManager.GetConfig()
-
-	// Update settings with interface values
-	config.SignalServer = sw.ServerEntry.Text
-	config.ThemePreference = sw.ThemeSelect.Selected
-	config.Language = sw.LanguageSelect.Selected
-	config.AutoConnect = sw.AutoConnectCheck.Checked
-	config.StartOnSystemBoot = sw.StartupCheck.Checked
-	config.EnableNotifications = sw.NotificationsCheck.Checked
-
-	// Save settings
-	sw.UI.ConfigManager.UpdateConfig(config)
-
-	// Update signal server in NetworkManager
-	sw.UI.VPN.NetworkManager.SignalServer = config.SignalServer
-
-	// Apply theme
-	switch config.ThemePreference {
-	case "Light":
-		sw.UI.App.Settings().SetTheme(theme.LightTheme())
-	case "Dark":
-		sw.UI.App.Settings().SetTheme(theme.DarkTheme())
-	case "System Default":
-		sw.UI.App.Settings().SetTheme(theme.DefaultTheme())
-	}
-
-	// Apply other settings-based adjustments
-	// (Code for system boot startup, etc. would be implemented here)
-
-	// Close the window
-	sw.Close()
-}
-
-// Show overrides the BaseWindow Show method to ensure content is created correctly
-func (sw *SettingsWindow) Show() {
-	// If window was destroyed, create a new one
-	if sw.Window == nil {
-		sw.Window = sw.UI.createWindow(sw.Title, sw.Width, sw.Height, sw.Resizable)
-		// Add handler for when window is closed
-		sw.Window.SetOnClosed(func() {
-			sw.Window = nil
-			// Also clear reference in UIManager when window is closed by "X"
-			sw.UI.SettingsWindow = nil
-		})
-		// Always recreate content to avoid problems with old references
-		sw.Content = nil
-	}
-
-	// Create content - always recreate to avoid issues
+	// Initialize content immediately after window creation
 	sw.Content = sw.CreateContent()
 
-	// Set window content
-	if sw.Content != nil {
-		sw.Window.SetContent(sw.Content)
+	return sw
+}
+
+// CreateContent builds the settings UI
+func (s *SettingsWindow) CreateContent() fyne.CanvasObject {
+	// Get current configuration
+	config := s.UI.ConfigManager.GetConfig()
+
+	// Create server input field
+	serverLabel := widget.NewLabel("Signal Server URL:")
+	s.serverInput = widget.NewEntry()
+	s.serverInput.SetText(s.UI.VPN.NetworkManager.SignalServer)
+
+	// Create theme selection dropdown
+	themeLabel := widget.NewLabel("Theme:")
+	s.themeSelection = widget.NewSelect([]string{"System Default", "Light", "Dark"}, func(selected string) {
+		// Theme selection is handled on save
+	})
+	// Set current theme selection
+	s.themeSelection.SetSelected(config.ThemePreference)
+
+	// Create username input field
+	usernameLabel := widget.NewLabel("Display Username:")
+	s.usernameInput = widget.NewEntry()
+	s.usernameInput.SetText(config.Username) // Load saved username from config
+	s.usernameInput.SetPlaceHolder("Enter your display name")
+	// Limitar nome de usuário a 10 caracteres
+	s.usernameInput.Validator = func(s string) error {
+		if len(s) > 10 {
+			return fmt.Errorf("Username must be 10 characters or less")
+		}
+		return nil
+	}
+
+	// Create save and cancel buttons
+	saveButton := widget.NewButton("Save", func() {
+		s.saveSettings()
+	})
+	saveButton.Importance = widget.HighImportance
+
+	cancelButton := widget.NewButton("Cancel", func() {
+		s.Close()
+	})
+
+	// Create button container
+	buttonContainer := container.NewHBox(
+		layout.NewSpacer(),
+		cancelButton,
+		saveButton,
+	)
+
+	// Create form layout
+	form := container.NewVBox(
+		serverLabel,
+		s.serverInput,
+		widget.NewSeparator(),
+		themeLabel,
+		s.themeSelection,
+		widget.NewSeparator(),
+		usernameLabel,
+		s.usernameInput,
+		layout.NewSpacer(),
+	)
+
+	// Main layout with padding
+	content := container.NewPadded(
+		container.NewBorder(
+			nil,
+			buttonContainer,
+			nil,
+			nil,
+			form,
+		),
+	)
+
+	return content
+}
+
+// Show sobrescreve o método Show da BaseWindow para garantir que o conteúdo seja criado corretamente
+func (s *SettingsWindow) Show() {
+	// Se a janela foi destruída, cria uma nova
+	if s.Window == nil {
+		s.Window = s.UI.createWindow(s.Title, s.Width, s.Height, s.Resizable)
+		// Adiciona novamente o manipulador para quando a janela for fechada
+		s.Window.SetOnClosed(func() {
+			s.Window = nil
+			// Também limpa a referência no UIManager quando a janela é fechada pelo "X"
+			s.UI.SettingsWindow = nil
+		})
+		// Sempre recria o conteúdo para evitar problemas com referências antigas
+		s.Content = nil
+	}
+
+	// Cria o conteúdo - sempre recria para evitar problemas
+	s.Content = s.CreateContent()
+
+	// Define o conteúdo da janela
+	if s.Content != nil {
+		s.Window.SetContent(s.Content)
 	} else {
-		// If content is null, display an error
-		errorLabel := widget.NewLabel("Error: Could not create window content")
-		closeButton := widget.NewButton("Close", func() {
-			sw.Close()
+		// Se o conteúdo for nulo, exibe um erro
+		errorLabel := widget.NewLabel("Erro: Não foi possível criar o conteúdo da janela")
+		closeButton := widget.NewButton("Fechar", func() {
+			s.Close()
 		})
 
 		errorContent := container.NewCenter(
@@ -172,19 +142,69 @@ func (sw *SettingsWindow) Show() {
 			),
 		)
 
-		sw.Window.SetContent(errorContent)
+		s.Window.SetContent(errorContent)
 	}
 
-	// Display centered window
-	sw.Window.CenterOnScreen()
-	sw.Window.Show()
+	// Exibe a janela centralizada
+	s.Window.CenterOnScreen()
+	s.Window.Show()
 }
 
-// Close overrides the BaseWindow Close method to ensure reference in UIManager is cleared
-func (sw *SettingsWindow) Close() {
-	// Call parent class Close method
-	sw.BaseWindow.Close()
+// Close sobrescreve o método Close da BaseWindow para garantir que a referência no UIManager seja limpa
+func (s *SettingsWindow) Close() {
+	// Chama o método Close da classe pai
+	s.BaseWindow.Close()
 
-	// Clear reference in UIManager
-	sw.UI.SettingsWindow = nil
+	// Limpa a referência no UIManager
+	s.UI.SettingsWindow = nil
+}
+
+// saveSettings saves the current settings
+func (s *SettingsWindow) saveSettings() {
+	config := s.UI.ConfigManager.GetConfig()
+
+	// Save signal server
+	newServer := s.serverInput.Text
+	if newServer != s.UI.VPN.NetworkManager.SignalServer {
+		s.UI.VPN.NetworkManager.SignalServer = newServer
+		config.SignalServer = newServer
+	}
+
+	// Save theme preference
+	themePreference := s.themeSelection.Selected
+	if themePreference != config.ThemePreference {
+		config.ThemePreference = themePreference
+
+		// Apply theme change
+		switch themePreference {
+		case "Light":
+			s.UI.App.Settings().SetTheme(theme.LightTheme())
+		case "Dark":
+			s.UI.App.Settings().SetTheme(theme.DarkTheme())
+		default:
+			s.UI.App.Settings().SetTheme(theme.DefaultTheme())
+		}
+
+		// Update colors of elements that depend on theme
+		s.UI.UpdateThemeColors()
+	}
+
+	// Save username (truncando para 10 caracteres se necessário)
+	username := s.usernameInput.Text
+	if len(username) > 10 {
+		username = username[:10]
+	}
+
+	if username != config.Username {
+		config.Username = username
+		// Update the NetworkManager username
+		if s.UI.VPN.NetworkManager != nil {
+			s.UI.VPN.NetworkManager.Username = username
+		}
+	}
+
+	// Save to file
+	s.UI.ConfigManager.UpdateConfig(config)
+
+	s.Close()
 }

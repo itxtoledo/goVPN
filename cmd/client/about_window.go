@@ -18,7 +18,7 @@ type AboutWindow struct {
 // NewAboutWindow creates a new "About" window
 func NewAboutWindow(ui *UIManager) *AboutWindow {
 	aboutWindow := &AboutWindow{
-		BaseWindow: NewBaseWindow(ui, "About - goVPN", 400, 300, false),
+		BaseWindow: NewBaseWindow(ui, "About - "+AppTitleName, 400, 300, false),
 	}
 
 	// Garantir que o conteúdo é criado imediatamente após a inicialização da janela
@@ -30,7 +30,7 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 // CreateContent creates the content for the "About" window
 func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 	// Title
-	title := widget.NewLabelWithStyle("goVPN", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	title := widget.NewLabelWithStyle(AppTitleName, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 
 	// Version
 	version := widget.NewLabelWithStyle("Version 1.0.0", fyne.TextAlignCenter, fyne.TextStyle{})
@@ -45,9 +45,16 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 
 	// Author
 	authors := widget.NewLabelWithStyle(
-		"Developed by: goVPN Team",
+		"Developed by: "+AppTitleName+" Team",
 		fyne.TextAlignCenter,
 		fyne.TextStyle{},
+	)
+
+	// Made in Brazil by Gustavo Toledo
+	madeInBrazil := widget.NewLabelWithStyle(
+		"Proudly made in Brazil by Gustavo Toledo",
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Italic: true},
 	)
 
 	// Social links
@@ -66,7 +73,7 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 	)
 
 	// Logo (colored text as a placeholder for an image)
-	logo := canvas.NewText("goVPN", color.NRGBA{R: 0, G: 180, B: 100, A: 255})
+	logo := canvas.NewText(AppTitleName, color.NRGBA{R: 0, G: 180, B: 100, A: 255})
 	logo.TextSize = 48
 	logo.Alignment = fyne.TextAlignCenter
 
@@ -84,6 +91,7 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 		description,
 		widget.NewSeparator(),
 		authors,
+		madeInBrazil,
 		widget.NewSeparator(),
 		linksContainer,
 		closeButton,

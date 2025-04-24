@@ -1,0 +1,25 @@
+[Details]
+  Icon = "./assets/app.png"
+  Name = "GoVPN"
+  ID = "com.github.itxtoledo.govpn.client"
+  Version = "1.0.0"
+  Build = 1
+
+[Migrations]
+  fyneDo = true
+
+[Source]
+  Repo = "https://github.com/itxtoledo/goVPN"
+  Dir = "cmd/client"
+
+[Development]
+  HelperText = "This binary was built with debug symbols"
+
+[Release]
+  HelperText = "This binary was built without debug symbols"
+
+[LinuxAndBSD]
+  GenericName = "Virtual LAN Gaming"
+  Categories = ["Network", "Game"]
+  Comment = "A Virtual LAN solution for gaming that allows players to connect as if they were on the same local network."
+  Keywords = ["vpn", "gaming", "network", "vlan", "p2p"]

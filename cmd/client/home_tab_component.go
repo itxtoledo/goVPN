@@ -113,7 +113,12 @@ func (h *HomeTabComponent) updateContent() {
 		h.Container.Add(container.NewCenter(h.EmptyContent))
 	} else {
 		// Display the network tree when there are networks or is connected
-		h.Container.Add(h.NetworkTree.GetNetworkTree())
+		if h.NetworkTree != nil && h.NetworkTree.ui != nil && h.NetworkTree.ui.NetworkList != nil {
+			h.Container.Add(h.NetworkTree.ui.NetworkList)
+		} else {
+			// Fallback to empty content if network tree is not available
+			h.Container.Add(container.NewCenter(h.EmptyContent))
+		}
 	}
 
 	h.Container.Refresh()

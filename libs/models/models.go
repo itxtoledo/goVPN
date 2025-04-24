@@ -1,61 +1,53 @@
 package models
 
 import (
-	"encoding/json"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 )
 
-// Room representa uma sala virtual na rede VPN
+// Message represents a message in the system
+type Message struct {
+	Type          string `json:"type"`
+	RoomID        string `json:"room_id,omitempty"`
+	RoomName      string `json:"room_name,omitempty"`
+	PublicKey     string `json:"public_key,omitempty"`
+	Password      string `json:"password,omitempty"`
+	DestinationID string `json:"destination_id,omitempty"`
+	TargetID      string `json:"target_id,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Offer         string `json:"offer,omitempty"`
+	Answer        string `json:"answer,omitempty"`
+	Candidate     string `json:"candidate,omitempty"`
+	Data          []byte `json:"data,omitempty"`
+	Signature     string `json:"signature,omitempty"`
+	MessageID     string `json:"message_id,omitempty"` // ID único para rastreamento de mensagens
+}
+
+// Room represents a network or room
 type Room struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	Password    string `json:"password,omitempty"` // Omitido em respostas públicas
-	ClientCount int    `json:"clientCount"`
-	Status      string `json:"status,omitempty"`    // Campo apenas para o cliente
-	IsCreator   bool   `json:"isCreator,omitempty"` // Campo apenas para o cliente
+	Password    string `json:"password,omitempty"`
+	ClientCount int    `json:"client_count"`
 }
 
-// Message representa uma mensagem websocket
-type Message struct {
-	Type          string          `json:"type"`
-	RoomID        string          `json:"roomID,omitempty"`
-	RoomName      string          `json:"roomName,omitempty"`
-	Password      string          `json:"password,omitempty"`
-	PublicKey     string          `json:"publicKey,omitempty"`
-	TargetID      string          `json:"targetID,omitempty"`
-	Signature     string          `json:"signature,omitempty"`
-	Data          json.RawMessage `json:"data,omitempty"`
-	Candidate     json.RawMessage `json:"candidate,omitempty"`
-	Offer         json.RawMessage `json:"offer,omitempty"`
-	Answer        json.RawMessage `json:"answer,omitempty"`
-	DestinationID string          `json:"destinationID,omitempty"`
-}
+// GenerateMessageID gera um ID aleatório em formato hexadecimal com base no comprimento especificado
+func GenerateMessageID(length int) (string, error) {
+	// Determine quantos bytes precisamos para gerar o ID
+	byteLength := (length + 1) / 2 // arredondamento para cima para garantir bytes suficientes
 
-// NetworkPacket representa um pacote de rede tunelado pela VPN
-type NetworkPacket struct {
-	Source      string `json:"source"`
-	Destination string `json:"destination"`
-	Protocol    string `json:"protocol"` // tcp, udp, icmp
-	Port        int    `json:"port,omitempty"`
-	Data        []byte `json:"data"`
-	Encrypted   bool   `json:"encrypted"`
-}
+	bytes := make([]byte, byteLength)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", fmt.Errorf("falha ao gerar bytes aleatórios: %w", err)
+	}
 
-// ClientInfo representa informações sobre um cliente conectado
-type ClientInfo struct {
-	ID        string `json:"id"`
-	Connected bool   `json:"connected"`
-	P2PStatus string `json:"p2pStatus"` // "direct", "relayed", "failed"
-	Latency   int64  `json:"latency"`   // em milissegundos
-}
+	// Converte para hexadecimal e limita ao comprimento desejado
+	id := hex.EncodeToString(bytes)
+	if len(id) > length {
+		id = id[:length]
+	}
 
-// RoomListResponse é utilizado na API para listar salas disponíveis
-type RoomListResponse struct {
-	Rooms []Room `json:"rooms"`
-}
-
-// ErrorResponse representa uma resposta de erro
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Details string `json:"details,omitempty"`
-	Code    int    `json:"code"`
+	return id, nil
 }

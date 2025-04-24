@@ -1,17 +1,20 @@
 package main
 
 import (
+	"image/color"
 	"log"
 	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/services/client/icon"
 )
 
 // UIManager manages the VPN client's graphical interface
@@ -34,7 +37,7 @@ type UIManager struct {
 	// Direct references to important components maintained for compatibility
 	PowerButton   *widget.Button
 	NetworkList   *widget.Tree
-	IPInfoLabel   *widget.Label
+	IPInfoLabel   *canvas.Text // Changed from *widget.Label to *canvas.Text
 	RoomNameLabel *widget.Label
 	NetworkUsers  map[string]bool // Map of public keys (truncated) and their status (online/offline)
 
@@ -72,15 +75,10 @@ func NewUIManager(vpn *VPNClient) *UIManager {
 	// Create main window
 	uiManager.MainWindow = uiManager.App.NewWindow("goVPN")
 
-	// Carregar o ícone do aplicativo após a inicialização completa do UIManager
-	iconPath := uiManager.resolveResourcePath("power-button.svg")
-	appIcon, err := fyne.LoadResourceFromPath(iconPath)
-	if err != nil {
-		log.Printf("Error loading app icon: %v", err)
-	} else {
-		uiManager.App.SetIcon(appIcon)
-		uiManager.MainWindow.SetIcon(appIcon)
-	}
+	appIcon := icon.Power
+
+	uiManager.App.SetIcon(appIcon)
+	uiManager.MainWindow.SetIcon(appIcon)
 
 	// Set fixed size and define as main window
 	uiManager.MainWindow.SetFixedSize(true)
@@ -122,24 +120,11 @@ func (ui *UIManager) resolveResourcePath(filename string) string {
 	return filename
 }
 
-// loadSystemTrayIcon carrega o ícone personalizado para a bandeja do sistema
-func (ui *UIManager) loadSystemTrayIcon() fyne.Resource {
-	// Usa a função resolveResourcePath para encontrar o arquivo do ícone
-	iconPath := ui.resolveResourcePath("power-button.svg")
-
-	// Tenta carregar o ícone personalizado
-	res, err := fyne.LoadResourceFromPath(iconPath)
-	if err != nil {
-		log.Printf("Error loading system tray icon: %v", err)
-		// Se não conseguir carregar o ícone personalizado, usa o padrão do Fyne
-		return theme.ComputerIcon()
-	}
-	return res
-}
-
 // updateSystemTrayStatus atualiza o status do ícone na bandeja do sistema
 func (ui *UIManager) updateSystemTrayStatus() {
-	// Atualiza o texto de status (tooltip) do ícone
+	// Create the title text based on connection state
+	title := "goVPN - Disconnected"
+	
 	if ui.VPN.IsConnected {
 		networkName := "unknown"
 		if ui.VPN.NetworkManager != nil && ui.VPN.NetworkManager.RoomName != "" {
@@ -152,13 +137,21 @@ func (ui *UIManager) updateSystemTrayStatus() {
 			ipAddress = ui.VPN.NetworkManager.VirtualNetwork.GetLocalIP()
 		}
 
-		ui.MainWindow.SetTitle(
-			"goVPN - Connected\n" +
-				"Network: " + networkName + "\n" +
-				"IP: " + ipAddress)
-	} else {
-		ui.MainWindow.SetTitle("goVPN - Disconnected")
+		title = "goVPN - Connected\n" +
+			"Network: " + networkName + "\n" +
+			"IP: " + ipAddress
 	}
+	
+	// Using Fyne's internal async functionality to ensure UI updates happen on the main thread
+	// Store the title locally and update it in the main UI thread
+	finalTitle := title
+	fyne.CurrentApp().SendNotification(&fyne.Notification{
+		Title:   finalTitle,
+		Content: "",
+	})
+	
+	// For the window title, we use a callback to the main window
+	ui.MainWindow.SetTitle(finalTitle)
 }
 
 // refreshNetworkList updates the list of users in the network
@@ -181,14 +174,15 @@ func (ui *UIManager) refreshNetworkList() {
 		}
 	}
 
-	// Update network tree view
-	if ui.NetworkTreeComponent != nil {
-		ui.NetworkTreeComponent.RefreshTree()
-	}
-
+	// Update UI elements directly - Fyne handles thread safety internally
 	// Update Home tab content
 	if ui.HomeTabComponent != nil {
 		ui.HomeTabComponent.updateContent()
+	}
+
+	// Update username display
+	if ui.HeaderComponent != nil {
+		ui.HeaderComponent.updateUsername()
 	}
 
 	// Atualiza o status na bandeja do sistema
@@ -284,9 +278,15 @@ func (ui *UIManager) initializeUIComponents() {
 	ui.NetworkTreeComponent = NewNetworkTreeComponent(ui)
 	ui.HomeTabComponent = NewHomeTabComponent(ui, ui.NetworkTreeComponent)
 
+	// Set username from config
+	if ui.VPN.NetworkManager != nil {
+		config := ui.ConfigManager.GetConfig()
+		ui.VPN.NetworkManager.Username = config.Username
+	}
+
 	// Maintain direct references for compatibility with existing code
 	ui.PowerButton = ui.HeaderComponent.PowerButton
-	ui.NetworkList = ui.NetworkTreeComponent.NetworkList
+	ui.NetworkList = ui.NetworkTreeComponent.ui.NetworkList
 	ui.IPInfoLabel = ui.HeaderComponent.IPInfoLabel
 	ui.RoomNameLabel = ui.HeaderComponent.RoomNameLabel
 }
@@ -353,7 +353,7 @@ func (ui *UIManager) setupSystemTray() {
 	// Verifica se o aplicativo suporta ícones na bandeja
 	if deskApp, ok := ui.App.(desktop.App); ok {
 		// Configura o ícone personalizado para a bandeja do sistema
-		deskApp.SetSystemTrayIcon(ui.loadSystemTrayIcon())
+		deskApp.SetSystemTrayIcon(icon.VPN)
 
 		// Show initial notification
 		ui.App.SendNotification(&fyne.Notification{
@@ -428,4 +428,22 @@ func (ui *UIManager) createWindow(title string, width, height int, resizable boo
 // ShowMessage displays a simple message dialog to the user
 func (ui *UIManager) ShowMessage(title, message string) {
 	dialog.ShowInformation(title, message, ui.MainWindow)
+}
+
+// UpdateThemeColors atualiza as cores de elementos que dependem do tema
+func (ui *UIManager) UpdateThemeColors() {
+	// Atualiza a cor do texto do IPv4 no HeaderComponent
+	if ui.HeaderComponent != nil && ui.HeaderComponent.IPInfoLabel != nil {
+		// Verifica o tema atual
+		isDark := ui.App.Settings().ThemeVariant() == theme.VariantDark
+
+		// Define a cor apropriada dependendo do tema
+		if isDark {
+			ui.HeaderComponent.IPInfoLabel.Color = color.NRGBA{R: 255, G: 255, B: 0, A: 255} // Amarelo para tema escuro
+		} else {
+			ui.HeaderComponent.IPInfoLabel.Color = color.NRGBA{R: 0, G: 60, B: 120, A: 255} // Azul para tema claro
+		}
+
+		ui.HeaderComponent.IPInfoLabel.Refresh()
+	}
 }

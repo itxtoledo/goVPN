@@ -2,146 +2,220 @@
 package main
 
 import (
+	"log"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/libs/models"
 )
 
-// NetworkTreeComponent representa a árvore de visualização de rede
+// NetworkTreeComponent represents the networks list with categories
 type NetworkTreeComponent struct {
-	UI          *UIManager
-	NetworkList *widget.Tree
+	ui          *UIManager
+	NetworkList *widget.List  // Changed from tree to list for better stability
+	rooms       []models.Room // All rooms (local and remote)
+	localRooms  map[string]models.Room
+	container   *fyne.Container
 }
 
-// NewNetworkTreeComponent cria uma nova instância do componente de árvore de rede
+// NewNetworkTreeComponent creates a new network tree component
 func NewNetworkTreeComponent(ui *UIManager) *NetworkTreeComponent {
-	comp := &NetworkTreeComponent{
-		UI: ui,
+	ntc := &NetworkTreeComponent{
+		ui:         ui,
+		rooms:      []models.Room{},
+		localRooms: make(map[string]models.Room),
 	}
 
-	comp.setupNetworkTree()
-	return comp
-}
+	// Create a list instead of a tree for more reliable display
+	ntc.NetworkList = widget.NewList(
+		// Length function
+		func() int {
+			// Return the number of items (categories + rooms)
+			count := 2 // Always have "Recent Networks" and "Available Networks" headers
+			count += len(ntc.localRooms)
 
-// setupNetworkTree configura a árvore de rede que mostra usuários
-func (n *NetworkTreeComponent) setupNetworkTree() {
-	n.NetworkList = widget.NewTree(
-		func(id widget.TreeNodeID) []widget.TreeNodeID {
-			if id == "" {
-				return []widget.TreeNodeID{"network"}
-			} else if id == "network" {
-				userIDs := make([]widget.TreeNodeID, 0, len(n.UI.NetworkUsers))
-				for userID := range n.UI.NetworkUsers {
-					userIDs = append(userIDs, "user_"+userID)
+			// Count available (non-local) rooms
+			for _, room := range ntc.rooms {
+				if _, exists := ntc.localRooms[room.ID]; !exists {
+					count++
 				}
-				return userIDs
 			}
-			return []widget.TreeNodeID{}
+
+			return count
 		},
-		func(id widget.TreeNodeID) bool {
-			return id == "" || id == "network"
-		},
-		func(branch bool) fyne.CanvasObject {
-			if branch {
-				// For the network node, place status icon on the left, label in the center, and expand icon on the right
-				statusIcon := widget.NewIcon(theme.RadioButtonIcon())
-				label := widget.NewLabel("Network")
-				expandIcon := widget.NewIcon(theme.MenuDropDownIcon())
-				// Use container.NewHBox to ensure proper ordering
-				return container.NewHBox(
-					statusIcon,
-					label,
-					layout.NewSpacer(),
-					expandIcon,
-				)
-			}
-			// For users, keep the simple format
+		// Create item UI
+		func() fyne.CanvasObject {
+			// Create a template for list items with just an icon and label
 			return container.NewHBox(
-				widget.NewIcon(theme.ComputerIcon()),
-				widget.NewLabel("User"),
+				widget.NewIcon(theme.HomeIcon()),
+				widget.NewLabel("Template Item"),
 			)
 		},
-		func(id widget.TreeNodeID, branch bool, o fyne.CanvasObject) {
-			if branch {
-				// Update elements for the network node
-				container := o.(*fyne.Container)
-				statusIcon := container.Objects[0].(*widget.Icon) // Status icon at index 0
-				label := container.Objects[1].(*widget.Label)     // Label at index 1
-				expandIcon := container.Objects[3].(*widget.Icon) // Expand icon at index 3
+		// Update item UI
+		func(id widget.ListItemID, item fyne.CanvasObject) {
+			// Convert to container and access elements
+			hBox := item.(*fyne.Container)
+			if len(hBox.Objects) < 2 {
+				return
+			}
+			icon := hBox.Objects[0].(*widget.Icon)
+			label := hBox.Objects[1].(*widget.Label)
 
-				if id == "network" {
-					label.SetText("Network")
-
-					// Update status icon based on connection
-					if n.UI.VPN.IsConnected {
-						statusIcon.SetResource(theme.NewColoredResource(theme.RadioButtonCheckedIcon(), theme.ColorNameSuccess))
-					} else {
-						statusIcon.SetResource(theme.NewColoredResource(theme.RadioButtonIcon(), theme.ColorNameError))
+			// Get the appropriate item based on id
+			if id == 0 {
+				// Recent Networks header
+				icon.SetResource(theme.FolderOpenIcon())
+				label.SetText("Recent Networks")
+				label.TextStyle = fyne.TextStyle{Bold: true}
+			} else if id == 1+len(ntc.localRooms) {
+				// Available Networks header
+				icon.SetResource(theme.FolderOpenIcon())
+				label.SetText("Available Networks")
+				label.TextStyle = fyne.TextStyle{Bold: true}
+			} else if id <= len(ntc.localRooms) {
+				// Recent network item
+				var i int = 0
+				for _, room := range ntc.getSortedLocalRooms() {
+					if i == id-1 { // -1 because we have a header
+						icon.SetResource(theme.ComputerIcon())
+						label.SetText(room.Name)
+						label.TextStyle = fyne.TextStyle{} // Reset any style
+						break
 					}
-
-					// Update expand/collapse icon based on state
-					if n.NetworkList.IsBranchOpen(id) {
-						expandIcon.SetResource(theme.MenuDropUpIcon())
-					} else {
-						expandIcon.SetResource(theme.MenuDropDownIcon())
-					}
+					i++
 				}
-			} else if id[:5] == "user_" {
-				container := o.(*fyne.Container)
-				label := container.Objects[1].(*widget.Label)
-				icon := container.Objects[0].(*widget.Icon)
-
-				userID := id[5:]
-				isOnline := n.UI.NetworkUsers[userID]
-
-				ipText := "Offline user"
-				if isOnline {
-					if n.UI.VPN.NetworkManager.VirtualNetwork != nil {
-						// Using the network library's implementation
-						// Get peer's virtual IP if exists
-						ipText = "Online user"
-						icon.SetResource(theme.RadioButtonCheckedIcon())
-					} else {
-						ipText = "Online user"
-						icon.SetResource(theme.RadioButtonCheckedIcon())
+			} else {
+				// Available network item
+				var i int = 0
+				for _, room := range ntc.getAvailableRooms() {
+					if i == id-(2+len(ntc.localRooms)) { // -2 for both headers, -len for local rooms
+						icon.SetResource(theme.StorageIcon())
+						label.SetText(room.Name)
+						label.TextStyle = fyne.TextStyle{} // Reset any style
+						break
 					}
-				} else {
-					icon.SetResource(theme.RadioButtonIcon())
+					i++
 				}
-
-				label.SetText(ipText)
 			}
 		},
 	)
 
-	// Expand the network node by default
-	n.NetworkList.OpenBranch("network")
+	// Create scrollable container with the list
+	scrollContainer := container.NewScroll(ntc.NetworkList)
+	ntc.container = container.NewMax(scrollContainer)
 
-	// Add listeners to update expand/collapse icons
-	n.NetworkList.OnBranchOpened = func(id widget.TreeNodeID) {
-		if id == "network" {
-			n.NetworkList.Refresh()
+	// Set a reasonable min size
+	// ntc.NetworkList.MinSize = fyne.NewSize(280, 300)
+
+	// Register callback to update when room list changes
+	if ui != nil && ui.VPN != nil && ui.VPN.NetworkManager != nil {
+		ui.VPN.NetworkManager.OnRoomListUpdate = func(rooms []models.Room) {
+			ntc.updateRooms(rooms)
 		}
 	}
 
-	n.NetworkList.OnBranchClosed = func(id widget.TreeNodeID) {
-		if id == "network" {
-			n.NetworkList.Refresh()
+	// Load initial rooms without attempting to connect
+	ntc.loadLocalRooms()
+
+	return ntc
+}
+
+// GetContainer returns the component's container
+func (ntc *NetworkTreeComponent) GetContainer() *fyne.Container {
+	return ntc.container
+}
+
+// loadLocalRooms loads rooms from local database
+func (ntc *NetworkTreeComponent) loadLocalRooms() {
+	// Ensure the VPN client and NetworkManager are available
+	if ntc.ui == nil || ntc.ui.VPN == nil || ntc.ui.VPN.NetworkManager == nil {
+		log.Printf("Cannot load local rooms: UI or NetworkManager is nil")
+		return
+	}
+
+	localRooms, err := ntc.ui.VPN.NetworkManager.loadLocalRooms()
+	if err != nil {
+		log.Printf("Error loading local rooms: %v", err)
+		return
+	}
+
+	// Update local rooms map
+	ntc.localRooms = make(map[string]models.Room)
+	for _, room := range localRooms {
+		ntc.localRooms[room.ID] = room
+	}
+
+	// Update the component
+	ntc.updateRooms(nil)
+}
+
+// updateRooms updates the list with new rooms from server
+func (ntc *NetworkTreeComponent) updateRooms(serverRooms []models.Room) {
+	// Safety check
+	if ntc.NetworkList == nil {
+		log.Printf("Warning: NetworkList is nil in updateRooms")
+		return
+	}
+
+	// Combine local and server rooms
+	allRooms := []models.Room{}
+
+	// Add local rooms first
+	for _, room := range ntc.localRooms {
+		allRooms = append(allRooms, room)
+	}
+
+	// Add server rooms that aren't already in local
+	if serverRooms != nil {
+		for _, room := range serverRooms {
+			if _, exists := ntc.localRooms[room.ID]; !exists {
+				allRooms = append(allRooms, room)
+			}
 		}
 	}
+
+	// Update the component state
+	ntc.rooms = allRooms
+
+	// Update the list
+	ntc.NetworkList.Refresh()
 }
 
-// GetNetworkTree retorna o widget de árvore de rede
-func (n *NetworkTreeComponent) GetNetworkTree() *fyne.Container {
-	// Garantir que a árvore de rede não expanda além do tamanho da janela
-	container := container.NewMax(n.NetworkList)
-	container.Resize(fyne.NewSize(280, 500))
-	return container
+// getSortedLocalRooms returns local rooms sorted by last used time
+func (ntc *NetworkTreeComponent) getSortedLocalRooms() []models.Room {
+	rooms := []models.Room{}
+
+	// Collect all local rooms
+	for _, room := range ntc.localRooms {
+		rooms = append(rooms, room)
+	}
+
+	// We could add sorting logic here if we tracked last used time
+	// For now, let's leave them as they come from the database which
+	// should already have some order
+
+	return rooms
 }
 
-// RefreshTree atualiza a visualização da árvore
-func (n *NetworkTreeComponent) RefreshTree() {
-	n.NetworkList.Refresh()
+// getAvailableRooms returns rooms that are not in local storage
+func (ntc *NetworkTreeComponent) getAvailableRooms() []models.Room {
+	rooms := []models.Room{}
+
+	// Find rooms that aren't in local storage
+	for _, room := range ntc.rooms {
+		if _, exists := ntc.localRooms[room.ID]; !exists {
+			rooms = append(rooms, room)
+		}
+	}
+
+	return rooms
+}
+
+// Refresh explicitly refreshes the network list
+func (ntc *NetworkTreeComponent) Refresh() {
+	if ntc.NetworkList != nil {
+		ntc.NetworkList.Refresh()
+	}
 }

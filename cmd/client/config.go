@@ -2,40 +2,31 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 )
 
-// UserConfig stores user configuration
-type UserConfig struct {
-	SignalServer        string `json:"signalServer"`
-	ThemePreference     string `json:"themePreference"`     // "System Default", "Light", "Dark"
-	Language            string `json:"language"`            // "English", "Spanish"
-	AutoConnect         bool   `json:"autoConnect"`         // Auto-connect to last network
-	StartOnSystemBoot   bool   `json:"startOnSystemBoot"`   // Start on system startup
-	EnableNotifications bool   `json:"enableNotifications"` // Enable notifications
-	LastConnectedRoom   string `json:"lastConnectedRoom"`   // Last room the user connected to
+// Config represents application settings
+type Config struct {
+	SignalServer    string `json:"signal_server"`
+	ThemePreference string `json:"theme_preference"`
+	Username        string `json:"username"` // Added username field
 }
 
 // DefaultConfig returns configuration with default values
-func DefaultConfig() *UserConfig {
-	return &UserConfig{
-		SignalServer:        "localhost:8080",
-		ThemePreference:     "System Default",
-		Language:            "English",
-		AutoConnect:         false,
-		StartOnSystemBoot:   false,
-		EnableNotifications: true,
-		LastConnectedRoom:   "",
+func DefaultConfig() *Config {
+	return &Config{
+		SignalServer:    "localhost:8080",
+		ThemePreference: "System Default",
+		Username:        "",
 	}
 }
 
 // ConfigManager manages application configuration
 type ConfigManager struct {
 	configPath string
-	config     *UserConfig
+	config     *Config
 }
 
 // NewConfigManager creates a new configuration manager
@@ -68,7 +59,7 @@ func NewConfigManager() *ConfigManager {
 
 // LoadConfig loads configuration from file
 func (cm *ConfigManager) LoadConfig() {
-	data, err := ioutil.ReadFile(cm.configPath)
+	data, err := os.ReadFile(cm.configPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			log.Printf("Failed to read config file: %v", err)
@@ -76,7 +67,7 @@ func (cm *ConfigManager) LoadConfig() {
 		return
 	}
 
-	var config UserConfig
+	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.Printf("Failed to parse config file: %v", err)
 		return
@@ -93,18 +84,18 @@ func (cm *ConfigManager) SaveConfig() {
 		return
 	}
 
-	if err := ioutil.WriteFile(cm.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(cm.configPath, data, 0644); err != nil {
 		log.Printf("Failed to write config file: %v", err)
 	}
 }
 
 // GetConfig returns current configuration
-func (cm *ConfigManager) GetConfig() *UserConfig {
+func (cm *ConfigManager) GetConfig() *Config {
 	return cm.config
 }
 
 // UpdateConfig updates configuration
-func (cm *ConfigManager) UpdateConfig(config *UserConfig) {
+func (cm *ConfigManager) UpdateConfig(config *Config) {
 	cm.config = config
 	cm.SaveConfig()
 }

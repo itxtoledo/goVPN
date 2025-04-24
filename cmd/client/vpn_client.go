@@ -71,7 +71,7 @@ func (v *VPNClient) loadSettings() {
 	var stunServer string
 	err = v.DB.QueryRow("SELECT value FROM settings WHERE key = 'stun_server'").Scan(&stunServer)
 	if err == nil && stunServer != "" {
-		v.NetworkManager.ICEServers = []webrtc.ICEServer{
+		v.NetworkManager.RTCConfig.ICEServers = []webrtc.ICEServer{
 			{
 				URLs: []string{stunServer},
 			},
