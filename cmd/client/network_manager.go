@@ -70,12 +70,12 @@ func (n *NetworkManager) Connect() error {
 		return err
 	}
 
-	log.Printf("Conectando ao servidor de sinalização: %s", u.String())
+	log.Printf("Connecting to signaling server: %s", u.String())
 
 	for n.CurrentRetry = 0; n.CurrentRetry < n.MaxRetries; n.CurrentRetry++ {
 		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 		if err != nil {
-			log.Printf("Tentativa %d de conexão falhou: %v", n.CurrentRetry+1, err)
+			log.Printf("Connection attempt %d failed: %v", n.CurrentRetry+1, err)
 			if n.OnConnectionError != nil {
 				n.OnConnectionError(err)
 			}
@@ -91,7 +91,7 @@ func (n *NetworkManager) Connect() error {
 		return nil
 	}
 
-	return fmt.Errorf("não foi possível conectar ao servidor de sinalização após %d tentativas", n.MaxRetries)
+	return fmt.Errorf("could not connect to signaling server after %d attempts", n.MaxRetries)
 }
 
 // Disconnect desconecta do servidor de sinalização
@@ -213,14 +213,14 @@ func (n *NetworkManager) handleWebSocketMessages() {
 	for {
 		_, message, err := n.WSConn.ReadMessage()
 		if err != nil {
-			log.Printf("Erro ao ler mensagem: %v", err)
+			log.Printf("Error reading message: %v", err)
 			n.IsConnected = false
 			return
 		}
 
 		var msg models.Message
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("Erro ao desserializar mensagem: %v", err)
+			log.Printf("Error deserializing message: %v", err)
 			continue
 		}
 
@@ -256,7 +256,7 @@ func (n *NetworkManager) handleRoomListMessage(message []byte) {
 	}
 
 	if err := json.Unmarshal(message, &roomListMsg); err != nil {
-		log.Printf("Erro ao desserializar lista de salas: %v", err)
+		log.Printf("Error deserializing room list: %v", err)
 		return
 	}
 
@@ -270,19 +270,19 @@ func (n *NetworkManager) handleRoomCreatedMessage(msg models.Message) {
 	n.VPN.CurrentRoom = msg.RoomID
 	n.RoomName = msg.RoomName
 	n.VPN.IsConnected = true
-	log.Printf("Sala criada com sucesso: %s (%s)", msg.RoomID, msg.RoomName)
+	log.Printf("Room successfully created: %s (%s)", msg.RoomID, msg.RoomName)
 }
 
 func (n *NetworkManager) handleRoomJoinedMessage(msg models.Message) {
 	n.VPN.CurrentRoom = msg.RoomID
 	n.RoomName = msg.RoomName
-	log.Printf("Entrou na sala: %s (%s)", msg.RoomID, msg.RoomName)
+	log.Printf("Joined room: %s (%s)", msg.RoomID, msg.RoomName)
 }
 
 func (n *NetworkManager) handlePeerJoinedMessage(msg models.Message) {
 	peerPublicKey := msg.PublicKey // Agora também recebemos a chave pública do peer
 
-	log.Printf("Novo peer entrou na sala: %s", peerPublicKey)
+	log.Printf("New peer joined the room: %s", peerPublicKey)
 
 	// Se a chave pública está presente, podemos usá-la como identificador principal
 	if peerPublicKey != "" {
@@ -291,7 +291,7 @@ func (n *NetworkManager) handlePeerJoinedMessage(msg models.Message) {
 
 		// truncamos a chave pública para exibição por ser muito longa
 		displayID := n.GetFormattedPublicKey(peerPublicKey)
-		log.Printf("Usando chave pública como identificador do peer: %s", displayID)
+		log.Printf("Using public key as peer identifier: %s", displayID)
 
 		// Aqui você poderia inicializar as estruturas necessárias usando
 		// a chave pública como identificador
@@ -303,7 +303,7 @@ func (n *NetworkManager) handlePeerJoinedMessage(msg models.Message) {
 
 func (n *NetworkManager) handlePeerLeftMessage(msg models.Message) {
 	peerPublicKey := msg.PublicKey
-	log.Printf("Peer saiu da sala: %s", peerPublicKey)
+	log.Printf("Peer left the room: %s", peerPublicKey)
 	// Remover conexão WebRTC com o peer
 	if n.VirtualNetwork != nil {
 		n.VirtualNetwork.RemovePeer(peerPublicKey)
@@ -315,7 +315,7 @@ func (n *NetworkManager) handlePeerLeftMessage(msg models.Message) {
 
 func (n *NetworkManager) handleOfferMessage(msg models.Message) {
 	// Implementar lógica para lidar com ofertas WebRTC
-	log.Printf("Oferta recebida do peer: %s", msg.PublicKey)
+	log.Printf("Offer received from peer: %s", msg.PublicKey)
 
 	// Aqui você criaria um PeerConnection, configuraria os canais de dados
 	// e responderia com uma Answer
@@ -323,21 +323,21 @@ func (n *NetworkManager) handleOfferMessage(msg models.Message) {
 
 func (n *NetworkManager) handleAnswerMessage(msg models.Message) {
 	// Implementar lógica para lidar com respostas WebRTC
-	log.Printf("Resposta recebida do peer: %s", msg.PublicKey)
+	log.Printf("Answer received from peer: %s", msg.PublicKey)
 
 	// Aqui você aplicaria a answer ao PeerConnection correspondente
 }
 
 func (n *NetworkManager) handleICECandidateMessage(msg models.Message) {
 	// Implementar lógica para lidar com candidatos ICE
-	log.Printf("Candidato ICE recebido do peer: %s", msg.PublicKey)
+	log.Printf("ICE candidate received from peer: %s", msg.PublicKey)
 
 	// Aqui você adicionaria o candidato ICE ao PeerConnection correspondente
 }
 
 func (n *NetworkManager) handleErrorMessage(msg models.Message) {
 	errorMsg := string(msg.Data)
-	log.Printf("Erro recebido do servidor: %s", errorMsg)
+	log.Printf("Error received from server: %s", errorMsg)
 
 	// Verifica se o erro é sobre chave pública duplicada
 	if errorStr := string(msg.Data); len(errorStr) > 0 {
@@ -346,7 +346,7 @@ func (n *NetworkManager) handleErrorMessage(msg models.Message) {
 			// Se encontrar uma sala existente, notifica o usuário
 			// Isso deve ser tratado pela UI, que pode exibir uma mensagem específica
 			if n.VPN.UI != nil {
-				n.VPN.UI.ShowMessage("Sala já existe", publicKeyError)
+				n.VPN.UI.ShowMessage("Room already exists", publicKeyError)
 			}
 		}
 	}

@@ -8,8 +8,7 @@ import (
 
 // LoginWindow manages the login interface
 type LoginWindow struct {
-	UI            *UIManager
-	Window        fyne.Window
+	*BaseWindow
 	ServerEntry   *widget.Entry
 	UsernameEntry *widget.Entry
 	PasswordEntry *widget.Entry
@@ -20,29 +19,10 @@ type LoginWindow struct {
 // NewLoginWindow creates a new login window
 func NewLoginWindow(ui *UIManager) *LoginWindow {
 	loginWindow := &LoginWindow{
-		UI:     ui,
-		Window: ui.createWindow("Login - goVPN", 400, 300, false),
+		BaseWindow: NewBaseWindow(ui, "Login - goVPN", 400, 300, false),
 	}
 
 	return loginWindow
-}
-
-// Show displays the login window
-func (lw *LoginWindow) Show() {
-	// If the window has been closed, recreate it
-	if lw.Window == nil {
-		lw.Window = lw.UI.createWindow("Login - goVPN", 400, 300, false)
-	}
-
-	// Initialize the necessary components before showing the window
-	content := lw.CreateContent()
-
-	// Set the window content
-	lw.Window.SetContent(content)
-
-	// Display the window centered
-	lw.Window.CenterOnScreen()
-	lw.Window.Show()
 }
 
 // CreateContent creates the content for the login window
@@ -80,7 +60,7 @@ func (lw *LoginWindow) CreateContent() fyne.CanvasObject {
 		form,
 		container.NewHBox(
 			widget.NewButton("Cancel", func() {
-				lw.Window.Hide()
+				lw.Hide()
 			}),
 		),
 	)
@@ -102,5 +82,5 @@ func (lw *LoginWindow) login() {
 	}
 
 	// Hide the login window after success
-	lw.Window.Hide()
+	lw.Hide()
 }

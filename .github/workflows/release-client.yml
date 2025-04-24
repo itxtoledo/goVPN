@@ -34,20 +34,32 @@ jobs:
 
       - name: Build Linux version
         run: |
-          go build -o govpn-client-linux ./client.go
+          cd cmd/client
+          go build -o ../../govpn-client-linux .
+          cd ../..
           tar -czf govpn-client-linux.tar.gz govpn-client-linux
       
       - name: Package Linux app
-        run: fyne package -os linux -icon icon.png -name GoVPN -release
+        run: |
+          cd cmd/client
+          fyne package -os linux -icon ../../icon.png -name GoVPN -release
+          mv GoVPN.AppImage ../../
+          cd ../..
         continue-on-error: true
       
       - name: Build Windows version
         run: |
-          GOOS=windows GOARCH=amd64 go build -o govpn-client-windows.exe ./client.go
+          cd cmd/client
+          GOOS=windows GOARCH=amd64 go build -o ../../govpn-client-windows.exe .
+          cd ../..
           zip -r govpn-client-windows.zip govpn-client-windows.exe
       
       - name: Package Windows app
-        run: fyne package -os windows -icon icon.png -name GoVPN -release
+        run: |
+          cd cmd/client
+          fyne package -os windows -icon ../../icon.png -name GoVPN -release
+          mv GoVPN.exe ../../
+          cd ../..
         continue-on-error: true
         
       - name: Setup macOS cross-compilation
@@ -59,8 +71,10 @@ jobs:
       
       - name: Build macOS versions
         run: |
-          GOOS=darwin GOARCH=amd64 go build -o govpn-client-darwin-amd64 ./client.go
-          GOOS=darwin GOARCH=arm64 go build -o govpn-client-darwin-arm64 ./client.go
+          cd cmd/client
+          GOOS=darwin GOARCH=amd64 go build -o ../../govpn-client-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -o ../../govpn-client-darwin-arm64 .
+          cd ../..
           tar -czf govpn-client-darwin-amd64.tar.gz govpn-client-darwin-amd64
           tar -czf govpn-client-darwin-arm64.tar.gz govpn-client-darwin-arm64
         continue-on-error: true

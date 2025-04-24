@@ -33,17 +33,17 @@ func NewVPNClient() *VPNClient {
 
 	// Inicialização do banco de dados
 	if err := vpn.initDatabase(); err != nil {
-		log.Fatalf("Erro ao inicializar banco de dados: %v", err)
+		log.Fatalf("Error initializing database: %v", err)
 	}
 
 	// Carrega ou gera chaves RSA para identificação do usuário
 	// Esta etapa é essencial e deve acontecer logo na inicialização
 	if err := vpn.loadOrGenerateKeys(); err != nil {
-		log.Fatalf("Erro crítico ao carregar/gerar chaves RSA: %v", err)
+		log.Fatalf("Critical error loading/generating RSA keys: %v", err)
 		// Se não conseguirmos gerar as chaves, não faz sentido continuar
 	}
 
-	log.Printf("Chaves RSA carregadas com sucesso: chave pública disponível")
+	log.Printf("RSA keys successfully loaded: public key available")
 
 	// Inicialização do gerenciador de rede
 	vpn.NetworkManager = NewNetworkManager(vpn)
@@ -83,7 +83,7 @@ func (v *VPNClient) loadSettings() {
 
 // Run inicia o cliente VPN
 func (v *VPNClient) Run() {
-	log.Println("Iniciando cliente goVPN")
+	log.Println("Starting goVPN client")
 
 	// Attempt to connect to the backend in a background goroutine
 	go func() {
@@ -168,7 +168,7 @@ func (v *VPNClient) loadOrGenerateKeys() error {
 		// Chaves encontradas, carrega-as
 		v.PrivateKeyPEM = privateKey
 		v.PublicKeyPEM = publicKey
-		log.Println("Chaves RSA carregadas com sucesso.")
+		log.Println("RSA keys successfully loaded.")
 		return nil
 	}
 
@@ -178,7 +178,7 @@ func (v *VPNClient) loadOrGenerateKeys() error {
 	}
 
 	// Chaves não encontradas, gera novas
-	log.Println("Gerando novas chaves RSA...")
+	log.Println("Generating new RSA keys...")
 	privateKey, publicKey, err = crypto_utils.GenerateRSAKeys()
 	if err != nil {
 		return err
@@ -194,7 +194,7 @@ func (v *VPNClient) loadOrGenerateKeys() error {
 	// Atualiza a estrutura VPNClient
 	v.PrivateKeyPEM = privateKey
 	v.PublicKeyPEM = publicKey
-	log.Println("Novas chaves RSA geradas e armazenadas com sucesso.")
+	log.Println("New RSA keys generated and stored successfully.")
 
 	return nil
 }
@@ -205,7 +205,7 @@ func (v *VPNClient) getPublicKey() string {
 	if v.PublicKeyPEM == "" {
 		err := v.loadOrGenerateKeys()
 		if err != nil {
-			log.Printf("Erro ao carregar/gerar chaves RSA: %v", err)
+			log.Printf("Error loading/generating RSA keys: %v", err)
 			return ""
 		}
 	}

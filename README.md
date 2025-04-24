@@ -174,16 +174,42 @@ fyne package -os windows -icon ../../icon.png -name GoVPN
 export SUPABASE_URL="your-supabase-url"
 export SUPABASE_KEY="your-supabase-key"
 
-# Run the server
+# Run the server (compiled binary)
 ./govpn-server
 ```
 
 ### Client
 
 ```bash
-# Run the client
+# Run the client (compiled binary)
 ./govpn-client
 ```
+
+### Running from Source (Development)
+
+To run the application directly from source code without compiling:
+
+#### Server
+```bash
+# Set required environment variables
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-key"
+
+# Run using go run (single line command)
+cd cmd/server && go run main.go
+```
+
+#### Client
+```bash
+# Run using go run (single line command)
+cd cmd/client && go run .
+```
+
+### VS Code Tasks
+
+- Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
+- Type "Tasks: Run Task"
+- Select either "Run GoVPN Server" or "Run GoVPN Client"
 
 ## License
 

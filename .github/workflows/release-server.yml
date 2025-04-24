@@ -28,14 +28,15 @@ jobs:
       - name: Build for multiple platforms
         run: |
           # Build for Linux
-          GOOS=linux GOARCH=amd64 go build -v -o govpn-server-linux-amd64 ./server.go
+          cd cmd/server
+          GOOS=linux GOARCH=amd64 go build -v -o ../../govpn-server-linux-amd64 .
           
           # Build for Windows
-          GOOS=windows GOARCH=amd64 go build -v -o govpn-server-windows-amd64.exe ./server.go
+          GOOS=windows GOARCH=amd64 go build -v -o ../../govpn-server-windows-amd64.exe .
           
           # Build for macOS
-          GOOS=darwin GOARCH=amd64 go build -v -o govpn-server-darwin-amd64 ./server.go
-          GOOS=darwin GOARCH=arm64 go build -v -o govpn-server-darwin-arm64 ./server.go
+          GOOS=darwin GOARCH=amd64 go build -v -o ../../govpn-server-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -v -o ../../govpn-server-darwin-arm64 .
           
       - name: Create release
         id: create_release

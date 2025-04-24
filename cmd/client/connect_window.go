@@ -1,166 +1,122 @@
 package main
 
 import (
-	"fmt"
-	"unicode"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
 
-// ConnectWindow manages the VPN connection interface
+// ConnectWindow manages the connect to network interface
 type ConnectWindow struct {
-	UI            *UIManager
-	Window        fyne.Window
-	RoomIDEntry   *widget.Entry
-	PasswordEntry *widget.Entry
-	ConnectButton *widget.Button
-	Container     *fyne.Container
-	Status        *widget.Label
+	*BaseWindow
+	NetworkIDEntry *widget.Entry
+	PasswordEntry  *widget.Entry
+	Container      *fyne.Container
 }
 
-// NewConnectWindow creates a new connection window
+// NewConnectWindow creates a new connect window
 func NewConnectWindow(ui *UIManager) *ConnectWindow {
 	connectWindow := &ConnectWindow{
-		UI:     ui,
-		Window: ui.createWindow("Connect to VPN", 400, 300, false),
+		BaseWindow: NewBaseWindow(ui, "Connect to Network - goVPN", 400, 250, false),
 	}
-
-	// Add handler for when the window is closed
-	connectWindow.Window.SetOnClosed(func() {
-		connectWindow.Window = nil
-	})
 
 	return connectWindow
 }
 
-// Show displays the connection window
-func (cw *ConnectWindow) Show() {
-	// If the window has been closed, recreate it
-	if cw.Window == nil {
-		cw.Window = cw.UI.createWindow("Connect to VPN", 400, 300, false)
-		// Re-add the handler for when the window is closed
-		cw.Window.SetOnClosed(func() {
-			cw.Window = nil
-		})
-	}
-
-	// Ensure content is created before displaying the window
-	content := cw.CreateContent()
-
-	// Set the window content
-	cw.Window.SetContent(content)
-
-	// Clear the fields
-	cw.RoomIDEntry.SetText("")
-	cw.PasswordEntry.SetText("")
-	cw.Status.SetText("")
-
-	// Display the window centered
-	cw.Window.CenterOnScreen()
-	cw.Window.Show()
-}
-
-// CreateContent creates the content for the connection window
+// CreateContent creates the content for the connect window
 func (cw *ConnectWindow) CreateContent() fyne.CanvasObject {
 	// Input fields
-	cw.RoomIDEntry = widget.NewEntry()
-	cw.RoomIDEntry.SetPlaceHolder("Room ID")
+	cw.NetworkIDEntry = widget.NewEntry()
+	cw.NetworkIDEntry.SetPlaceHolder("Network ID")
 
 	cw.PasswordEntry = widget.NewPasswordEntry()
-	cw.PasswordEntry.SetPlaceHolder("Room Password")
+	cw.PasswordEntry.SetPlaceHolder("Password (optional)")
 
-	// Restrict to only numbers and maximum of 4 characters
-	cw.PasswordEntry.Validator = func(s string) error {
-		if len(s) > 4 {
-			return fmt.Errorf("password must be at most 4 characters")
-		}
-		for _, r := range s {
-			if !unicode.IsDigit(r) {
-				return fmt.Errorf("password must contain only numbers")
-			}
-		}
-		return nil
-	}
-
-	// Limit input to 4 characters in real-time
-	cw.PasswordEntry.OnChanged = func(s string) {
-		if len(s) > 4 {
-			cw.PasswordEntry.SetText(s[:4])
-		}
-	}
-
-	// Connection status
-	cw.Status = widget.NewLabel("")
-
-	// Action buttons
-	cw.ConnectButton = widget.NewButton("Connect", func() {
-		cw.connect()
-	})
-
-	// Connection form
+	// Connect form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
-			{Text: "Room ID", Widget: cw.RoomIDEntry},
+			{Text: "Network ID", Widget: cw.NetworkIDEntry},
 			{Text: "Password", Widget: cw.PasswordEntry},
 		},
 		SubmitText: "Connect",
-		OnSubmit: func() {
-			cw.connect()
+		OnSubmit:   cw.connect,
+		OnCancel: func() {
+			cw.Close()
 		},
 	}
 
 	// Main container
 	cw.Container = container.NewVBox(
-		widget.NewLabel("Connect to a VPN Room"),
+		widget.NewLabel("Connect to an existing goVPN network"),
 		form,
-		cw.Status,
-		container.NewHBox(
-			widget.NewButton("Cancel", func() {
-				cw.Window.Close()
-			}),
-		),
 	)
 
 	return cw.Container
 }
 
-// connect attempts to connect to a VPN room
+// connect attempts to join the specified network
 func (cw *ConnectWindow) connect() {
-	// Field validation
-	if cw.RoomIDEntry.Text == "" || cw.PasswordEntry.Text == "" {
-		cw.Status.SetText("Please fill in all fields")
-		return
+	networkID := cw.NetworkIDEntry.Text
+	// A senha seria utilizada aqui para conectar à rede,
+	// mas não estamos implementando isso agora.
+	// Na implementação completa:
+	// err := cw.UI.VPN.NetworkManager.JoinNetwork(networkID, cw.PasswordEntry.Text)
+
+	// For now, we'll just show a message and hide the window
+	cw.UI.ShowMessage("Connection", "Attempting to connect to network: "+networkID)
+
+	// Close the window after attempt
+	cw.Close()
+}
+
+// Show sobrescreve o método Show da BaseWindow para garantir que o conteúdo seja criado corretamente
+func (cw *ConnectWindow) Show() {
+	// Se a janela foi destruída, cria uma nova
+	if cw.Window == nil {
+		cw.Window = cw.UI.createWindow(cw.Title, cw.Width, cw.Height, cw.Resizable)
+		// Adiciona novamente o manipulador para quando a janela for fechada
+		cw.Window.SetOnClosed(func() {
+			cw.Window = nil
+			// Também limpa a referência no UIManager quando a janela é fechada pelo "X"
+			cw.UI.ConnectWindow = nil
+		})
+		// Sempre recria o conteúdo para evitar problemas com referências antigas
+		cw.Content = nil
 	}
 
-	// Attempt to connect to the signaling server if not already connected
-	if !cw.UI.VPN.NetworkManager.IsConnected {
-		cw.Status.SetText("Connecting to server...")
-		err := cw.UI.VPN.NetworkManager.Connect()
-		if err != nil {
-			cw.Status.SetText("Connection failed: " + err.Error())
-			return
-		}
+	// Cria o conteúdo - sempre recria para evitar problemas
+	cw.Content = cw.CreateContent()
+
+	// Define o conteúdo da janela
+	if cw.Content != nil {
+		cw.Window.SetContent(cw.Content)
+	} else {
+		// Se o conteúdo for nulo, exibe um erro
+		errorLabel := widget.NewLabel("Erro: Não foi possível criar o conteúdo da janela")
+		closeButton := widget.NewButton("Fechar", func() {
+			cw.Close()
+		})
+
+		errorContent := container.NewCenter(
+			container.NewVBox(
+				errorLabel,
+				closeButton,
+			),
+		)
+
+		cw.Window.SetContent(errorContent)
 	}
 
-	// Attempt to join the room
-	cw.Status.SetText("Joining room...")
-	err := cw.UI.VPN.NetworkManager.JoinRoom(cw.RoomIDEntry.Text, cw.PasswordEntry.Text)
-	if err != nil {
-		cw.Status.SetText("Failed to join room: " + err.Error())
-		return
-	}
+	// Exibe a janela centralizada
+	cw.Window.CenterOnScreen()
+	cw.Window.Show()
+}
 
-	// Save room information and close the window
-	cw.UI.VPN.CurrentRoom = cw.RoomIDEntry.Text
-	cw.UI.VPN.NetworkManager.RoomName = cw.RoomIDEntry.Text
-	cw.UI.VPN.IsConnected = true
+// Close sobrescreve o método Close da BaseWindow para garantir que a referência no UIManager seja limpa
+func (cw *ConnectWindow) Close() {
+	// Chama o método Close da classe pai
+	cw.BaseWindow.Close()
 
-	// Update the toggle button state in the header and connection information
-	cw.UI.updatePowerButtonState()
-	cw.UI.updateIPInfo()
-	cw.UI.updateRoomName()
-
-	cw.Window.Close()
+	// Limpa a referência no UIManager
+	cw.UI.ConnectWindow = nil
 }

@@ -29,11 +29,12 @@ func NewNetworkTabComponent(ui *UIManager) *NetworkTabComponent {
 
 // createContent cria o conteúdo da aba Network
 func (n *NetworkTabComponent) createContent() {
-	// Botões para controle de rede
+	// Botão para atualizar lista
 	n.RefreshButton = widget.NewButton("Atualizar Lista", func() {
 		n.UI.refreshNetworkList()
 	})
 
+	// Botão para gerenciar salas
 	n.RoomsButton = widget.NewButton("Gerenciar Salas", func() {
 		if n.UI.RoomWindow == nil {
 			n.UI.RoomWindow = NewRoomWindow(n.UI)

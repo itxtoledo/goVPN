@@ -97,8 +97,7 @@ func (ui *UIManager) preInitializeComponents() {
 		return
 	}
 
-	// Inicializa apenas os componentes necessários para a tela inicial
-	// Outros componentes serão inicializados sob demanda
+	// Inicializa a janela de criação de sala
 	if ui.RoomWindow == nil {
 		ui.RoomWindow = NewRoomWindow(ui)
 	}

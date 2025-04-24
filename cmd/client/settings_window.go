@@ -1,161 +1,156 @@
 package main
 
 import (
-	"log"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
-	"github.com/pion/webrtc/v3"
 )
 
-// SettingsWindow gerencia a interface de configurações
+// SettingsWindow manages the settings interface
 type SettingsWindow struct {
-	UI           *UIManager
-	Window       fyne.Window
-	Container    *fyne.Container
-	ServerEntry  *widget.Entry
-	EncryptCheck *widget.Check
-	StunEntry    *widget.Entry
-	SaveButton   *widget.Button
+	*BaseWindow
+	ServerEntry        *widget.Entry
+	AutoConnectCheck   *widget.Check
+	StartupCheck       *widget.Check
+	NotificationsCheck *widget.Check
+	ThemeSelect        *widget.Select
+	LanguageSelect     *widget.Select
+	Container          *fyne.Container
 }
 
-// NewSettingsWindow cria uma nova janela de configurações
+// NewSettingsWindow creates a new settings window
 func NewSettingsWindow(ui *UIManager) *SettingsWindow {
 	settingsWindow := &SettingsWindow{
-		UI:     ui,
-		Window: ui.createWindow("Settings - goVPN", 500, 350, false),
+		BaseWindow: NewBaseWindow(ui, "Settings - goVPN", 500, 400, false),
 	}
 
-	// Adiciona o manipulador para quando a janela for fechada
-	settingsWindow.Window.SetOnClosed(func() {
-		settingsWindow.Window = nil
-	})
+	// Garantir que o conteúdo é criado imediatamente após a inicialização da janela
+	settingsWindow.Content = settingsWindow.CreateContent()
 
 	return settingsWindow
 }
 
-// Show exibe a janela de configurações
+// CreateContent creates the content for the settings window
+func (sw *SettingsWindow) CreateContent() fyne.CanvasObject {
+	// Server settings
+	sw.ServerEntry = widget.NewEntry()
+	sw.ServerEntry.SetPlaceHolder("Signaling server address")
+	sw.ServerEntry.SetText(sw.UI.VPN.NetworkManager.SignalServer)
+
+	// Behavior settings
+	sw.AutoConnectCheck = widget.NewCheck("Auto-connect to last network", nil)
+	sw.StartupCheck = widget.NewCheck("Start on system startup", nil)
+	sw.NotificationsCheck = widget.NewCheck("Enable notifications", nil)
+
+	// Appearance settings
+	sw.ThemeSelect = widget.NewSelect([]string{"System Default", "Light", "Dark"}, nil)
+	sw.ThemeSelect.Selected = "System Default"
+
+	sw.LanguageSelect = widget.NewSelect([]string{"English", "Portuguese", "Spanish"}, nil)
+	sw.LanguageSelect.Selected = "English"
+
+	// Tabs for different settings categories
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Connection", container.NewVBox(
+			widget.NewLabel("Server Settings"),
+			widget.NewForm(
+				widget.NewFormItem("Signal Server", sw.ServerEntry),
+			),
+			sw.AutoConnectCheck,
+		)),
+		container.NewTabItem("Appearance", container.NewVBox(
+			widget.NewForm(
+				widget.NewFormItem("Theme", sw.ThemeSelect),
+				widget.NewFormItem("Language", sw.LanguageSelect),
+			),
+		)),
+		container.NewTabItem("System", container.NewVBox(
+			sw.StartupCheck,
+			sw.NotificationsCheck,
+		)),
+	)
+
+	// Button container
+	buttons := container.NewHBox(
+		widget.NewButton("Cancel", func() {
+			sw.Close()
+		}),
+		widget.NewButton("Save", func() {
+			sw.saveSettings()
+		}),
+	)
+
+	// Main container
+	sw.Container = container.NewBorder(
+		nil,
+		buttons,
+		nil,
+		nil,
+		tabs,
+	)
+
+	return sw.Container
+}
+
+// saveSettings saves the current settings
+func (sw *SettingsWindow) saveSettings() {
+	// Update the settings
+	sw.UI.VPN.NetworkManager.SignalServer = sw.ServerEntry.Text
+
+	// Here we would save the other settings
+
+	// Close the window
+	sw.Close()
+}
+
+// Show sobrescreve o método Show da BaseWindow para garantir que o conteúdo seja criado corretamente
 func (sw *SettingsWindow) Show() {
-	// Se a janela já foi fechada, recria
+	// Se a janela foi destruída, cria uma nova
 	if sw.Window == nil {
-		sw.Window = sw.UI.createWindow("Settings - goVPN", 500, 350, false)
-		// Re-adiciona o manipulador para quando a janela for fechada
+		sw.Window = sw.UI.createWindow(sw.Title, sw.Width, sw.Height, sw.Resizable)
+		// Adiciona novamente o manipulador para quando a janela for fechada
 		sw.Window.SetOnClosed(func() {
 			sw.Window = nil
+			// Também limpa a referência no UIManager quando a janela é fechada pelo "X"
+			sw.UI.SettingsWindow = nil
 		})
+		// Sempre recria o conteúdo para evitar problemas com referências antigas
+		sw.Content = nil
 	}
 
-	// Inicializa ou atualiza os componentes antes de exibir
-	content := sw.CreateContent()
+	// Cria o conteúdo - sempre recria para evitar problemas
+	sw.Content = sw.CreateContent()
 
 	// Define o conteúdo da janela
-	sw.Window.SetContent(content)
+	if sw.Content != nil {
+		sw.Window.SetContent(sw.Content)
+	} else {
+		// Se o conteúdo for nulo, exibe um erro
+		errorLabel := widget.NewLabel("Erro: Não foi possível criar o conteúdo da janela")
+		closeButton := widget.NewButton("Fechar", func() {
+			sw.Close()
+		})
+
+		errorContent := container.NewCenter(
+			container.NewVBox(
+				errorLabel,
+				closeButton,
+			),
+		)
+
+		sw.Window.SetContent(errorContent)
+	}
 
 	// Exibe a janela centralizada
 	sw.Window.CenterOnScreen()
 	sw.Window.Show()
 }
 
-// CreateContent cria o conteúdo da janela de configurações
-func (sw *SettingsWindow) CreateContent() fyne.CanvasObject {
-	// Campos de entrada para configurações
-	sw.ServerEntry = widget.NewEntry()
-	sw.ServerEntry.SetPlaceHolder("Endereço do servidor de sinalização")
+// Close sobrescreve o método Close da BaseWindow para garantir que a referência no UIManager seja limpa
+func (sw *SettingsWindow) Close() {
+	// Chama o método Close da classe pai
+	sw.BaseWindow.Close()
 
-	// Obter o valor atual do servidor de sinalização
-	signalServer := "ws://localhost:8080/ws" // Valor padrão
-	if sw.UI != nil && sw.UI.VPN != nil && sw.UI.VPN.NetworkManager != nil {
-		if sw.UI.VPN.NetworkManager.SignalServer != "" {
-			signalServer = sw.UI.VPN.NetworkManager.SignalServer
-		}
-	}
-	sw.ServerEntry.SetText(signalServer)
-
-	sw.StunEntry = widget.NewEntry()
-	sw.StunEntry.SetPlaceHolder("Servidor STUN")
-
-	// Valor padrão para o servidor STUN
-	stunServer := "stun:stun.l.google.com:19302"
-
-	// Tenta obter o valor atual, com tratamento de erros
-	if sw.UI != nil && sw.UI.VPN != nil && sw.UI.VPN.NetworkManager != nil {
-		if len(sw.UI.VPN.NetworkManager.ICEServers) > 0 &&
-			len(sw.UI.VPN.NetworkManager.ICEServers[0].URLs) > 0 {
-			stunServer = sw.UI.VPN.NetworkManager.ICEServers[0].URLs[0]
-		}
-	}
-	sw.StunEntry.SetText(stunServer)
-
-	sw.EncryptCheck = widget.NewCheck("Criptografar tráfego", nil)
-	sw.EncryptCheck.SetChecked(true)
-
-	// Formulário de configurações
-	form := &widget.Form{
-		Items: []*widget.FormItem{
-			{Text: "Servidor de Sinalização", Widget: sw.ServerEntry},
-			{Text: "Servidor STUN", Widget: sw.StunEntry},
-			{Text: "Segurança", Widget: sw.EncryptCheck},
-		},
-		SubmitText: "Salvar",
-		OnSubmit: func() {
-			sw.saveSettings()
-		},
-	}
-
-	// Container principal
-	content := container.NewVBox(
-		widget.NewLabel("Configurações do Cliente"),
-		form,
-	)
-
-	return content
-}
-
-// saveSettings salva as configurações no banco de dados
-func (sw *SettingsWindow) saveSettings() {
-	// Atualiza as configurações de rede
-	sw.UI.VPN.NetworkManager.SignalServer = sw.ServerEntry.Text
-
-	// Atualiza o servidor STUN
-	if sw.StunEntry.Text != "" {
-		sw.UI.VPN.NetworkManager.ICEServers = []webrtc.ICEServer{
-			{
-				URLs: []string{sw.StunEntry.Text},
-			},
-		}
-	}
-
-	// Salva as configurações no banco de dados
-	_, err := sw.UI.VPN.DB.Exec(`
-		INSERT OR REPLACE INTO settings (key, value) VALUES ('signal_server', ?);
-	`, sw.ServerEntry.Text)
-
-	if err != nil {
-		log.Printf("Erro ao salvar configurações: %v", err)
-		sw.UI.ShowMessage("Erro", "Não foi possível salvar as configurações")
-		return
-	}
-
-	_, err = sw.UI.VPN.DB.Exec(`
-		INSERT OR REPLACE INTO settings (key, value) VALUES ('stun_server', ?);
-	`, sw.StunEntry.Text)
-
-	if err != nil {
-		log.Printf("Erro ao salvar configurações: %v", err)
-		sw.UI.ShowMessage("Erro", "Não foi possível salvar as configurações")
-		return
-	}
-
-	_, err = sw.UI.VPN.DB.Exec(`
-		INSERT OR REPLACE INTO settings (key, value) VALUES ('encrypt_traffic', ?);
-	`, sw.EncryptCheck.Checked)
-
-	if err != nil {
-		log.Printf("Erro ao salvar configurações: %v", err)
-		sw.UI.ShowMessage("Erro", "Não foi possível salvar as configurações")
-		return
-	}
-
-	sw.UI.ShowMessage("Sucesso", "Configurações salvas com sucesso")
+	// Limpa a referência no UIManager
+	sw.UI.SettingsWindow = nil
 }

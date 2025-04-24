@@ -12,46 +12,19 @@ import (
 
 // AboutWindow manages the "About" interface
 type AboutWindow struct {
-	UI        *UIManager
-	Window    fyne.Window
-	Container *fyne.Container
+	*BaseWindow
 }
 
 // NewAboutWindow creates a new "About" window
 func NewAboutWindow(ui *UIManager) *AboutWindow {
 	aboutWindow := &AboutWindow{
-		UI:     ui,
-		Window: ui.createWindow("About - goVPN", 400, 300, false),
+		BaseWindow: NewBaseWindow(ui, "About - goVPN", 400, 300, false),
 	}
 
-	// Add handler for when the window is closed
-	aboutWindow.Window.SetOnClosed(func() {
-		aboutWindow.Window = nil
-	})
+	// Garantir que o conteúdo é criado imediatamente após a inicialização da janela
+	aboutWindow.Content = aboutWindow.CreateContent()
 
 	return aboutWindow
-}
-
-// Show displays the "About" window
-func (aw *AboutWindow) Show() {
-	// If the window has been destroyed, create a new one
-	if aw.Window == nil {
-		aw.Window = aw.UI.createWindow("About - goVPN", 400, 300, false)
-		// Re-add the handler for when the window is closed
-		aw.Window.SetOnClosed(func() {
-			aw.Window = nil
-		})
-	}
-
-	// Initialize necessary components before showing the window
-	content := aw.CreateContent()
-
-	// Set the window content
-	aw.Window.SetContent(content)
-
-	// Display the window centered
-	aw.Window.CenterOnScreen()
-	aw.Window.Show()
 }
 
 // CreateContent creates the content for the "About" window
@@ -99,10 +72,7 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 
 	// Close button
 	closeButton := widget.NewButton("Close", func() {
-		if aw.Window != nil {
-			// Completely close the window instead of just hiding it
-			aw.Window.Close()
-		}
+		aw.Close()
 	})
 
 	// Main container
@@ -120,4 +90,56 @@ func (aw *AboutWindow) CreateContent() fyne.CanvasObject {
 	)
 
 	return content
+}
+
+// Show sobrescreve o método Show da BaseWindow para garantir que o conteúdo seja criado corretamente
+func (aw *AboutWindow) Show() {
+	// Se a janela foi destruída, cria uma nova
+	if aw.Window == nil {
+		aw.Window = aw.UI.createWindow(aw.Title, aw.Width, aw.Height, aw.Resizable)
+		// Adiciona novamente o manipulador para quando a janela for fechada
+		aw.Window.SetOnClosed(func() {
+			aw.Window = nil
+			// Também limpa a referência no UIManager quando a janela é fechada pelo "X"
+			aw.UI.AboutWindow = nil
+		})
+		// Sempre recria o conteúdo para evitar problemas com referências antigas
+		aw.Content = nil
+	}
+
+	// Cria o conteúdo - sempre recria para evitar problemas
+	aw.Content = aw.CreateContent()
+
+	// Define o conteúdo da janela
+	if aw.Content != nil {
+		aw.Window.SetContent(aw.Content)
+	} else {
+		// Se o conteúdo for nulo, exibe um erro
+		errorLabel := widget.NewLabel("Erro: Não foi possível criar o conteúdo da janela")
+		closeButton := widget.NewButton("Fechar", func() {
+			aw.Close()
+		})
+
+		errorContent := container.NewCenter(
+			container.NewVBox(
+				errorLabel,
+				closeButton,
+			),
+		)
+
+		aw.Window.SetContent(errorContent)
+	}
+
+	// Exibe a janela centralizada
+	aw.Window.CenterOnScreen()
+	aw.Window.Show()
+}
+
+// Close sobrescreve o método Close da BaseWindow para garantir que a referência no UIManager seja limpa
+func (aw *AboutWindow) Close() {
+	// Chama o método Close da classe pai
+	aw.BaseWindow.Close()
+
+	// Limpa a referência no UIManager
+	aw.UI.AboutWindow = nil
 }

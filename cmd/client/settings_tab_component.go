@@ -93,8 +93,8 @@ func (s *SettingsTabComponent) saveSettings() {
 	`, s.ServerEntry.Text)
 
 	if err != nil {
-		log.Printf("Erro ao salvar configurações: %v", err)
-		s.UI.ShowMessage("Erro", "Não foi possível salvar as configurações")
+		log.Printf("Error saving settings: %v", err)
+		s.UI.ShowMessage("Error", "Could not save settings")
 		return
 	}
 
@@ -103,8 +103,8 @@ func (s *SettingsTabComponent) saveSettings() {
 	`, s.StunEntry.Text)
 
 	if err != nil {
-		log.Printf("Erro ao salvar configurações: %v", err)
-		s.UI.ShowMessage("Erro", "Não foi possível salvar as configurações")
+		log.Printf("Error saving settings: %v", err)
+		s.UI.ShowMessage("Error", "Could not save settings")
 		return
 	}
 
@@ -113,12 +113,12 @@ func (s *SettingsTabComponent) saveSettings() {
 	`, s.EncryptCheck.Checked)
 
 	if err != nil {
-		log.Printf("Erro ao salvar configurações: %v", err)
-		s.UI.ShowMessage("Erro", "Não foi possível salvar as configurações")
+		log.Printf("Error saving settings: %v", err)
+		s.UI.ShowMessage("Error", "Could not save settings")
 		return
 	}
 
-	s.UI.ShowMessage("Sucesso", "Configurações salvas com sucesso")
+	s.UI.ShowMessage("Success", "Settings saved successfully")
 }
 
 // GetContainer retorna o container da aba Configurações
