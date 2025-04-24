@@ -71,7 +71,7 @@ func NewUIManager(vpn *VPNClient) *UIManager {
 
 	// Create main window
 	uiManager.MainWindow = uiManager.App.NewWindow("goVPN")
-	
+
 	// Carregar o ícone do aplicativo após a inicialização completa do UIManager
 	iconPath := uiManager.resolveResourcePath("power-button.svg")
 	appIcon, err := fyne.LoadResourceFromPath(iconPath)
@@ -105,10 +105,10 @@ func NewUIManager(vpn *VPNClient) *UIManager {
 func (ui *UIManager) resolveResourcePath(filename string) string {
 	// Lista de possíveis localizações para o arquivo
 	possiblePaths := []string{
-		filename,                        // Caminho relativo atual
-		"cmd/client/" + filename,        // A partir da raiz do projeto
-		"../client/" + filename,         // Se estiver no diretório cmd
-		"../../cmd/client/" + filename,  // Se estiver em outro subdiretório
+		filename,                       // Caminho relativo atual
+		"cmd/client/" + filename,       // A partir da raiz do projeto
+		"../client/" + filename,        // Se estiver no diretório cmd
+		"../../cmd/client/" + filename, // Se estiver em outro subdiretório
 	}
 
 	// Tenta encontrar o arquivo em cada um dos possíveis caminhos
@@ -126,7 +126,7 @@ func (ui *UIManager) resolveResourcePath(filename string) string {
 func (ui *UIManager) loadSystemTrayIcon() fyne.Resource {
 	// Usa a função resolveResourcePath para encontrar o arquivo do ícone
 	iconPath := ui.resolveResourcePath("power-button.svg")
-	
+
 	// Tenta carregar o ícone personalizado
 	res, err := fyne.LoadResourceFromPath(iconPath)
 	if err != nil {
