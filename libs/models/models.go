@@ -6,22 +6,52 @@ import (
 	"fmt"
 )
 
+// MessageType defines the type of messages that can be sent between client and server
+type MessageType string
+
+// Message type constants
+const (
+	// Client to server message types
+	TypeCreateRoom MessageType = "CreateRoom"
+	TypeJoinRoom   MessageType = "JoinRoom"
+	TypeLeaveRoom  MessageType = "LeaveRoom"
+	TypeOffer      MessageType = "Offer"
+	TypeAnswer     MessageType = "Answer"
+	TypeCandidate  MessageType = "Candidate"
+	TypeKick       MessageType = "Kick"
+	TypeRename     MessageType = "Rename"
+	TypeDelete     MessageType = "Delete"
+
+	// Server to client message types
+	TypeError         MessageType = "Error"
+	TypeRoomCreated   MessageType = "RoomCreated"
+	TypeRoomJoined    MessageType = "RoomJoined"
+	TypeRoomDeleted   MessageType = "RoomDeleted"
+	TypeRoomRenamed   MessageType = "RoomRenamed"
+	TypePeerJoined    MessageType = "PeerJoined"
+	TypePeerLeft      MessageType = "PeerLeft"
+	TypeKicked        MessageType = "Kicked"
+	TypeKickSuccess   MessageType = "KickSuccess"
+	TypeRenameSuccess MessageType = "RenameSuccess"
+	TypeDeleteSuccess MessageType = "DeleteSuccess"
+)
+
 // Message represents a message in the system
 type Message struct {
-	Type          string `json:"type"`
-	RoomID        string `json:"room_id,omitempty"`
-	RoomName      string `json:"room_name,omitempty"`
-	PublicKey     string `json:"public_key,omitempty"`
-	Password      string `json:"password,omitempty"`
-	DestinationID string `json:"destination_id,omitempty"`
-	TargetID      string `json:"target_id,omitempty"`
-	Username      string `json:"username,omitempty"`
-	Offer         string `json:"offer,omitempty"`
-	Answer        string `json:"answer,omitempty"`
-	Candidate     string `json:"candidate,omitempty"`
-	Data          []byte `json:"data,omitempty"`
-	Signature     string `json:"signature,omitempty"`
-	MessageID     string `json:"message_id,omitempty"` // ID único para rastreamento de mensagens
+	Type          MessageType `json:"type"` // Changed from string to MessageType
+	RoomID        string      `json:"room_id,omitempty"`
+	RoomName      string      `json:"room_name,omitempty"`
+	PublicKey     string      `json:"public_key,omitempty"`
+	Password      string      `json:"password,omitempty"`
+	DestinationID string      `json:"destination_id,omitempty"`
+	TargetID      string      `json:"target_id,omitempty"`
+	Username      string      `json:"username,omitempty"`
+	Offer         string      `json:"offer,omitempty"`
+	Answer        string      `json:"answer,omitempty"`
+	Candidate     string      `json:"candidate,omitempty"`
+	Data          []byte      `json:"data,omitempty"`
+	Signature     string      `json:"signature,omitempty"`
+	MessageID     string      `json:"message_id,omitempty"` // ID único para rastreamento de mensagens
 }
 
 // Room represents a network or room

@@ -11,7 +11,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/itxtoledo/govpn/services/client/icon"
+	"github.com/itxtoledo/govpn/cmd/client/icon"
 )
 
 // HeaderComponent represents the application header

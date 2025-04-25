@@ -26,7 +26,7 @@ func main() {
 	vpn := NewVPNClient()
 	initialize()
 	vpn.UI.App.Lifecycle().SetOnStarted(onstart)
-	defer vpn.DB.Close()
+	defer vpn.DBManager.Close()
 
 	vpn.Run()
 }

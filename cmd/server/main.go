@@ -24,6 +24,7 @@ import (
 	"github.com/itxtoledo/govpn/libs/models" // Import the models package
 	"github.com/joho/godotenv"               // Import godotenv package
 	"github.com/supabase-community/supabase-go"
+	"golang.org/x/time/rate"
 )
 
 // loadEnvFile attempts to load environment variables from a .env file if it exists
@@ -140,13 +141,14 @@ type SupabaseRoom struct {
 
 // Server manages clients and rooms
 type Server struct {
-	clients      map[*websocket.Conn]string
-	networks     map[string][]*websocket.Conn
-	roomCreators map[string]*websocket.Conn
-	publicKeys   map[string]string // Maps public key to roomID
-	mu           sync.RWMutex
-	config       Config
-	supabase     *supabase.Client
+	clients           map[*websocket.Conn]string   // Maps connection to roomID
+	networks          map[string][]*websocket.Conn // Maps roomID to list of connections
+	clientToPublicKey map[*websocket.Conn]string   // Maps connection to public key
+	joinLimiters      map[string]*rate.Limiter     // Maps IP address to rate limiter for join room requests
+	limiterMu         sync.RWMutex                 // Mutex for the rate limiter map
+	mu                sync.RWMutex
+	config            Config
+	supabase          *supabase.Client
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -161,22 +163,23 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	return &Server{
-		clients:      make(map[*websocket.Conn]string),
-		networks:     make(map[string][]*websocket.Conn),
-		roomCreators: make(map[string]*websocket.Conn),
-		publicKeys:   make(map[string]string),
-		config:       cfg,
-		supabase:     supaClient,
+		clients:           make(map[*websocket.Conn]string),
+		networks:          make(map[string][]*websocket.Conn),
+		clientToPublicKey: make(map[*websocket.Conn]string),
+		joinLimiters:      make(map[string]*rate.Limiter),
+		config:            cfg,
+		supabase:          supaClient,
 	}, nil
 }
 
-// generateRoomID creates a SHA-256 hash based on room name, salt, and timestamp
+// generateRoomID creates a short 6-digit hexadecimal ID for the room
 func generateRoomID(roomName string) string {
-	salt := make([]byte, 16)
-	rand.Read(salt)
-	input := fmt.Sprintf("%s:%s:%d", roomName, base64.StdEncoding.EncodeToString(salt), time.Now().UnixNano())
-	hash := sha256.Sum256([]byte(input))
-	return hex.EncodeToString(hash[:])
+	id, err := GenerateRandomID(6)
+	if err != nil {
+		// Fall back to a timestamp-based ID if random generation fails
+		return fmt.Sprintf("%06x", time.Now().UnixNano()%0xFFFFFF)
+	}
+	return id
 }
 
 // GenerateRandomID gera um ID aleatório em formato hexadecimal com o comprimento desejado
@@ -220,30 +223,30 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		// Processa a mensagem com base no tipo
 		switch msg.Type {
-		case "CreateRoom":
+		case models.TypeCreateRoom:
 			s.handleCreateRoom(conn, msg)
-		case "JoinRoom":
+		case models.TypeJoinRoom:
 			s.handleJoinRoom(conn, msg)
-		case "Offer":
+		case models.TypeOffer:
 			s.handleOffer(conn, msg)
-		case "Answer":
+		case models.TypeAnswer:
 			s.handleAnswer(conn, msg)
-		case "Candidate":
+		case models.TypeCandidate:
 			s.handleCandidate(conn, msg)
-		case "Kick":
+		case models.TypeKick:
 			s.handleKick(conn, msg)
-		case "Rename":
+		case models.TypeRename:
 			s.handleRename(conn, msg)
-		case "Delete":
+		case models.TypeDelete:
 			s.handleDelete(conn, msg)
-		// case "LeaveRoom":
+		// case models.TypeLeaveRoom:
 		// 	s.handleLeaveRoom(conn, msg)
 		default:
 			log.Printf("Unknown message type: %s", msg.Type)
 			// Se a mensagem tinha um ID, responde com erro mantendo o mesmo ID
 			if originalID != "" {
 				responseMsg := models.Message{
-					Type:      "Error",
+					Type:      models.TypeError,
 					Data:      []byte(`"Unknown message type"`),
 					MessageID: originalID,
 				}
@@ -341,6 +344,25 @@ func (s *Server) updateRoomName(roomID string, newName string) error {
 	return err
 }
 
+// getLimiter returns a rate limiter for the specified IP address
+// Rate is limited to 3 requests per minute per IP address
+func (s *Server) getLimiter(ip string) *rate.Limiter {
+	s.limiterMu.RLock()
+	limiter, exists := s.joinLimiters[ip]
+	s.limiterMu.RUnlock()
+
+	if !exists {
+		// Create a new limiter for this IP: 3 requests per minute
+		limiter = rate.NewLimiter(rate.Every(20*time.Second), 3) // 3 requests per minute
+
+		s.limiterMu.Lock()
+		s.joinLimiters[ip] = limiter
+		s.limiterMu.Unlock()
+	}
+
+	return limiter
+}
+
 func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -348,9 +370,28 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	// Preserva o ID da mensagem original para a resposta
 	originalID := msg.MessageID
 
+	// Apply rate limiting based on IP address for create room requests
+	clientIP := conn.RemoteAddr().String()
+	// Extract IP address without port if necessary
+	if strings.Contains(clientIP, ":") {
+		clientIP = strings.Split(clientIP, ":")[0]
+	}
+
+	limiter := s.getLimiter(clientIP)
+	if !limiter.Allow() {
+		// Rate limit exceeded
+		log.Printf("Rate limit exceeded for IP %s attempting to create a room", clientIP)
+		conn.WriteJSON(models.Message{
+			Type:      models.TypeError,
+			Data:      []byte(`"Rate limit exceeded. Please try again later."`),
+			MessageID: originalID,
+		})
+		return
+	}
+
 	if msg.RoomName == "" || msg.Password == "" || msg.PublicKey == "" {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Room name, password, and public key are required"`),
 			MessageID: originalID,
 		})
@@ -359,18 +400,8 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 
 	if !passwordRegex.MatchString(msg.Password) {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Password does not match required pattern"`),
-			MessageID: originalID,
-		})
-		return
-	}
-
-	// Check if this public key has already created a room
-	if existingRoomID, found := s.publicKeys[msg.PublicKey]; found {
-		conn.WriteJSON(models.Message{
-			Type:      "Error",
-			Data:      []byte(fmt.Sprintf(`"This public key has already created room: %s"`, existingRoomID)),
 			MessageID: originalID,
 		})
 		return
@@ -379,12 +410,13 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	// Query Supabase for rooms with this public key
 	var results []SupabaseRoom
 	data, _, err := s.supabase.From(s.config.SupabaseRoomsTable).Select("id", "", false).Eq("public_key", msg.PublicKey).Execute()
+
 	if err == nil {
 		err = json.Unmarshal(data, &results)
 		if err == nil && len(results) > 0 {
 			// Public key already has a room
 			conn.WriteJSON(models.Message{
-				Type:      "Error",
+				Type:      models.TypeError,
 				Data:      []byte(fmt.Sprintf(`"This public key has already created room: %s"`, results[0].ID)),
 				MessageID: originalID,
 			})
@@ -398,7 +430,7 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	_, err = s.fetchRoom(roomID)
 	if err == nil {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Room ID conflict"`),
 			MessageID: originalID,
 		})
@@ -408,7 +440,7 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(msg.PublicKey)
 	if err != nil {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Invalid public key"`),
 			MessageID: originalID,
 		})
@@ -417,7 +449,7 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	pubKey, err := x509.ParsePKIXPublicKey(pubKeyBytes)
 	if err != nil {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Failed to parse public key"`),
 			MessageID: originalID,
 		})
@@ -426,7 +458,7 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
 	if !ok {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Public key is not RSA"`),
 			MessageID: originalID,
 		})
@@ -451,18 +483,20 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	if err != nil {
 		log.Printf("Error creating room in Supabase: %v", err)
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Error creating room in database"`),
 			MessageID: originalID,
 		})
 		return
 	}
 
-	// Store creator connection and public key mapping
-	s.roomCreators[roomID] = conn
-	s.clients[conn] = roomID
-	s.publicKeys[msg.PublicKey] = roomID // Track that this public key has created a room
+	// Armazena a chave pública associada a esta conexão
+	s.clientToPublicKey[conn] = msg.PublicKey
 
+	// Associa este cliente à sala
+	s.clients[conn] = roomID
+
+	// Adiciona o cliente à lista de conexões desta sala
 	if _, exists := s.networks[roomID]; !exists {
 		s.networks[roomID] = []*websocket.Conn{}
 	}
@@ -473,7 +507,7 @@ func (s *Server) handleCreateRoom(conn *websocket.Conn, msg models.Message) {
 	}
 
 	conn.WriteJSON(models.Message{
-		Type:      "RoomCreated",
+		Type:      models.TypeRoomCreated,
 		RoomID:    roomID,
 		RoomName:  msg.RoomName,
 		Password:  msg.Password,
@@ -489,11 +523,30 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 	// Preserva o ID da mensagem original para a resposta
 	originalID := msg.MessageID
 
+	// Apply rate limiting based on IP address
+	clientIP := conn.RemoteAddr().String()
+	// Extract IP address without port if necessary
+	if strings.Contains(clientIP, ":") {
+		clientIP = strings.Split(clientIP, ":")[0]
+	}
+
+	limiter := s.getLimiter(clientIP)
+	if !limiter.Allow() {
+		// Rate limit exceeded
+		log.Printf("Rate limit exceeded for IP %s attempting to join room %s", clientIP, msg.RoomID)
+		conn.WriteJSON(models.Message{
+			Type:      models.TypeError,
+			Data:      []byte(`"Rate limit exceeded. Please try again later."`),
+			MessageID: originalID,
+		})
+		return
+	}
+
 	// Fetch room from Supabase
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Room does not exist"`),
 			MessageID: originalID,
 		})
@@ -502,7 +555,7 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 
 	if msg.Password != room.Password {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Incorrect password"`),
 			MessageID: originalID,
 		})
@@ -511,7 +564,7 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 
 	if msg.PublicKey == "" {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Public key is required"`),
 			MessageID: originalID,
 		})
@@ -521,12 +574,15 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 	// Check if room is full
 	if len(s.networks[msg.RoomID]) >= s.config.MaxClientsPerRoom {
 		conn.WriteJSON(models.Message{
-			Type:      "Error",
+			Type:      models.TypeError,
 			Data:      []byte(`"Room is full"`),
 			MessageID: originalID,
 		})
 		return
 	}
+
+	// Armazena a chave pública do cliente que entrou na sala
+	s.clientToPublicKey[conn] = msg.PublicKey
 
 	s.clients[conn] = msg.RoomID
 	if _, exists := s.networks[msg.RoomID]; !exists {
@@ -547,7 +603,7 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 
 	// Envia a resposta ao cliente com o ID da mensagem original
 	conn.WriteJSON(models.Message{
-		Type:      "RoomJoined",
+		Type:      models.TypeRoomJoined,
 		RoomID:    msg.RoomID,
 		RoomName:  room.Name,
 		MessageID: originalID,
@@ -558,7 +614,7 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 		if peer != conn {
 			// Informa aos peers que um novo cliente entrou
 			peer.WriteJSON(models.Message{
-				Type:      "PeerJoined",
+				Type:      models.TypePeerJoined,
 				RoomID:    msg.RoomID,
 				PublicKey: msg.PublicKey,
 				Username:  msg.Username,
@@ -566,7 +622,7 @@ func (s *Server) handleJoinRoom(conn *websocket.Conn, msg models.Message) {
 
 			// Informa ao novo cliente sobre os peers existentes
 			conn.WriteJSON(models.Message{
-				Type:      "PeerJoined",
+				Type:      models.TypePeerJoined,
 				RoomID:    msg.RoomID,
 				PublicKey: peer.RemoteAddr().String(),
 				Username:  "Peer",
@@ -583,7 +639,7 @@ func (s *Server) handleOffer(conn *websocket.Conn, msg models.Message) {
 	for _, peer := range s.networks[roomID] {
 		if peer.RemoteAddr().String() == msg.DestinationID {
 			peer.WriteJSON(models.Message{
-				Type:          "Offer",
+				Type:          models.TypeOffer,
 				RoomID:        msg.RoomID,
 				PublicKey:     msg.PublicKey,
 				DestinationID: msg.DestinationID,
@@ -602,7 +658,7 @@ func (s *Server) handleAnswer(conn *websocket.Conn, msg models.Message) {
 	for _, peer := range s.networks[roomID] {
 		if peer.RemoteAddr().String() == msg.DestinationID {
 			peer.WriteJSON(models.Message{
-				Type:          "Answer",
+				Type:          models.TypeAnswer,
 				RoomID:        msg.RoomID,
 				PublicKey:     msg.PublicKey,
 				DestinationID: msg.DestinationID,
@@ -621,7 +677,7 @@ func (s *Server) handleCandidate(conn *websocket.Conn, msg models.Message) {
 	for _, peer := range s.networks[roomID] {
 		if peer.RemoteAddr().String() == msg.DestinationID {
 			peer.WriteJSON(models.Message{
-				Type:          "Candidate",
+				Type:          models.TypeCandidate,
 				RoomID:        msg.RoomID,
 				PublicKey:     msg.PublicKey,
 				DestinationID: msg.DestinationID,
@@ -662,26 +718,26 @@ func (s *Server) handleKick(conn *websocket.Conn, msg models.Message) {
 
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
 	if !s.verifySignature(msg, *room) {
-		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Invalid signature"`)})
 		return
 	}
 
 	for _, peer := range s.networks[msg.RoomID] {
 		if peer.RemoteAddr().String() == msg.TargetID {
-			peer.WriteJSON(models.Message{Type: "Kicked", RoomID: msg.RoomID})
+			peer.WriteJSON(models.Message{Type: models.TypeKicked, RoomID: msg.RoomID})
 			peer.Close()
 			s.removeClient(peer, msg.RoomID)
 			log.Printf("Client %s kicked from room %s", msg.TargetID, msg.RoomID)
-			conn.WriteJSON(models.Message{Type: "KickSuccess", RoomID: msg.RoomID, TargetID: msg.TargetID})
+			conn.WriteJSON(models.Message{Type: models.TypeKickSuccess, RoomID: msg.RoomID, TargetID: msg.TargetID})
 			return
 		}
 	}
-	conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Target client not found"`)})
+	conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Target client not found"`)})
 }
 
 func (s *Server) handleRename(conn *websocket.Conn, msg models.Message) {
@@ -690,46 +746,62 @@ func (s *Server) handleRename(conn *websocket.Conn, msg models.Message) {
 
 	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
 	if !s.verifySignature(msg, *room) {
-		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Invalid signature"`)})
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Invalid signature"`)})
 		return
 	}
 
 	err = s.updateRoomName(msg.RoomID, msg.RoomName)
 	if err != nil {
 		log.Printf("Error updating room name: %v", err)
-		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Error updating room name in database"`)})
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Error updating room name in database"`)})
 		return
 	}
 
 	log.Printf("Room %s renamed to %s", msg.RoomID, msg.RoomName)
 
 	for _, peer := range s.networks[msg.RoomID] {
-		peer.WriteJSON(models.Message{Type: "RoomRenamed", RoomID: msg.RoomID, RoomName: msg.RoomName})
+		peer.WriteJSON(models.Message{Type: models.TypeRoomRenamed, RoomID: msg.RoomID, RoomName: msg.RoomName})
 	}
-	conn.WriteJSON(models.Message{Type: "RenameSuccess", RoomID: msg.RoomID, RoomName: msg.RoomName})
+	conn.WriteJSON(models.Message{Type: models.TypeRenameSuccess, RoomID: msg.RoomID, RoomName: msg.RoomName})
 }
 
 func (s *Server) handleDelete(conn *websocket.Conn, msg models.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.fetchRoom(msg.RoomID)
+	// Verifica se a sala existe no banco de dados
+	room, err := s.fetchRoom(msg.RoomID)
 	if err != nil {
-		conn.WriteJSON(models.Message{Type: "Error", Data: []byte(`"Room does not exist"`)})
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Room does not exist"`)})
 		return
 	}
 
-	for _, peer := range s.networks[msg.RoomID] {
-		peer.WriteJSON(models.Message{Type: "RoomDeleted", RoomID: msg.RoomID})
-		peer.Close()
+	// Verifica se o cliente que está excluindo é o dono da sala
+	publicKey, hasPublicKey := s.clientToPublicKey[conn]
+	if !hasPublicKey || publicKey != room.PublicKeyB64 {
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Only the room owner can delete the room"`)})
+		return
 	}
 
-	delete(s.roomCreators, msg.RoomID)
+	// Remove a sala do banco de dados Supabase
+	err = s.deleteRoomFromSupabase(msg.RoomID)
+	if err != nil {
+		log.Printf("Error deleting room from Supabase: %v", err)
+		conn.WriteJSON(models.Message{Type: models.TypeError, Data: []byte(`"Failed to delete room from database"`)})
+		return
+	}
+
+	// Notifica todos os clientes conectados que a sala foi excluída
+	for _, peer := range s.networks[msg.RoomID] {
+		peer.WriteJSON(models.Message{Type: models.TypeRoomDeleted, RoomID: msg.RoomID})
+	}
+
+	// Limpa todas as referências da sala em memória
 	delete(s.networks, msg.RoomID)
 	for c, roomID := range s.clients {
 		if roomID == msg.RoomID {
@@ -737,8 +809,8 @@ func (s *Server) handleDelete(conn *websocket.Conn, msg models.Message) {
 		}
 	}
 
-	log.Printf("Room %s deleted", msg.RoomID)
-	conn.WriteJSON(models.Message{Type: "DeleteSuccess", RoomID: msg.RoomID})
+	log.Printf("Room %s deleted by owner", msg.RoomID)
+	conn.WriteJSON(models.Message{Type: models.TypeDeleteSuccess, RoomID: msg.RoomID})
 }
 
 func (s *Server) handleDisconnect(conn *websocket.Conn) {
@@ -749,12 +821,25 @@ func (s *Server) handleDisconnect(conn *websocket.Conn) {
 
 func (s *Server) removeClient(conn *websocket.Conn, roomID string) {
 	if roomID == "" {
+		// Limpa a chave pública do cliente mesmo se não estiver em uma sala
+		delete(s.clientToPublicKey, conn)
 		return
 	}
 
-	delete(s.clients, conn)
+	// Recupera a chave pública do cliente antes de removê-lo
+	publicKey, hasPublicKey := s.clientToPublicKey[conn]
 
-	network := s.networks[roomID]
+	// Limpa as referências do cliente
+	delete(s.clients, conn)
+	delete(s.clientToPublicKey, conn)
+
+	// Se a sala não existe no networks, não há nada mais a fazer
+	network, exists := s.networks[roomID]
+	if !exists {
+		return
+	}
+
+	// Remove o cliente da lista de conexões da sala
 	for i, peer := range network {
 		if peer == conn {
 			s.networks[roomID] = append(network[:i], network[i+1:]...)
@@ -762,15 +847,42 @@ func (s *Server) removeClient(conn *websocket.Conn, roomID string) {
 		}
 	}
 
-	if creatorConn, exists := s.roomCreators[roomID]; exists && creatorConn == conn {
-		delete(s.roomCreators, roomID)
+	// Verifica se o cliente que está saindo é o dono da sala com base na chave pública
+	isCreator := false
+	if hasPublicKey {
+		// Busca a sala no banco de dados
+		room, err := s.fetchRoom(roomID)
+		if err == nil && publicKey == room.PublicKeyB64 {
+			// A chave pública do cliente que está saindo coincide com a do criador da sala
+			isCreator = true
+			log.Printf("Room creator disconnected: %s", publicKey)
+		}
+	}
+
+	// Se for o criador, deleta a sala do banco de dados
+	if isCreator {
 		err := s.deleteRoomFromSupabase(roomID)
 		if err != nil && (s.config.LogLevel == "debug") {
 			log.Printf("Error deleting room from Supabase on creator disconnect: %v", err)
 		}
-	}
 
-	if len(s.networks[roomID]) == 0 {
+		// Notifica todos os outros participantes da sala que ela foi excluída
+		for _, peer := range s.networks[roomID] {
+			if peer != conn {
+				peer.WriteJSON(models.Message{Type: models.TypeRoomDeleted, RoomID: roomID})
+			}
+		}
+
+		// Remove completamente a sala e seus clientes
+		delete(s.networks, roomID)
+		for c, cRoomID := range s.clients {
+			if cRoomID == roomID {
+				delete(s.clients, c)
+			}
+		}
+		log.Printf("Room %s deleted because owner disconnected", roomID)
+	} else if len(s.networks[roomID]) == 0 {
+		// Se não houver mais clientes na sala, remove a referência da sala
 		delete(s.networks, roomID)
 	}
 

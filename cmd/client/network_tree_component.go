@@ -6,216 +6,230 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
-// NetworkTreeComponent represents the networks list with categories
+// NetworkTreeComponent representa a lista scrollable de salas
 type NetworkTreeComponent struct {
-	ui          *UIManager
-	NetworkList *widget.List  // Changed from tree to list for better stability
-	rooms       []models.Room // All rooms (local and remote)
-	localRooms  map[string]models.Room
-	container   *fyne.Container
+	ui               *UIManager
+	localRooms       []models.Room                 // Lista de salas locais
+	container        *fyne.Container               // Container principal
+	scrollContainer  *container.Scroll             // Container com scroll
+	roomsList        *fyne.Container               // Container de lista vertical
+	roomComponents   []*RoomItemComponent          // Lista de componentes de sala
+	roomComponentMap map[string]*RoomItemComponent // Mapa de componentes por ID
+	emptyContent     *fyne.Container               // Conteúdo quando não há salas disponíveis
 }
 
-// NewNetworkTreeComponent creates a new network tree component
+// NewNetworkTreeComponent cria um novo componente de lista de salas
 func NewNetworkTreeComponent(ui *UIManager) *NetworkTreeComponent {
 	ntc := &NetworkTreeComponent{
-		ui:         ui,
-		rooms:      []models.Room{},
-		localRooms: make(map[string]models.Room),
+		ui:               ui,
+		localRooms:       []models.Room{},
+		roomComponents:   []*RoomItemComponent{},
+		roomComponentMap: make(map[string]*RoomItemComponent),
 	}
 
-	// Create a list instead of a tree for more reliable display
-	ntc.NetworkList = widget.NewList(
-		// Length function
-		func() int {
-			// Return the number of items (categories + rooms)
-			count := 2 // Always have "Recent Networks" and "Available Networks" headers
-			count += len(ntc.localRooms)
+	// Cria um container vertical para a lista de salas
+	ntc.roomsList = container.NewVBox()
 
-			// Count available (non-local) rooms
-			for _, room := range ntc.rooms {
-				if _, exists := ntc.localRooms[room.ID]; !exists {
-					count++
-				}
-			}
+	// Cria container com barra de rolagem
+	ntc.scrollContainer = container.NewScroll(ntc.roomsList)
+	ntc.container = container.NewMax(ntc.scrollContainer)
 
-			return count
-		},
-		// Create item UI
-		func() fyne.CanvasObject {
-			// Create a template for list items with just an icon and label
-			return container.NewHBox(
-				widget.NewIcon(theme.HomeIcon()),
-				widget.NewLabel("Template Item"),
-			)
-		},
-		// Update item UI
-		func(id widget.ListItemID, item fyne.CanvasObject) {
-			// Convert to container and access elements
-			hBox := item.(*fyne.Container)
-			if len(hBox.Objects) < 2 {
-				return
-			}
-			icon := hBox.Objects[0].(*widget.Icon)
-			label := hBox.Objects[1].(*widget.Label)
+	// Cria o conteúdo para quando não há salas
+	ntc.createEmptyContent()
 
-			// Get the appropriate item based on id
-			if id == 0 {
-				// Recent Networks header
-				icon.SetResource(theme.FolderOpenIcon())
-				label.SetText("Recent Networks")
-				label.TextStyle = fyne.TextStyle{Bold: true}
-			} else if id == 1+len(ntc.localRooms) {
-				// Available Networks header
-				icon.SetResource(theme.FolderOpenIcon())
-				label.SetText("Available Networks")
-				label.TextStyle = fyne.TextStyle{Bold: true}
-			} else if id <= len(ntc.localRooms) {
-				// Recent network item
-				var i int = 0
-				for _, room := range ntc.getSortedLocalRooms() {
-					if i == id-1 { // -1 because we have a header
-						icon.SetResource(theme.ComputerIcon())
-						label.SetText(room.Name)
-						label.TextStyle = fyne.TextStyle{} // Reset any style
-						break
-					}
-					i++
-				}
-			} else {
-				// Available network item
-				var i int = 0
-				for _, room := range ntc.getAvailableRooms() {
-					if i == id-(2+len(ntc.localRooms)) { // -2 for both headers, -len for local rooms
-						icon.SetResource(theme.StorageIcon())
-						label.SetText(room.Name)
-						label.TextStyle = fyne.TextStyle{} // Reset any style
-						break
-					}
-					i++
-				}
-			}
-		},
-	)
-
-	// Create scrollable container with the list
-	scrollContainer := container.NewScroll(ntc.NetworkList)
-	ntc.container = container.NewMax(scrollContainer)
-
-	// Set a reasonable min size
-	// ntc.NetworkList.MinSize = fyne.NewSize(280, 300)
-
-	// Register callback to update when room list changes
+	// Registra callback para atualizar quando a lista de salas mudar
 	if ui != nil && ui.VPN != nil && ui.VPN.NetworkManager != nil {
 		ui.VPN.NetworkManager.OnRoomListUpdate = func(rooms []models.Room) {
-			ntc.updateRooms(rooms)
+			// Atualiza as salas locais
+			ntc.updateLocalRooms(rooms)
 		}
 	}
 
-	// Load initial rooms without attempting to connect
+	// Carrega salas locais iniciais
 	ntc.loadLocalRooms()
 
 	return ntc
 }
 
-// GetContainer returns the component's container
+// createEmptyContent cria o conteúdo a ser exibido quando não há salas disponíveis
+func (ntc *NetworkTreeComponent) createEmptyContent() {
+	// Criando botões para quando não há redes
+	createNetButton := widget.NewButton("Criar uma Sala", func() {
+		if ntc.ui.RoomDialog == nil {
+			ntc.ui.RoomDialog = NewRoomDialog(ntc.ui)
+		}
+		ntc.ui.RoomDialog.Show()
+	})
+	createNetButton.Importance = widget.HighImportance
+
+	connectNetButton := widget.NewButton("Conectar a uma Sala", func() {
+		if ntc.ui.ConnectDialog == nil {
+			ntc.ui.ConnectDialog = NewConnectDialog(ntc.ui)
+		}
+		ntc.ui.ConnectDialog.Show()
+	})
+
+	// Limita o tamanho máximo dos botões
+	createNetButton.Resize(fyne.NewSize(260, 40))
+	connectNetButton.Resize(fyne.NewSize(260, 40))
+
+	// Criando um texto informativo com status online/offline dinâmico
+	infoText := "Esta área vai mostrar suas salas salvas. Você está " +
+		func() string {
+			if ntc.ui.VPN.IsConnected {
+				return "conectado"
+			}
+			return "desconectado"
+		}() +
+		", mas ainda não tem salas salvas localmente."
+
+	// Texto informativo com alinhamento centralizado
+	statusText := widget.NewLabelWithStyle(
+		infoText,
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Italic: true},
+	)
+
+	// Limita o tamanho dos textos para evitar quebra de linha não intencional
+	statusText.Wrapping = fyne.TextWrapWord
+	statusText.Resize(fyne.NewSize(260, 80))
+
+	// Centralizando todos os textos horizontalmente
+	title := widget.NewLabelWithStyle("Nenhuma sala disponível", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	title.Resize(fyne.NewSize(260, 30))
+
+	description := widget.NewLabelWithStyle("Você não está conectado a nenhuma sala. Escolha uma opção:",
+		fyne.TextAlignCenter, fyne.TextStyle{})
+	description.Resize(fyne.NewSize(260, 40))
+	description.Wrapping = fyne.TextWrapWord
+
+	// Container de botões mais compacto
+	buttonContainer := container.NewVBox(
+		createNetButton,
+		connectNetButton,
+	)
+
+	// Conteúdo principal com tamanho controlado
+	ntc.emptyContent = container.NewVBox(
+		title,
+		widget.NewSeparator(),
+		description,
+		buttonContainer,
+		widget.NewSeparator(),
+		statusText,
+	)
+
+	// Define um tamanho fixo para o container vazio
+	ntc.emptyContent.Resize(fyne.NewSize(280, 400))
+}
+
+// GetContainer retorna o container do componente
 func (ntc *NetworkTreeComponent) GetContainer() *fyne.Container {
 	return ntc.container
 }
 
-// loadLocalRooms loads rooms from local database
+// loadLocalRooms carrega salas do banco de dados local
 func (ntc *NetworkTreeComponent) loadLocalRooms() {
-	// Ensure the VPN client and NetworkManager are available
+	// Verifica se o VPN client e NetworkManager estão disponíveis
 	if ntc.ui == nil || ntc.ui.VPN == nil || ntc.ui.VPN.NetworkManager == nil {
-		log.Printf("Cannot load local rooms: UI or NetworkManager is nil")
+		log.Printf("Não foi possível carregar salas locais: UI ou NetworkManager é nil")
 		return
 	}
 
 	localRooms, err := ntc.ui.VPN.NetworkManager.loadLocalRooms()
 	if err != nil {
-		log.Printf("Error loading local rooms: %v", err)
+		log.Printf("Erro ao carregar salas locais: %v", err)
 		return
 	}
 
-	// Update local rooms map
-	ntc.localRooms = make(map[string]models.Room)
-	for _, room := range localRooms {
-		ntc.localRooms[room.ID] = room
-	}
+	// Atualiza lista de salas locais
+	ntc.localRooms = localRooms
 
-	// Update the component
-	ntc.updateRooms(nil)
+	ntc.updateRoomsList()
+
 }
 
-// updateRooms updates the list with new rooms from server
-func (ntc *NetworkTreeComponent) updateRooms(serverRooms []models.Room) {
-	// Safety check
-	if ntc.NetworkList == nil {
-		log.Printf("Warning: NetworkList is nil in updateRooms")
+// updateLocalRooms atualiza a lista com novas salas
+func (ntc *NetworkTreeComponent) updateLocalRooms(serverRooms []models.Room) {
+	// Se serverRooms for nil, recarrega apenas as salas locais
+	if serverRooms == nil {
+		ntc.loadLocalRooms()
 		return
 	}
 
-	// Combine local and server rooms
-	allRooms := []models.Room{}
-
-	// Add local rooms first
-	for _, room := range ntc.localRooms {
-		allRooms = append(allRooms, room)
+	// Carrega salas locais novamente para garantir sincronização
+	localRooms, err := ntc.ui.VPN.NetworkManager.loadLocalRooms()
+	if err != nil {
+		log.Printf("Erro ao carregar salas locais: %v", err)
+		return
 	}
 
-	// Add server rooms that aren't already in local
-	if serverRooms != nil {
-		for _, room := range serverRooms {
-			if _, exists := ntc.localRooms[room.ID]; !exists {
-				allRooms = append(allRooms, room)
-			}
+	// Atualiza a lista de salas locais
+	ntc.localRooms = localRooms
+
+	// Atualiza a lista de salas
+	ntc.updateRoomsList()
+}
+
+// updateRoomsList atualiza a lista visual de salas
+func (ntc *NetworkTreeComponent) updateRoomsList() {
+	// Limpa o container principal
+	ntc.container.Objects = nil
+
+	// Limpa a lista de salas
+	ntc.roomsList.Objects = nil
+	ntc.roomComponents = nil
+	ntc.roomComponentMap = make(map[string]*RoomItemComponent)
+
+	// Verifica se há salas para mostrar
+	if len(ntc.localRooms) > 0 {
+		// Adiciona cada sala como um componente individual
+		for _, room := range ntc.localRooms {
+			// Cria um novo componente de sala
+			roomComponent := NewRoomItemComponent(ntc.ui, room)
+
+			// Adiciona à lista de componentes
+			ntc.roomComponents = append(ntc.roomComponents, roomComponent)
+			ntc.roomComponentMap[room.ID] = roomComponent
+
+			// Adiciona o container do componente à lista visual
+			ntc.roomsList.Add(roomComponent.GetContainer())
+		}
+
+		// Exibe a lista de salas
+		ntc.container.Add(ntc.scrollContainer)
+	} else {
+		// Se não há salas, exibe o conteúdo vazio
+		ntc.container.Add(container.NewCenter(ntc.emptyContent))
+	}
+
+	// Refresh para atualizar a interface
+	ntc.container.Refresh()
+	ntc.roomsList.Refresh()
+}
+
+// updateRoomItems atualiza o estado de todos os componentes de sala
+func (ntc *NetworkTreeComponent) updateRoomItems() {
+	for _, roomComponent := range ntc.roomComponents {
+		roomComponent.Update()
+	}
+}
+
+// getConnectedRoomComponent retorna o componente da sala conectada, se houver
+func (ntc *NetworkTreeComponent) getConnectedRoomComponent() *RoomItemComponent {
+	if ntc.ui.VPN.IsConnected && ntc.ui.VPN.CurrentRoom != "" {
+		if component, exists := ntc.roomComponentMap[ntc.ui.VPN.CurrentRoom]; exists {
+			return component
 		}
 	}
-
-	// Update the component state
-	ntc.rooms = allRooms
-
-	// Update the list
-	ntc.NetworkList.Refresh()
+	return nil
 }
 
-// getSortedLocalRooms returns local rooms sorted by last used time
-func (ntc *NetworkTreeComponent) getSortedLocalRooms() []models.Room {
-	rooms := []models.Room{}
-
-	// Collect all local rooms
-	for _, room := range ntc.localRooms {
-		rooms = append(rooms, room)
-	}
-
-	// We could add sorting logic here if we tracked last used time
-	// For now, let's leave them as they come from the database which
-	// should already have some order
-
-	return rooms
-}
-
-// getAvailableRooms returns rooms that are not in local storage
-func (ntc *NetworkTreeComponent) getAvailableRooms() []models.Room {
-	rooms := []models.Room{}
-
-	// Find rooms that aren't in local storage
-	for _, room := range ntc.rooms {
-		if _, exists := ntc.localRooms[room.ID]; !exists {
-			rooms = append(rooms, room)
-		}
-	}
-
-	return rooms
-}
-
-// Refresh explicitly refreshes the network list
+// Refresh atualiza explicitamente a lista de redes
 func (ntc *NetworkTreeComponent) Refresh() {
-	if ntc.NetworkList != nil {
-		ntc.NetworkList.Refresh()
-	}
+	ntc.loadLocalRooms()
 }

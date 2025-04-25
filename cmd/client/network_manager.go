@@ -7,12 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/itxtoledo/govpn/libs/models"
 	"github.com/itxtoledo/govpn/libs/network"
 	"github.com/pion/webrtc/v3"
@@ -29,7 +27,6 @@ const (
 type NetworkManager struct {
 	SignalServer          string                            // Endereço do servidor de sinalização
 	IsConnected           bool                              // Indica se está conectado ao servidor de sinalização
-	WSConn                *websocket.Conn                   // WebSocket connection com o servidor de sinalização
 	RoomID                string                            // ID da sala atual
 	RoomName              string                            // Nome da sala atual
 	VirtualNetwork        *network.VirtualNetwork           // Rede virtual
@@ -51,6 +48,7 @@ type NetworkManager struct {
 	OnRoomListUpdate      func([]models.Room)             // Callback for room list updates
 	pendingRequests       map[string]chan models.Message  // Map to track requests by their ID
 	messageCallbacks      map[string]func(models.Message) // Map for message callbacks by message ID
+	signalingServer       *SignalingServer                // Signaling server connection manager
 }
 
 // NewNetworkManager cria um novo gerenciador de rede
@@ -61,7 +59,7 @@ func NewNetworkManager(vpn *VPNClient) *NetworkManager {
 		signalServer = serverEnv
 	}
 
-	return &NetworkManager{
+	nm := &NetworkManager{
 		VPNClient:    vpn,
 		SignalServer: signalServer,
 		PeersConn:    make(map[string]*webrtc.PeerConnection),
@@ -80,49 +78,37 @@ func NewNetworkManager(vpn *VPNClient) *NetworkManager {
 		pendingRequests:       make(map[string]chan models.Message),
 		messageCallbacks:      make(map[string]func(models.Message)),
 	}
+
+	// Create and setup the signaling server
+	nm.signalingServer = NewSignalingServer(signalServer)
+
+	// Configure callbacks
+	nm.signalingServer.OnConnectionStatus = func(isConnected bool) {
+		nm.SignalServerConnected = isConnected
+		nm.IsConnected = isConnected
+	}
+
+	nm.signalingServer.OnConnectionError = func(err error) {
+		if nm.OnConnectionError != nil {
+			nm.OnConnectionError(err)
+		}
+	}
+
+	nm.signalingServer.OnMessage = func(msg models.Message) {
+		nm.handleReceivedMessage(msg)
+	}
+
+	return nm
 }
 
 // Connect conecta ao servidor de sinalização
 func (n *NetworkManager) Connect() error {
-	u, err := url.Parse(n.SignalServer)
-	if err != nil {
-		n.SignalServerConnected = false
-		return fmt.Errorf("invalid signaling server URL: %w", err)
-	}
-
-	log.Printf("Connecting to signaling server: %s", u.String())
-	n.SignalServerConnected = false
-
-	for n.CurrentRetry = 0; n.CurrentRetry < n.MaxRetries; n.CurrentRetry++ {
-		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-		if err != nil {
-			log.Printf("Connection attempt %d failed: %v", n.CurrentRetry+1, err)
-			if n.OnConnectionError != nil {
-				n.OnConnectionError(err)
-			}
-			continue
-		}
-
-		n.WSConn = conn
-		n.IsConnected = true
-		n.SignalServerConnected = true
-
-		// Inicia a rotina para lidar com mensagens do servidor
-		go n.handleWebSocketMessages()
-
-		return nil
-	}
-
-	n.SignalServerConnected = false
-	return fmt.Errorf("could not connect to signaling server at %s after %d attempts", n.SignalServer, n.MaxRetries)
+	return n.signalingServer.Connect()
 }
 
 // Disconnect desconecta do servidor de sinalização
 func (n *NetworkManager) Disconnect() {
-	if n.WSConn != nil {
-		n.WSConn.Close()
-		n.WSConn = nil
-	}
+	n.signalingServer.Disconnect()
 	n.IsConnected = false
 	n.SignalServerConnected = false
 }
@@ -147,32 +133,21 @@ func (n *NetworkManager) GetRoomList() error {
 
 // loadLocalRooms carrega a lista de salas do banco de dados SQLite local
 func (n *NetworkManager) loadLocalRooms() ([]models.Room, error) {
-	var rooms []models.Room
-
-	// Consulta as salas no banco de dados local
-	rows, err := n.VPNClient.DB.Query(`
-		SELECT id, name, password, last_connected 
-		FROM rooms 
-		ORDER BY last_connected DESC
-	`)
+	// Obter as salas do DatabaseManager
+	dbRooms, err := n.VPNClient.DBManager.GetRooms()
 	if err != nil {
 		return nil, fmt.Errorf("erro ao consultar banco de dados: %w", err)
 	}
-	defer rows.Close()
 
-	// Processa os resultados
-	for rows.Next() {
-		var room models.Room
-		var lastConnected string
-
-		err := rows.Scan(&room.ID, &room.Name, &room.Password, &lastConnected)
-		if err != nil {
-			log.Printf("Erro ao ler registro de sala: %v", err)
-			continue
+	// Converter para o formato models.Room
+	rooms := make([]models.Room, 0, len(dbRooms))
+	for _, dbRoom := range dbRooms {
+		room := models.Room{
+			ID:          dbRoom.ID,
+			Name:        dbRoom.Name,
+			Password:    dbRoom.Password,
+			ClientCount: 0, // Não sabemos quantos clientes até conectar
 		}
-
-		// Adiciona a sala à lista
-		room.ClientCount = 0 // Não sabemos quantos clientes até conectar
 		rooms = append(rooms, room)
 	}
 
@@ -211,7 +186,7 @@ func (n *NetworkManager) JoinRoom(roomID, password string) error {
 	}
 
 	msg := models.Message{
-		Type:      "JoinRoom",
+		Type:      models.TypeJoinRoom,
 		RoomID:    roomID,
 		Password:  password,
 		PublicKey: n.VPNClient.getPublicKey(), // Usa apenas a chave pública para identificação
@@ -230,12 +205,12 @@ func (n *NetworkManager) JoinRoom(roomID, password string) error {
 	}
 
 	// Verifica se a resposta é um erro
-	if response.Type == "Error" {
+	if response.Type == models.TypeError {
 		return fmt.Errorf("erro ao entrar na sala: %s", string(response.Data))
 	}
 
 	// Se a resposta for bem-sucedida, processa o resultado
-	if response.Type == "RoomJoined" {
+	if response.Type == models.TypeRoomJoined {
 		n.VPNClient.CurrentRoom = response.RoomID
 		n.RoomName = response.RoomName
 		n.VPNClient.IsConnected = true
@@ -286,7 +261,7 @@ func (n *NetworkManager) CreateRoom(name, password string) error {
 	}
 
 	msg := models.Message{
-		Type:      "CreateRoom",
+		Type:      models.TypeCreateRoom,
 		RoomName:  name,
 		Password:  password,
 		PublicKey: publicKey,
@@ -304,12 +279,12 @@ func (n *NetworkManager) CreateRoom(name, password string) error {
 	}
 
 	// Verifica se a resposta é um erro
-	if response.Type == "Error" {
+	if response.Type == models.TypeError {
 		return fmt.Errorf("erro ao criar sala: %s", string(response.Data))
 	}
 
 	// Se a resposta for bem-sucedida, processa o resultado
-	if response.Type == "RoomCreated" {
+	if response.Type == models.TypeRoomCreated {
 		n.VPNClient.CurrentRoom = response.RoomID
 		n.RoomName = response.RoomName
 		n.VPNClient.IsConnected = true
@@ -319,6 +294,29 @@ func (n *NetworkManager) CreateRoom(name, password string) error {
 		if err := n.saveRoomToLocalDB(response.RoomID, response.RoomName, password); err != nil {
 			log.Printf("Aviso: Não foi possível salvar a sala no banco de dados local: %v", err)
 			// Continuamos mesmo com erro ao salvar no banco local
+		}
+
+		// Atualiza a interface de forma segura
+		if n.VPNClient != nil && n.VPNClient.UI != nil {
+			// Evita acesso direto aos componentes da UI após criar uma sala
+			// Isso previne crashes quando a atualização da UI é feita no fluxo de criação
+
+			// Em vez disso, usamos um goroutine para atrasar um pouco a atualização
+			// permitindo que a UI termine seu processamento atual
+			go func() {
+				// Pequeno delay para garantir que a UI esteja pronta
+				time.Sleep(100 * time.Millisecond)
+
+				// Atualização do cabeçalho com tratamento de erros
+				if n.VPNClient.UI.HeaderComponent != nil {
+					n.VPNClient.UI.HeaderComponent.updateIPInfo()
+					n.VPNClient.UI.HeaderComponent.updateUsername()
+					n.VPNClient.UI.HeaderComponent.updateRoomName()
+				}
+
+				// Atualizar o botão de energia
+				n.VPNClient.UI.updatePowerButtonState()
+			}()
 		}
 
 		return nil
@@ -335,7 +333,7 @@ func (n *NetworkManager) LeaveRoom() error {
 	}
 
 	msg := models.Message{
-		Type:      "LeaveRoom",
+		Type:      models.TypeLeaveRoom,
 		RoomID:    n.VPNClient.CurrentRoom,
 		PublicKey: n.VPNClient.getPublicKey(),
 	}
@@ -349,79 +347,56 @@ func (n *NetworkManager) LeaveRoom() error {
 
 // sendMessage envia uma mensagem para o servidor de sinalização
 func (n *NetworkManager) sendMessage(msg interface{}) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	if err := n.WSConn.WriteMessage(websocket.TextMessage, data); err != nil {
-		return err
-	}
-
-	return nil
+	return n.signalingServer.SendMessage(msg)
 }
 
-// handleWebSocketMessages processa as mensagens recebidas do servidor de sinalização
-func (n *NetworkManager) handleWebSocketMessages() {
-	for {
-		_, message, err := n.WSConn.ReadMessage()
-		if err != nil {
-			log.Printf("Error reading message: %v", err)
-			n.IsConnected = false
-			n.SignalServerConnected = false
+// handleReceivedMessage processa as mensagens recebidas do servidor de sinalização
+func (n *NetworkManager) handleReceivedMessage(msg models.Message) {
+	// Processa a mensagem com base no tipo
+	switch msg.Type {
+	case "RoomList":
+		// We need raw message for this one
+		var roomListMsg struct {
+			Type  string        `json:"type"`
+			Rooms []models.Room `json:"rooms"`
+		}
+
+		data, _ := json.Marshal(msg)
+		if err := json.Unmarshal(data, &roomListMsg); err != nil {
+			log.Printf("Error deserializing room list: %v", err)
 			return
 		}
 
-		var msg models.Message
-		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("Error deserializing message: %v", err)
-			continue
-		}
+		n.handleRoomListMessage(roomListMsg.Rooms)
+	case models.TypeRoomCreated:
+		n.handleRoomCreatedMessage(msg)
+	case models.TypeRoomJoined:
+		n.handleRoomJoinedMessage(msg)
+	case models.TypePeerJoined:
+		n.handlePeerJoinedMessage(msg)
+	case models.TypePeerLeft:
+		n.handlePeerLeftMessage(msg)
+	case models.TypeOffer:
+		n.handleOfferMessage(msg)
+	case models.TypeAnswer:
+		n.handleAnswerMessage(msg)
+	case models.TypeCandidate:
+		n.handleICECandidateMessage(msg)
+	case models.TypeError:
+		n.handleErrorMessage(msg)
+	}
 
-		// Processa a mensagem com base no tipo
-		switch msg.Type {
-		case "RoomList":
-			n.handleRoomListMessage(message)
-		case "RoomCreated":
-			n.handleRoomCreatedMessage(msg)
-		case "RoomJoined":
-			n.handleRoomJoinedMessage(msg)
-		case "PeerJoined":
-			n.handlePeerJoinedMessage(msg)
-		case "PeerLeft":
-			n.handlePeerLeftMessage(msg)
-		case "Offer":
-			n.handleOfferMessage(msg)
-		case "Answer":
-			n.handleAnswerMessage(msg)
-		case "Candidate":
-			n.handleICECandidateMessage(msg)
-		case "Error":
-			n.handleErrorMessage(msg)
-		}
-
-		// Processa IDs de mensagens para callbacks ou respostas
-		if !n.processMessageID(msg) {
-			log.Printf("Message ID not processed: %s", msg.MessageID)
-		}
+	// Processa IDs de mensagens para callbacks ou respostas
+	if !n.processMessageID(msg) {
+		log.Printf("Message ID not processed: %s", msg.MessageID)
 	}
 }
 
 // Métodos para tratamento de mensagens específicas
-func (n *NetworkManager) handleRoomListMessage(message []byte) {
-	var roomListMsg struct {
-		Type  string        `json:"type"`
-		Rooms []models.Room `json:"rooms"`
-	}
-
-	if err := json.Unmarshal(message, &roomListMsg); err != nil {
-		log.Printf("Error deserializing room list: %v", err)
-		return
-	}
-
+func (n *NetworkManager) handleRoomListMessage(rooms []models.Room) {
 	// Notifica a UI sobre a atualização da lista de salas
 	if n.OnRoomListUpdate != nil {
-		n.OnRoomListUpdate(roomListMsg.Rooms)
+		n.OnRoomListUpdate(rooms)
 	}
 }
 
@@ -581,12 +556,12 @@ func (n *NetworkManager) GetFormattedPublicKey(publicKey string) string {
 
 // IsBackendConnected returns whether the network manager is connected to the backend server
 func (n *NetworkManager) IsBackendConnected() bool {
-	return n.WSConn != nil && n.IsConnected
+	return n.signalingServer.IsConnectionActive() && n.IsConnected
 }
 
 // GetConnectionState returns the current connection state
 func (n *NetworkManager) GetConnectionState() int {
-	if n.WSConn == nil {
+	if !n.signalingServer.IsConnectionActive() {
 		return ConnectionStateDisconnected
 	}
 	if n.IsConnected {
@@ -719,29 +694,25 @@ func (n *NetworkManager) saveRoomToLocalDB(roomID, roomName, password string) er
 		return fmt.Errorf("ID da sala inválido")
 	}
 
-	// Salva ou atualiza a entrada no banco de dados
-	_, err := n.VPNClient.DB.Exec(
-		"INSERT OR REPLACE INTO rooms (id, name, password, last_connected) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-		roomID, roomName, password,
-	)
-	if err != nil {
-		return fmt.Errorf("erro ao salvar sala no banco de dados: %w", err)
-	}
-
-	log.Printf("Sala %s (%s) salva no banco de dados local", roomID, roomName)
-	return nil
+	// Usa o DatabaseManager para salvar a sala
+	return n.VPNClient.DBManager.SaveRoom(roomID, roomName, password)
 }
 
 // getPasswordForRoom obtém a senha para uma sala específica armazenada temporariamente
 // durante o processo de conexão
 func (n *NetworkManager) getPasswordForRoom(roomID string) (string, error) {
-
-	// Se não conseguimos recuperar do VirtualNetwork, tentamos buscar do banco de dados
-	var password string
-	err := n.VPNClient.DB.QueryRow("SELECT password FROM rooms WHERE id = ?", roomID).Scan(&password)
+	// Obtém as salas do DatabaseManager
+	rooms, err := n.VPNClient.DBManager.GetRooms()
 	if err != nil {
-		return "", fmt.Errorf("sala não encontrada no banco de dados: %w", err)
+		return "", fmt.Errorf("erro ao consultar banco de dados: %w", err)
 	}
 
-	return password, nil
+	// Procura a sala com o ID especificado
+	for _, room := range rooms {
+		if room.ID == roomID {
+			return room.Password, nil
+		}
+	}
+
+	return "", fmt.Errorf("sala não encontrada no banco de dados")
 }

@@ -4,21 +4,21 @@ import (
 	"database/sql"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/crypto_utils"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/pion/webrtc/v3"
 )
 
 // VPNClient é a estrutura principal do cliente VPN
 type VPNClient struct {
-	DB             *sql.DB
+	DBManager      *storage.DatabaseManager
 	CurrentRoom    string
 	IsConnected    bool
 	NetworkManager *NetworkManager
 	UI             *UIManager
+	Config         *storage.ConfigManager
 
 	// Chaves RSA para identificação do usuário
 	PrivateKeyPEM string // Chave privada em formato PEM
@@ -29,12 +29,15 @@ type VPNClient struct {
 func NewVPNClient() *VPNClient {
 	vpn := &VPNClient{
 		IsConnected: false,
+		Config:      storage.NewConfigManager(),
 	}
 
 	// Inicialização do banco de dados
-	if err := vpn.initDatabase(); err != nil {
+	dbManager, err := storage.NewDatabaseManager()
+	if err != nil {
 		log.Fatalf("Error initializing database: %v", err)
 	}
+	vpn.DBManager = dbManager
 
 	// Carrega ou gera chaves RSA para identificação do usuário
 	// Esta etapa é essencial e deve acontecer logo na inicialização
@@ -61,21 +64,15 @@ func NewVPNClient() *VPNClient {
 // loadSettings carrega as configurações salvas do banco de dados
 func (v *VPNClient) loadSettings() {
 	// Carrega as configurações de sinalização
-	var signalServer string
-	err := v.DB.QueryRow("SELECT value FROM settings WHERE key = 'signal_server'").Scan(&signalServer)
+	signalServer, err := v.DBManager.LoadSignalServer()
 	if err == nil && signalServer != "" {
 		v.NetworkManager.SignalServer = signalServer
 	}
 
-	// Carrega as configurações de STUN
-	var stunServer string
-	err = v.DB.QueryRow("SELECT value FROM settings WHERE key = 'stun_server'").Scan(&stunServer)
-	if err == nil && stunServer != "" {
-		v.NetworkManager.RTCConfig.ICEServers = []webrtc.ICEServer{
-			{
-				URLs: []string{stunServer},
-			},
-		}
+	// Carrega as configurações de STUN/ICE servers
+	iceServers, err := v.DBManager.GetICEServers()
+	if err == nil && len(iceServers) > 0 {
+		v.NetworkManager.RTCConfig.ICEServers = iceServers
 	}
 
 	// Outras configurações podem ser carregadas aqui
@@ -110,59 +107,10 @@ func (v *VPNClient) Run() {
 	v.UI.Start()
 }
 
-// initDatabase inicializa o banco de dados SQLite
-func (v *VPNClient) initDatabase() error {
-	// Cria o diretório de dados do usuário se não existir
-	userConfigDir, err := os.UserConfigDir()
-	if err != nil {
-		return err
-	}
-
-	appDir := filepath.Join(userConfigDir, "goVPN")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
-		return err
-	}
-
-	dbPath := filepath.Join(appDir, "govpn.db")
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return err
-	}
-
-	// Cria tabelas se não existirem
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS rooms (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			password TEXT NOT NULL,
-			last_connected TIMESTAMP
-		);
-		
-		CREATE TABLE IF NOT EXISTS settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-			);
-		
-		CREATE TABLE IF NOT EXISTS keys (
-			id TEXT PRIMARY KEY,
-			private_key TEXT NOT NULL,
-			public_key TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	if err != nil {
-		return err
-	}
-
-	v.DB = db
-	return nil
-}
-
 // loadOrGenerateKeys carrega as chaves RSA do banco ou gera novas se não existirem
 func (v *VPNClient) loadOrGenerateKeys() error {
 	// Tenta carregar as chaves existentes primeiro
-	var privateKey, publicKey string
-	err := v.DB.QueryRow("SELECT private_key, public_key FROM keys WHERE id = 'user_key' LIMIT 1").Scan(&privateKey, &publicKey)
+	privateKey, publicKey, err := v.DBManager.LoadRSAKeys()
 
 	if err == nil {
 		// Chaves encontradas, carrega-as
@@ -185,8 +133,7 @@ func (v *VPNClient) loadOrGenerateKeys() error {
 	}
 
 	// Armazena as chaves no banco de dados
-	_, err = v.DB.Exec("INSERT INTO keys (id, private_key, public_key) VALUES ('user_key', ?, ?)",
-		privateKey, publicKey)
+	err = v.DBManager.SaveRSAKeys(privateKey, publicKey)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-module github.com/itxtoledo/govpn/services/client
+module github.com/itxtoledo/govpn/cmd/client
 
 go 1.21
 

@@ -14,7 +14,8 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/itxtoledo/govpn/services/client/icon"
+	"github.com/itxtoledo/govpn/cmd/client/icon"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // UIManager manages the VPN client's graphical interface
@@ -24,10 +25,9 @@ type UIManager struct {
 	MainWindow     fyne.Window
 	RoomDialog     *RoomDialog
 	ConnectDialog  *ConnectDialog
-	LoginWindow    *LoginWindow
 	AboutWindow    *AboutWindow
 	SettingsWindow *SettingsWindow
-	ConfigManager  *ConfigManager
+	ConfigManager  *storage.ConfigManager
 
 	// Modular interface components
 	HeaderComponent      *HeaderComponent
@@ -36,7 +36,7 @@ type UIManager struct {
 
 	// Direct references to important components maintained for compatibility
 	PowerButton   *widget.Button
-	NetworkList   *widget.Tree
+	NetworkList   *widget.List
 	IPInfoLabel   *canvas.Text // Changed from *widget.Label to *canvas.Text
 	RoomNameLabel *widget.Label
 	NetworkUsers  map[string]bool // Map of public keys (truncated) and their status (online/offline)
@@ -51,7 +51,7 @@ func NewUIManager(vpn *VPNClient) *UIManager {
 		VPN:           vpn,
 		App:           app.New(),
 		NetworkUsers:  make(map[string]bool),
-		ConfigManager: NewConfigManager(),
+		ConfigManager: storage.NewConfigManager(),
 	}
 
 	// Load saved settings
@@ -124,7 +124,7 @@ func (ui *UIManager) resolveResourcePath(filename string) string {
 func (ui *UIManager) updateSystemTrayStatus() {
 	// Create the title text based on connection state
 	title := "goVPN - Disconnected"
-	
+
 	if ui.VPN.IsConnected {
 		networkName := "unknown"
 		if ui.VPN.NetworkManager != nil && ui.VPN.NetworkManager.RoomName != "" {
@@ -141,7 +141,7 @@ func (ui *UIManager) updateSystemTrayStatus() {
 			"Network: " + networkName + "\n" +
 			"IP: " + ipAddress
 	}
-	
+
 	// Using Fyne's internal async functionality to ensure UI updates happen on the main thread
 	// Store the title locally and update it in the main UI thread
 	finalTitle := title
@@ -149,44 +149,92 @@ func (ui *UIManager) updateSystemTrayStatus() {
 		Title:   finalTitle,
 		Content: "",
 	})
-	
+
 	// For the window title, we use a callback to the main window
 	ui.MainWindow.SetTitle(finalTitle)
 }
 
 // refreshNetworkList updates the list of users in the network
 func (ui *UIManager) refreshNetworkList() {
-	// Clear current user list
+	// Prevenção de pânico: verificar nulos antes de tudo
+	if ui == nil || ui.VPN == nil {
+		log.Println("Warning: UI Manager or VPN client is nil, can't refresh network list")
+		return
+	}
+
+	// Clear current user list (com verificação de segurança)
 	ui.NetworkUsers = make(map[string]bool)
 
+	// Verifica se está conectado e se o NetworkManager existe
 	if ui.VPN.IsConnected && ui.VPN.NetworkManager != nil {
-		// Add user's own public key (shown truncated)
+		// Add user's own public key (shown truncated) com verificações de segurança
 		ownPublicKey := ui.VPN.getPublicKey()
 		if ownPublicKey != "" {
-			formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(ownPublicKey)
-			ui.NetworkUsers[formattedKey] = true
+			// Verifica se o método GetFormattedPublicKey está disponível
+			if ui.VPN.NetworkManager != nil {
+				formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(ownPublicKey)
+				ui.NetworkUsers[formattedKey] = true
+			}
 		}
 
-		// Add all room peers with their public keys
-		for peerPublicKey, isOnline := range ui.VPN.NetworkManager.PeersByPublicKey {
-			formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(peerPublicKey)
-			ui.NetworkUsers[formattedKey] = isOnline
+		// Add all room peers com verificação de segurança
+		if ui.VPN.NetworkManager.PeersByPublicKey != nil {
+			for peerPublicKey, isOnline := range ui.VPN.NetworkManager.PeersByPublicKey {
+				// Verificação de segurança antes de chamar o método
+				if ui.VPN.NetworkManager != nil {
+					formattedKey := ui.VPN.NetworkManager.GetFormattedPublicKey(peerPublicKey)
+					ui.NetworkUsers[formattedKey] = isOnline
+				}
+			}
 		}
 	}
 
-	// Update UI elements directly - Fyne handles thread safety internally
-	// Update Home tab content
+	// Atualiza a UI com tratamento de erros em cada componente
+
+	// Update Home tab content with the new data (com verificação de segurança)
 	if ui.HomeTabComponent != nil {
-		ui.HomeTabComponent.updateContent()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Recuperado de pânico ao atualizar HomeTabComponent: %v", r)
+				}
+			}()
+		}()
 	}
 
-	// Update username display
+	// Atualiza os componentes de sala (com verificação de segurança)
+	if ui.NetworkTreeComponent != nil {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Recuperado de pânico ao atualizar NetworkTreeComponent: %v", r)
+				}
+			}()
+			ui.NetworkTreeComponent.updateRoomItems()
+		}()
+	}
+
+	// Update username display (com verificação de segurança)
 	if ui.HeaderComponent != nil {
-		ui.HeaderComponent.updateUsername()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Recuperado de pânico ao atualizar HeaderComponent: %v", r)
+				}
+			}()
+			ui.HeaderComponent.updateUsername()
+		}()
 	}
 
-	// Atualiza o status na bandeja do sistema
-	ui.updateSystemTrayStatus()
+	// Atualiza o status na bandeja do sistema (com verificação de segurança)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recuperado de pânico ao atualizar status da bandeja: %v", r)
+			}
+		}()
+		ui.updateSystemTrayStatus()
+	}()
 }
 
 // updatePowerButtonState updates the visual state of the power button
@@ -286,7 +334,8 @@ func (ui *UIManager) initializeUIComponents() {
 
 	// Maintain direct references for compatibility with existing code
 	ui.PowerButton = ui.HeaderComponent.PowerButton
-	ui.NetworkList = ui.NetworkTreeComponent.ui.NetworkList
+	// NetworkList foi substituído pelo Accordion
+	ui.NetworkList = nil
 	ui.IPInfoLabel = ui.HeaderComponent.IPInfoLabel
 	ui.RoomNameLabel = ui.HeaderComponent.RoomNameLabel
 }

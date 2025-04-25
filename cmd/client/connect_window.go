@@ -1,16 +1,11 @@
 package main
 
-import (
-	"errors"
-
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
-)
+import "github.com/itxtoledo/govpn/cmd/client/dialogs"
 
 // ConnectDialog manages the connect to network interface as a dialog
 type ConnectDialog struct {
-	UI *UIManager
+	UI     *UIManager
+	dialog *dialogs.ConnectDialog
 }
 
 // NewConnectDialog creates a new connect dialog
@@ -19,62 +14,28 @@ func NewConnectDialog(ui *UIManager) *ConnectDialog {
 		UI: ui,
 	}
 
+	// Create the underlying dialog from our dialogs package
+	var dialogRef interface{} = connectDialog
+	connectDialog.dialog = dialogs.NewConnectDialog(
+		ui.MainWindow,
+		&dialogRef,
+		ui.ShowMessage,
+	)
+
 	return connectDialog
 }
 
-// Show displays the connect dialog using the form dialog approach
+// Show displays the connect dialog
 func (cd *ConnectDialog) Show() {
-	// Create form inputs
-	networkIDEntry := widget.NewEntry()
-
-	passwordEntry := widget.NewPasswordEntry()
-
-	// Aplicando a configuração de validação de senha reutilizável
-	ConfigurePasswordEntry(passwordEntry)
-
-	// Create form items
-	items := []*widget.FormItem{
-		widget.NewFormItem("ID", networkIDEntry),
-		widget.NewFormItem("Pass", passwordEntry),
+	// Define a connection function that will attempt to join the room
+	// and handle any errors that occur during the connection process
+	connectToRoom := func(roomID, password string) error {
+		// Use the NetworkManager to join the room
+		if cd.UI != nil && cd.UI.VPN != nil && cd.UI.VPN.NetworkManager != nil {
+			return cd.UI.VPN.NetworkManager.JoinRoom(roomID, password)
+		}
+		return nil
 	}
 
-	// Show the form dialog
-	formDialog := dialog.NewForm("Connect to Network", "Connect", "Cancel", items, func(submitted bool) {
-		if !submitted {
-			// Dialog was cancelled
-			cd.UI.ConnectDialog = nil
-			return
-		}
-
-		// Process form submission
-		networkID := networkIDEntry.Text
-		password := passwordEntry.Text
-
-		// Validação básica
-		if networkID == "" {
-			dialog.ShowError(errors.New("Network ID cannot be empty"), cd.UI.MainWindow)
-			return
-		}
-
-		// Validar senha usando a função abstrata
-		if !ValidatePassword(password) {
-			dialog.ShowError(errors.New("Password must be exactly 4 digits"), cd.UI.MainWindow)
-			return
-		}
-
-		// A senha seria utilizada aqui para conectar à rede,
-		// mas não estamos implementando isso agora.
-		// Na implementação completa:
-		// err := cd.UI.VPN.NetworkManager.JoinNetwork(networkID, password)
-
-		// For now, we'll just show a message
-		cd.UI.ShowMessage("Connection", "Attempting to connect to network: "+networkID)
-
-		// Clear the reference
-		cd.UI.ConnectDialog = nil
-	}, cd.UI.MainWindow)
-
-	// Define uma largura mínima para o diálogo
-	formDialog.Resize(fyne.NewSize(300, 200))
-	formDialog.Show()
+	cd.dialog.Show(ValidatePassword, ConfigurePasswordEntry, connectToRoom)
 }
