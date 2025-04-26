@@ -1,151 +1,108 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
-// loadEnvFile attempts to load environment variables from a .env file if it exists
-// Logic: Try to load environment variables from .env file, but continue if not found
-func loadEnvFile() {
-	// Try to load from .env file
-	err := godotenv.Load()
-	if err != nil {
-		// Only log at debug level since the .env file might not exist, which is normal
-		log.Printf("No .env file found or error loading .env file: %v", err)
-	} else {
-		log.Println("Loaded environment variables from .env file")
-	}
-}
-
-// Config structure to hold our server configuration
+// Config holds the configuration for the WebSocket server
 type Config struct {
-	Port               string
-	AllowAllOrigins    bool
-	MaxRooms           int
-	MaxClientsPerRoom  int
-	LogLevel           string
-	IdleTimeout        time.Duration
-	PingInterval       time.Duration
-	ReadBufferSize     int
-	WriteBufferSize    int
-	SupabaseURL        string
-	SupabaseKey        string
-	SupabaseRoomsTable string
-	CleanupInterval    time.Duration
-	RoomExpiryDays     int
+	Port               string        // Port to listen on
+	SupabaseURL        string        // URL of the Supabase instance
+	SupabaseKey        string        // API key for Supabase
+	SupabaseRoomsTable string        // Name of the rooms table in Supabase
+	ReadBufferSize     int           // Size of the read buffer for WebSocket connections
+	WriteBufferSize    int           // Size of the write buffer for WebSocket connections
+	MaxClientsPerRoom  int           // Maximum number of clients allowed in a room
+	RoomExpiryDays     int           // Number of days after which inactive rooms are deleted
+	AllowAllOrigins    bool          // Whether to allow all origins for WebSocket connections
+	CleanupInterval    time.Duration // Interval at which to clean up stale rooms
+	LogLevel           string        // Log level (debug, info, warn, error)
 }
 
-// loadConfig loads configuration from environment variables and command-line flags
-// Logic: Set default values and override with environment variables when available
-func loadConfig() Config {
-	// First try to load environment variables from a .env file
-	loadEnvFile()
+// getEnv retrieves the value of an environment variable, prioritizing the .env file
+// If the variable is not found in either source, it returns the provided default value
+func getEnv(key string, defaultVal string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultVal
+}
 
-	// Define and parse command-line flags
-	portFlag := flag.String("port", "", "Port number to listen on")
-	allowOriginsFlag := flag.Bool("allow-all-origins", false, "Allow all origins for WebSocket connections")
+func main() {
+	// Load .env file if present
+	envPath := filepath.Join(".", ".env")
+	err := godotenv.Load(envPath)
+	if err != nil {
+		log.Printf("Warning: Could not load .env file: %v", err)
+	}
 
-	flag.Parse()
-
-	// Get environment variables with fallbacks
-	config := Config{
+	// Default configuration
+	cfg := Config{
 		Port:               getEnv("PORT", "8080"),
-		AllowAllOrigins:    getEnvBool("ALLOW_ALL_ORIGINS", true),
-		MaxRooms:           getEnvInt("MAX_ROOMS", 100),
-		MaxClientsPerRoom:  getEnvInt("MAX_CLIENTS_PER_ROOM", 10),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
-		IdleTimeout:        time.Second * time.Duration(getEnvInt("IDLE_TIMEOUT_SECONDS", 60)),
-		PingInterval:       time.Second * time.Duration(getEnvInt("PING_INTERVAL_SECONDS", 30)),
-		ReadBufferSize:     getEnvInt("READ_BUFFER_SIZE", 1024),
-		WriteBufferSize:    getEnvInt("WRITE_BUFFER_SIZE", 1024),
 		SupabaseURL:        getEnv("SUPABASE_URL", ""),
 		SupabaseKey:        getEnv("SUPABASE_KEY", ""),
 		SupabaseRoomsTable: getEnv("SUPABASE_ROOMS_TABLE", "rooms"),
-		CleanupInterval:    time.Hour * time.Duration(getEnvInt("CLEANUP_INTERVAL_HOURS", 24)),
-		RoomExpiryDays:     getEnvInt("ROOM_EXPIRY_DAYS", 30),
+		ReadBufferSize:     1024,
+		WriteBufferSize:    1024,
+		MaxClientsPerRoom:  50,
+		RoomExpiryDays:     7,
+		AllowAllOrigins:    true,
+		CleanupInterval:    24 * time.Hour, // Run cleanup once a day
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
 	}
 
-	// Override with command-line flags if provided
-	if *portFlag != "" {
-		config.Port = *portFlag
+	// Parse numeric environment variables
+	if readSize := getEnv("READ_BUFFER_SIZE", ""); readSize != "" {
+		if size, err := strconv.Atoi(readSize); err == nil {
+			cfg.ReadBufferSize = size
+		}
 	}
 
-	if *allowOriginsFlag {
-		config.AllowAllOrigins = true
+	if writeSize := getEnv("WRITE_BUFFER_SIZE", ""); writeSize != "" {
+		if size, err := strconv.Atoi(writeSize); err == nil {
+			cfg.WriteBufferSize = size
+		}
 	}
 
-	log.Printf("Server configuration loaded: %+v", config)
-	return config
-}
-
-// Helper functions for environment variables
-
-// getEnv gets an environment variable or returns a default value
-// Logic: Retrieve environment variable value or use fallback if not set
-func getEnv(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-// getEnvInt gets an integer environment variable or returns a default value
-// Logic: Convert environment variable to integer or use fallback if conversion fails
-func getEnvInt(key string, fallback int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	intVal, err := strconv.Atoi(value)
-	if err != nil {
-		log.Printf("Warning: Could not parse %s as integer: %v. Using default: %d", key, err, fallback)
-		return fallback
-	}
-	return intVal
-}
-
-// getEnvBool gets a boolean environment variable or returns a default value
-// Logic: Convert environment variable to boolean considering multiple true values
-func getEnvBool(key string, fallback bool) bool {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	value = strings.ToLower(value)
-	return value == "true" || value == "1" || value == "yes" || value == "y"
-}
-
-// RunServer starts the VPN server on the specified port
-// Logic: Initialize the server and start listening for connections
-func RunServer() {
-	// Load configuration from environment variables and command-line flags
-	config := loadConfig()
-
-	// Check if Supabase configuration is provided
-	if config.SupabaseURL == "" || config.SupabaseKey == "" {
-		log.Fatal("Supabase URL and API key are required. Please set SUPABASE_URL and SUPABASE_KEY environment variables")
+	if maxClients := getEnv("MAX_CLIENTS_PER_ROOM", ""); maxClients != "" {
+		if max, err := strconv.Atoi(maxClients); err == nil {
+			cfg.MaxClientsPerRoom = max
+		}
 	}
 
-	// Create and start the WebSocket server
-	server, err := NewWebSocketServer(config)
+	if expiryDays := getEnv("ROOM_EXPIRY_DAYS", ""); expiryDays != "" {
+		if days, err := strconv.Atoi(expiryDays); err == nil {
+			cfg.RoomExpiryDays = days
+		}
+	}
+
+	if cleanupInterval := getEnv("CLEANUP_INTERVAL_HOURS", ""); cleanupInterval != "" {
+		if hours, err := strconv.Atoi(cleanupInterval); err == nil {
+			cfg.CleanupInterval = time.Duration(hours) * time.Hour
+		}
+	}
+
+	// Parse boolean environment variables
+	if allowAllOrigins := getEnv("ALLOW_ALL_ORIGINS", ""); allowAllOrigins != "" {
+		cfg.AllowAllOrigins = allowAllOrigins == "true"
+	}
+
+	// Create new WebSocket server with the configuration
+	server, err := NewWebSocketServer(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create WebSocket server: %v", err)
 	}
 
-	// Start the server (this will block until the server is stopped)
-	log.Fatal(server.Start(config.Port))
-}
-
-// main is the entry point for the application
-// Logic: Start the server
-func main() {
-	RunServer()
+	// Start the server
+	log.Printf("Starting WebSocket server on port %s", cfg.Port)
+	err = server.Start(cfg.Port)
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }

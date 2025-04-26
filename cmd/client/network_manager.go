@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -16,16 +15,6 @@ type NetworkInterface interface {
 	GetAverageLatency() float64
 	GetBytesSent() int64
 	GetBytesReceived() int64
-}
-
-// Room represents a VPN room
-type Room struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Password    string `json:"password"`
-	OwnerID     string `json:"owner_id"`
-	CreatedAt   string `json:"created_at"`
 }
 
 // Computer represents a computer in the VPN network
@@ -51,9 +40,8 @@ type NetworkManager struct {
 	UI                *UIManager
 	VirtualNetwork    NetworkInterface
 	SignalingServer   *SignalingClient
-	RoomName          string
+	RoomID            string
 	RoomPassword      string
-	RoomDescription   string
 	Computers         []Computer
 	connectionState   ConnectionState
 	ReconnectAttempts int
@@ -84,7 +72,9 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	nm.UI.refreshUI()
 
 	// Initialize signaling server
-	nm.SignalingServer = NewSignalingClient(nm.UI)
+	// Get public key from UI's realtime data layer
+	publicKey := nm.UI.VPN.PublicKeyStr
+	nm.SignalingServer = NewSignalingClient(nm.UI, publicKey)
 
 	// Connect to signaling server
 	err := nm.SignalingServer.Connect(serverAddress)
@@ -201,13 +191,13 @@ func (nm *NetworkManager) GetConnectionState() ConnectionState {
 }
 
 // CreateRoom creates a new room
-func (nm *NetworkManager) CreateRoom(name string, description string, password string) error {
+func (nm *NetworkManager) CreateRoom(name string, password string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
 	// Create room
-	err := nm.SignalingServer.CreateRoom(name, description, password)
+	err := nm.SignalingServer.CreateRoom(name, password)
 	if err != nil {
 		return fmt.Errorf("failed to create room: %v", err)
 	}
@@ -219,34 +209,24 @@ func (nm *NetworkManager) CreateRoom(name string, description string, password s
 }
 
 // JoinRoom joins a room
-func (nm *NetworkManager) JoinRoom(roomName string, password string) error {
+func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
 	// Join room
-	err := nm.SignalingServer.JoinRoom(roomName, password)
+	err := nm.SignalingServer.JoinRoom(roomID, password)
 	if err != nil {
 		return fmt.Errorf("failed to join room: %v", err)
 	}
 
-	// Get details for the room from the cached list
-	var description string
-	for _, room := range nm.UI.Rooms {
-		if room.Name == roomName {
-			description = room.Description
-			break
-		}
-	}
-
 	// Store room information
-	nm.RoomName = roomName
+	nm.RoomID = roomID
 	nm.RoomPassword = password
-	nm.RoomDescription = description
 
 	// Update data layer
-	nm.UI.RealtimeData.SetRoomInfo(roomName, password, description)
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomName, nil)
+	nm.UI.RealtimeData.SetRoomInfo(roomID, password)
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
 
 	// Update UI
 	nm.UI.refreshUI()
@@ -260,21 +240,32 @@ func (nm *NetworkManager) LeaveRoom() error {
 		return fmt.Errorf("not connected to server")
 	}
 
+	log.Printf("Leaving room with ID: %s", nm.RoomID)
+
+	// Store room ID before clearing
+	roomID := nm.RoomID
+
 	// Leave room
-	err := nm.SignalingServer.LeaveRoom(nm.RoomName)
+	err := nm.SignalingServer.LeaveRoom(roomID)
 	if err != nil {
+		log.Printf("Error from SignalingClient when leaving room: %v", err)
 		return fmt.Errorf("failed to leave room: %v", err)
 	}
 
+	// Delete the room from the local database
+	err = nm.UI.VPN.DBManager.DeleteRoom(roomID)
+	if err != nil {
+		log.Printf("Error deleting room from database: %v", err)
+		// Continue even if database deletion fails
+	}
+
 	// Clear room information
-	roomName := nm.RoomName
-	nm.RoomName = ""
+	nm.RoomID = ""
 	nm.RoomPassword = ""
-	nm.RoomDescription = ""
 
 	// Update data layer
-	nm.UI.RealtimeData.SetRoomInfo("Not connected", "", "")
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomName, nil)
+	nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
 
 	// Update UI
 	nm.UI.refreshUI()
@@ -282,40 +273,71 @@ func (nm *NetworkManager) LeaveRoom() error {
 	return nil
 }
 
-// GetRoomList gets the list of rooms
-func (nm *NetworkManager) GetRoomList() ([]*Room, error) {
+// LeaveRoomById leaves a specific room by ID
+func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 	if nm.connectionState != ConnectionStateConnected {
-		return nil, fmt.Errorf("not connected to server")
+		return fmt.Errorf("not connected to server")
 	}
 
-	// Get room list
-	roomsData, err := nm.SignalingServer.GetRoomList()
+	log.Printf("Leaving room with ID: %s", roomID)
+
+	// Leave room
+	err := nm.SignalingServer.LeaveRoom(roomID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get room list: %v", err)
+		log.Printf("Error from SignalingClient when leaving room: %v", err)
+		return fmt.Errorf("failed to leave room: %v", err)
 	}
 
-	// Parse room list
-	var rooms []*Room
-	err = json.Unmarshal([]byte(roomsData), &rooms)
+	// Delete the room from the local database
+	err = nm.UI.VPN.DBManager.DeleteRoom(roomID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse room list: %v", err)
+		log.Printf("Error deleting room from database: %v", err)
+		// Continue even if database deletion fails
 	}
 
-	return rooms, nil
+	// If we're leaving the current room, clear our room information
+	if nm.RoomID == roomID {
+		nm.RoomID = ""
+		nm.RoomPassword = ""
+
+		// Update data layer
+		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+	}
+
+	// Emit the room left event regardless
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
+}
+
+// HandleRoomDeleted handles when a room has been deleted
+func (nm *NetworkManager) HandleRoomDeleted(roomID string) error {
+	log.Printf("Handling room deletion for ID: %s", roomID)
+
+	// If we're in this room, clear our room data
+	if nm.RoomID == roomID {
+		nm.RoomID = ""
+		nm.RoomPassword = ""
+
+		// Update data layer
+		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.UI.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
+
+		// Update UI
+		nm.UI.refreshUI()
+	}
+
+	// Delete the room from the database using the existing database manager
+	return nm.UI.VPN.DBManager.DeleteRoom(roomID)
 }
 
 // Disconnect disconnects from the VPN network
 func (nm *NetworkManager) Disconnect() error {
 	if nm.connectionState == ConnectionStateDisconnected {
 		return nil
-	}
-
-	// Leave room if in a room
-	if nm.RoomName != "" {
-		err := nm.LeaveRoom()
-		if err != nil {
-			log.Printf("Error leaving room: %v", err)
-		}
 	}
 
 	// Disconnect from signaling server

@@ -93,51 +93,54 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 			// Send create room command to backend
 			err := rd.CreateRoom(name, password)
 
-			// Hide progress dialog
-			progressDialog.Dismiss()
+			// Update UI on the main thread
+			fyne.Do(func() {
+				// Hide progress dialog
+				progressDialog.Dismiss()
 
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("Failed to create network: %v", err), rd.MainWindow)
-				// Clear the reference and return early to avoid showing success dialog
-				*rd.RoomDialogRef = nil
-				return
-			}
-
-			// Get room ID created by the server
-			roomID := rd.GetRoomID()
-
-			if roomID != "" {
-				// Save room to database
-				err := rd.SaveRoom(roomID, name, password)
 				if err != nil {
-					log.Printf("Error saving room to database: %v", err)
+					dialog.ShowError(fmt.Errorf("Failed to create network: %v", err), rd.MainWindow)
+					// Clear the reference and return early to avoid showing success dialog
+					*rd.RoomDialogRef = nil
+					return
 				}
 
-				// Show success dialog with room ID
-				roomIDEntry := widget.NewEntry()
-				roomIDEntry.Text = roomID
-				roomIDEntry.Disable()
+				// Get room ID created by the server
+				roomID := rd.GetRoomID()
 
-				content := container.NewVBox(
-					widget.NewLabel("Network created successfully!"),
-					widget.NewLabel(""),
-					widget.NewLabel("Network ID (share this with friends):"),
-					roomIDEntry,
-					widget.NewButton("Copy to Clipboard", func() {
-						rd.MainWindow.Clipboard().SetContent(roomID)
-						dialog.ShowInformation("Copied", "Network ID copied to clipboard", rd.MainWindow)
-					}),
-				)
+				if roomID != "" {
+					// Save room to database
+					err := rd.SaveRoom(roomID, name, password)
+					if err != nil {
+						log.Printf("Error saving room to database: %v", err)
+					}
 
-				successDialog := dialog.NewCustom("Success", "Close", content, rd.MainWindow)
-				successDialog.Show()
-			} else {
-				// If roomID is empty, it's likely an error occurred but wasn't caught
-				dialog.ShowError(errors.New("Failed to create network: No network ID returned"), rd.MainWindow)
-			}
+					// Show success dialog with room ID
+					roomIDEntry := widget.NewEntry()
+					roomIDEntry.Text = roomID
+					roomIDEntry.Disable()
 
-			// Clear the reference
-			// *rd.RoomDialogRef = nil
+					content := container.NewVBox(
+						widget.NewLabel("Network created successfully!"),
+						widget.NewLabel(""),
+						widget.NewLabel("Network ID (share this with friends):"),
+						roomIDEntry,
+						widget.NewButton("Copy to Clipboard", func() {
+							rd.MainWindow.Clipboard().SetContent(roomID)
+							dialog.ShowInformation("Copied", "Network ID copied to clipboard", rd.MainWindow)
+						}),
+					)
+
+					successDialog := dialog.NewCustom("Success", "Close", content, rd.MainWindow)
+					successDialog.Show()
+				} else {
+					// If roomID is empty, it's likely an error occurred but wasn't caught
+					dialog.ShowError(errors.New("Failed to create network: No network ID returned"), rd.MainWindow)
+				}
+
+				// Clear the reference
+				// *rd.RoomDialogRef = nil
+			})
 		}()
 	}, rd.MainWindow)
 

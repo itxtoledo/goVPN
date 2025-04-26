@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"github.com/itxtoledo/govpn/cmd/client/data"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // UIManager represents the UI manager for the VPN client app
@@ -16,16 +17,16 @@ type UIManager struct {
 	MainWindow        fyne.Window
 	VPN               *VPNClient
 	ConfigManager     *ConfigManager
-	NetworkTreeComp   *NetworkTreeComponent
+	NetworkTreeComp   *NetworkListComponent
 	RoomItemComponent *RoomItemComponent
 	HomeTabComponent  *HomeTabComponent
 	HeaderComponent   *HeaderComponent
 	AboutWindow       *AboutWindow
 	SettingsWindow    *SettingsWindow
 	ConnectDialog     *ConnectDialog
-	Rooms             []*Room
+	Rooms             []*storage.Room
 	ComputerList      []Computer
-	SelectedRoom      *Room
+	SelectedRoom      *storage.Room
 
 	// Nova camada de dados em tempo real
 	RealtimeData *data.RealtimeDataLayer
@@ -76,6 +77,11 @@ func NewUIManager() *UIManager {
 func (ui *UIManager) createWindow(title string, width, height float32) fyne.Window {
 	window := ui.App.NewWindow(title)
 	window.Resize(fyne.NewSize(width, height))
+	window.SetFixedSize(true)
+
+	// Ensure this window isn't modal which could block the main UI
+	window.CenterOnScreen()
+
 	return window
 }
 
@@ -92,6 +98,9 @@ func (ui *UIManager) listenForDataEvents() {
 		case data.EventRoomLeft:
 			// Atualizar a UI quando sair de uma sala
 			ui.refreshNetworkList()
+		case data.EventRoomDeleted:
+			// Atualizar a UI quando uma sala for excluída
+			ui.refreshNetworkList()
 		case data.EventSettingsChanged:
 			// Atualizar configurações quando forem alteradas
 			ui.refreshUI()
@@ -106,7 +115,7 @@ func (ui *UIManager) listenForDataEvents() {
 func (ui *UIManager) setupComponents() {
 	// Create components
 	ui.HeaderComponent = NewHeaderComponent(ui)
-	ui.NetworkTreeComp = NewNetworkTreeComponent(ui)
+	ui.NetworkTreeComp = NewNetworkListComponent(ui)
 	ui.RoomItemComponent = NewRoomItemComponent(ui)
 	ui.HomeTabComponent = NewHomeTabComponent(ui)
 
@@ -130,12 +139,6 @@ func (ui *UIManager) setupComponents() {
 // handleAppQuit handles application quit
 func (ui *UIManager) handleAppQuit() {
 	log.Println("Quitting app...")
-	if ui.VPN.IsConnected {
-		err := ui.VPN.NetworkManager.LeaveRoom()
-		if err != nil {
-			log.Printf("Error leaving room: %v", err)
-		}
-	}
 }
 
 // refreshUI refreshes the UI components
@@ -153,11 +156,6 @@ func (ui *UIManager) refreshUI() {
 	ui.HeaderComponent.updateRoomName()
 	ui.HeaderComponent.updateBackendStatus()
 
-	// Update home tab components
-	if ui.HomeTabComponent != nil {
-		ui.HomeTabComponent.updateUI()
-	}
-
 	// Force refresh widgets
 	if ui.MainWindow.Content() != nil {
 		ui.MainWindow.Content().Refresh()
@@ -166,23 +164,22 @@ func (ui *UIManager) refreshUI() {
 
 // refreshNetworkList refreshes the network tree
 func (ui *UIManager) refreshNetworkList() {
-	// Get rooms from backend
-	if ui.VPN.NetworkManager == nil {
-		// Not connected to backend yet
-		return
-	}
-
-	// Check if connected
-	if ui.VPN.NetworkManager.GetConnectionState() != ConnectionStateConnected {
-		// Not connected to backend yet
-		return
-	}
-
 	// Refresh rooms
-	refreshedRooms, err := ui.VPN.NetworkManager.GetRoomList()
+	dbRooms, err := ui.VPN.DBManager.GetRooms()
 	if err != nil {
 		log.Printf("Error refreshing room list: %v", err)
 		return
+	}
+
+	// Convert DB room structs to Room objects
+	refreshedRooms := make([]*storage.Room, len(dbRooms))
+	for i, dbRoom := range dbRooms {
+		refreshedRooms[i] = &storage.Room{
+			ID:            dbRoom.ID,
+			Name:          dbRoom.Name,
+			Password:      dbRoom.Password,
+			LastConnected: dbRoom.LastConnected,
+		}
 	}
 	ui.Rooms = refreshedRooms
 

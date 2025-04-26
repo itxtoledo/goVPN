@@ -2,107 +2,190 @@ package main
 
 import (
 	"fmt"
+	"log"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/libs/models"
 )
 
-// RoomDialog representa uma janela de diálogo para criar ou entrar em uma sala
-type RoomDialog struct {
-	UI        *UIManager
-	Dialog    dialog.Dialog
-	NameEntry *widget.Entry
-	DescEntry *widget.Entry
-	PassEntry *widget.Entry
-	IsCreate  bool
+// CreateRoomDialog represents a dialog for creating a new room
+type CreateRoomDialog struct {
+	UI         *UIManager
+	MainWindow fyne.Window
+	FormDialog dialog.Dialog
+	NameEntry  *widget.Entry
+	PassEntry  *widget.Entry
 }
 
-// NewRoomDialog cria um novo diálogo para sala
-func NewRoomDialog(ui *UIManager, isCreate bool) *RoomDialog {
-	rd := &RoomDialog{
-		UI:       ui,
-		IsCreate: isCreate,
+// NewCreateRoomDialog creates a new instance of the room creation dialog
+func NewCreateRoomDialog(ui *UIManager) *CreateRoomDialog {
+	crd := &CreateRoomDialog{
+		UI:         ui,
+		MainWindow: ui.MainWindow,
 	}
 
-	// Criar campos de entrada
-	rd.NameEntry = widget.NewEntry()
-	rd.NameEntry.SetPlaceHolder("Room Name")
+	// Create form inputs
+	crd.NameEntry = widget.NewEntry()
 
-	rd.DescEntry = widget.NewEntry()
-	rd.DescEntry.SetPlaceHolder("Room Description")
-	rd.DescEntry.MultiLine = true
+	// Create password entry with validation for digits
+	crd.PassEntry = widget.NewPasswordEntry()
 
-	rd.PassEntry = widget.NewPasswordEntry()
-	rd.PassEntry.SetPlaceHolder("Password (optional)")
-
-	// Criar o formulário
-	form := &widget.Form{
-		Items: []*widget.FormItem{
-			{Text: "Room Name", Widget: rd.NameEntry, HintText: "Enter a name for the room"},
-			{Text: "Description", Widget: rd.DescEntry, HintText: "Describe the purpose of the room"},
-			{Text: "Password", Widget: rd.PassEntry, HintText: "Optional password for the room"},
-		},
+	// Create form items
+	items := []*widget.FormItem{
+		widget.NewFormItem("Room Name", crd.NameEntry),
+		widget.NewFormItem("Password", crd.PassEntry),
 	}
 
-	// Título do diálogo e texto do botão de acordo com a operação
-	title := "Create Room"
-	buttonText := "Create"
-	if !isCreate {
-		title = "Join Room"
-		buttonText = "Join"
-	}
+	// Create the form dialog
+	crd.FormDialog = dialog.NewForm("Create Room", "Create", "Cancel", items,
+		func(submitted bool) {
+			if !submitted {
+				return
+			}
 
-	// Criar o diálogo
-	rd.Dialog = dialog.NewCustom(
-		title,
-		buttonText,
-		form,
-		rd.UI.MainWindow,
-	)
+			// Process form submission
+			name := crd.NameEntry.Text
+			pass := crd.PassEntry.Text
 
-	// Configurar o botão de confirmação
-	confirm, ok := rd.Dialog.(*dialog.CustomDialog)
-	if ok {
-		confirm.SetOnClosed(func() {
-			rd.handleConfirm()
-		})
-	}
+			// Validate input
+			if name == "" {
+				dialog.ShowError(fmt.Errorf("room name is required"), crd.MainWindow)
+				return
+			}
 
-	return rd
+			// Validate password using the models package
+			if !models.ValidatePassword(pass) {
+				dialog.ShowError(fmt.Errorf("password must be exactly 4 digits"), crd.MainWindow)
+				return
+			}
+
+			// Verify network connection
+			if crd.UI.VPN.NetworkManager == nil || crd.UI.VPN.NetworkManager.GetConnectionState() != ConnectionStateConnected {
+				dialog.ShowError(fmt.Errorf("not connected to server"), crd.MainWindow)
+				return
+			}
+
+			// Show progress dialog
+			progress := dialog.NewProgress("Creating Room", "Creating new room, please wait...", crd.MainWindow)
+			progress.Show()
+
+			// Create room in a goroutine
+			go func() {
+				// Create room
+				log.Printf("Creating room: %s", name)
+				err := crd.UI.VPN.NetworkManager.CreateRoom(name, pass)
+
+				// Update UI using fyne.Do
+				fyne.Do(func() {
+					// Hide progress dialog
+					progress.Hide()
+
+					if err != nil {
+						dialog.ShowError(fmt.Errorf("failed to create room: %v", err), crd.MainWindow)
+						return
+					}
+
+					// Update room list
+					crd.UI.refreshNetworkList()
+
+					// Show success message
+					dialog.ShowInformation("Success", "Room created successfully", crd.MainWindow)
+				})
+			}()
+		}, crd.MainWindow)
+
+	return crd
 }
 
-// Show exibe o diálogo
-func (rd *RoomDialog) Show() {
-	rd.Dialog.Show()
+// Show displays the create room dialog
+func (crd *CreateRoomDialog) Show() {
+	crd.FormDialog.Show()
 }
 
-// handleConfirm trata a confirmação do diálogo
-func (rd *RoomDialog) handleConfirm() {
-	// Validar campos
-	if rd.NameEntry.Text == "" {
-		dialog.ShowError(fmt.Errorf("room name is required"), rd.UI.MainWindow)
-		return
+// JoinRoomDialog represents a dialog for joining an existing room
+type JoinRoomDialog struct {
+	UI         *UIManager
+	MainWindow fyne.Window
+	FormDialog dialog.Dialog
+	IDEntry    *widget.Entry
+	PassEntry  *widget.Entry
+}
+
+// NewJoinRoomDialog creates a new instance of the room joining dialog
+func NewJoinRoomDialog(ui *UIManager) *JoinRoomDialog {
+	jrd := &JoinRoomDialog{
+		UI:         ui,
+		MainWindow: ui.MainWindow,
 	}
 
-	if rd.IsCreate {
-		// Criar sala
-		err := rd.UI.VPN.NetworkManager.CreateRoom(rd.NameEntry.Text, rd.DescEntry.Text, rd.PassEntry.Text)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("failed to create room: %v", err), rd.UI.MainWindow)
-			return
-		}
+	// Create form inputs
+	jrd.IDEntry = widget.NewEntry()
+	jrd.PassEntry = widget.NewPasswordEntry()
 
-		// Atualizar lista de salas
-		rd.UI.refreshNetworkList()
-	} else {
-		// Entrar na sala
-		err := rd.UI.VPN.NetworkManager.JoinRoom(rd.NameEntry.Text, rd.PassEntry.Text)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("failed to join room: %v", err), rd.UI.MainWindow)
-			return
-		}
-
-		// Atualizar UI
-		rd.UI.refreshUI()
+	// Create form items
+	items := []*widget.FormItem{
+		widget.NewFormItem("Room ID", jrd.IDEntry),
+		widget.NewFormItem("Password", jrd.PassEntry),
 	}
+
+	// Create the form dialog
+	jrd.FormDialog = dialog.NewForm("Join Room", "Join", "Cancel", items,
+		func(submitted bool) {
+			if !submitted {
+				return
+			}
+
+			// Process form submission
+			roomID := jrd.IDEntry.Text
+			pass := jrd.PassEntry.Text
+
+			// Validate input
+			if roomID == "" {
+				dialog.ShowError(fmt.Errorf("room id is required"), jrd.MainWindow)
+				return
+			}
+
+			// Verify network connection
+			if jrd.UI.VPN.NetworkManager == nil || jrd.UI.VPN.NetworkManager.GetConnectionState() != ConnectionStateConnected {
+				dialog.ShowError(fmt.Errorf("not connected to server"), jrd.MainWindow)
+				return
+			}
+
+			// Show progress dialog
+			progress := dialog.NewProgress("Joining Room", "Joining room, please wait...", jrd.MainWindow)
+			progress.Show()
+
+			// Join room in a goroutine
+			go func() {
+				// Join room
+				log.Printf("Joining room: %s", roomID)
+				err := jrd.UI.VPN.NetworkManager.JoinRoom(roomID, pass)
+
+				// Update UI using fyne.Do
+				fyne.Do(func() {
+					// Hide progress dialog
+					progress.Hide()
+
+					if err != nil {
+						dialog.ShowError(fmt.Errorf("failed to join room: %v", err), jrd.MainWindow)
+						return
+					}
+
+					// Update interface
+					jrd.UI.refreshUI()
+
+					// Show success message
+					dialog.ShowInformation("Success", "Joined room successfully", jrd.MainWindow)
+				})
+			}()
+		}, jrd.MainWindow)
+
+	return jrd
+}
+
+// Show displays the join room dialog
+func (jrd *JoinRoomDialog) Show() {
+	jrd.FormDialog.Show()
 }

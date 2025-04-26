@@ -153,6 +153,10 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleRename(conn, req, originalID)
 
+		case models.TypePing:
+			// Handle ping message - simple connection check
+			s.handlePing(conn, sigMsg.Payload, originalID)
+
 		default:
 			log.Printf("Unknown message type: %s", sigMsg.Type)
 			if originalID != "" {
@@ -402,24 +406,24 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 	if isCreator && !preserveRoom {
 		log.Printf("Room owner is leaving room %s, intentionally deleting the room", roomID)
 
-		// 1. Notificar todos os outros clientes que estão sendo expulsos
+		// Notificar todos os outros clientes que a sala foi excluída
 		for _, peer := range s.networks[roomID] {
 			if peer != conn {
-				kickedPayload := map[string]interface{}{
-					"room_id": roomID,
-					"reason":  "Room owner has left and closed the room",
+				// Usando o struct correto do models para TypeRoomDeleted
+				deletedNotification := models.RoomDeletedNotification{
+					RoomID: roomID,
 				}
-				s.sendSignal(peer, models.TypeKicked, kickedPayload, "")
+				s.sendSignal(peer, models.TypeRoomDeleted, deletedNotification, "")
 			}
 		}
 
-		// 2. Excluir a sala do Supabase
+		// Excluir a sala do Supabase
 		err := s.supabaseManager.DeleteRoom(roomID)
 		if err != nil {
 			log.Printf("Error deleting room from Supabase: %v", err)
 		}
 
-		// 3. Limpar todas as referências da sala em memória
+		// Limpar todas as referências da sala em memória
 		delete(s.networks, roomID)
 		for c, cRoomID := range s.clients {
 			if cRoomID == roomID {
@@ -551,12 +555,28 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 	defer s.mu.Unlock()
 
 	// Quando ocorre uma desconexão (fechamento do app ou perda de conexão),
-	// SEMPRE preserva a sala no Supabase, independente de quem seja o cliente
 	roomID := s.clients[conn]
 	if roomID != "" {
 		// Recupera a chave pública do cliente antes de removê-lo
 		publicKey, hasPublicKey := s.clientToPublicKey[conn]
 		isOwner := false
+
+		// Verifica se o cliente que está saindo é o dono da sala com base na chave pública
+		if hasPublicKey {
+			// Busca a sala no banco de dados
+			room, err := s.supabaseManager.GetRoom(roomID)
+			if err == nil && publicKey == room.PublicKeyB64 {
+				// A chave pública do cliente que está saindo coincide com a do criador da sala
+				isOwner = true
+				log.Printf("Room owner with public key %s disconnected", publicKey[:10]+"...")
+
+				// Update room activity to prevent it from being removed during cleanup
+				err := s.supabaseManager.UpdateRoomActivity(roomID)
+				if err != nil {
+					log.Printf("Error updating room activity: %v", err)
+				}
+			}
+		}
 
 		// Notifica outros membros da sala sobre a saída deste cliente
 		for _, peer := range s.networks[roomID] {
@@ -587,30 +607,13 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 			}
 		}
 
-		// Verifica se o cliente que está saindo é o dono da sala com base na chave pública
-		if hasPublicKey {
-			// Busca a sala no banco de dados
-			room, err := s.supabaseManager.GetRoom(roomID)
-			if err == nil && publicKey == room.PublicKeyB64 {
-				// A chave pública do cliente que está saindo coincide com a do criador da sala
-				isOwner = true
-				log.Printf("Room creator disconnected but room is preserved: %s", roomID)
-
-				// Atualiza o último acesso para evitar que seja removida pela limpeza de salas antigas
-				err := s.supabaseManager.UpdateRoomActivity(roomID)
-				if err != nil && (s.config.LogLevel == "debug") {
-					log.Printf("Error updating room activity on creator disconnect: %v", err)
-				}
-			}
-		}
-
-		// Se não tiver mais clientes na sala, remove apenas da memória (não do Supabase)
+		// Se não houver mais clientes na sala, remove apenas da memória mas mantém no banco
 		if len(s.networks[roomID]) == 0 {
 			delete(s.networks, roomID)
 		}
 
 		if isOwner {
-			log.Printf("Owner %s disconnected from room %s", conn.RemoteAddr().String(), roomID)
+			log.Printf("Owner %s disconnected but room %s preserved", conn.RemoteAddr().String(), roomID)
 		} else {
 			log.Printf("Client %s disconnected from room %s", conn.RemoteAddr().String(), roomID)
 		}
@@ -661,6 +664,34 @@ func (s *WebSocketServer) Start(port string) error {
 
 	log.Printf("WebSocket server starting on :%s", port)
 	return http.ListenAndServe(":"+port, nil)
+}
+
+// handlePing processes ping messages from clients and responds with a pong
+// This allows clients to verify their connection to the server
+func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, originalID string) {
+	// Parse the ping message
+	var pingData map[string]interface{}
+	if err := json.Unmarshal(payload, &pingData); err != nil {
+		log.Printf("Error parsing ping payload: %v", err)
+		s.sendErrorSignal(conn, "Invalid ping format", originalID)
+		return
+	}
+
+	// Create response payload with server timestamp
+	pongPayload := map[string]interface{}{
+		"client_timestamp": pingData["timestamp"],
+		"server_timestamp": time.Now().UnixNano(),
+		"status":           "ok",
+	}
+
+	// Log ping if in debug mode
+	if s.config.LogLevel == "debug" {
+		clientAddr := conn.RemoteAddr().String()
+		log.Printf("Received ping from client %s", clientAddr)
+	}
+
+	// Send pong response with the same message ID
+	s.sendSignal(conn, models.TypePing, pongPayload, originalID)
 }
 
 // removeClient remove um cliente da sala e, se necessário, a sala do Supabase
@@ -716,10 +747,11 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string, pres
 		// Notifica todos os outros participantes da sala que ela foi excluída
 		for _, peer := range s.networks[roomID] {
 			if peer != conn {
-				deletedPayload := map[string]interface{}{
-					"room_id": roomID,
+				// Usando o struct correto do models para TypeRoomDeleted
+				deletedNotification := models.RoomDeletedNotification{
+					RoomID: roomID,
 				}
-				s.sendSignal(peer, models.TypeRoomDeleted, deletedPayload, "")
+				s.sendSignal(peer, models.TypeRoomDeleted, deletedNotification, "")
 			}
 		}
 

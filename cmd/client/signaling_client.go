@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"reflect"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -21,14 +23,21 @@ type SignalingClient struct {
 	Connected      bool
 	LastHeartbeat  time.Time
 	MessageHandler func(messageType int, message []byte) error
+	PublicKeyStr   string // Public key string to identify this client
+
+	// System to track pending requests by message ID
+	pendingRequests     map[string]chan models.SignalingMessage
+	pendingRequestsLock sync.Mutex
 }
 
 // NewSignalingClient cria uma nova instância do servidor de sinalização
-func NewSignalingClient(ui *UIManager) *SignalingClient {
+func NewSignalingClient(ui *UIManager, publicKey string) *SignalingClient {
 	return &SignalingClient{
-		UI:            ui,
-		Connected:     false,
-		LastHeartbeat: time.Now(),
+		UI:              ui,
+		Connected:       false,
+		LastHeartbeat:   time.Now(),
+		PublicKeyStr:    publicKey,
+		pendingRequests: make(map[string]chan models.SignalingMessage),
 	}
 }
 
@@ -53,15 +62,51 @@ func (s *SignalingClient) Connect(serverAddress string) error {
 		return err
 	}
 
+	// Ensure path is set to /ws
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/ws"
+	}
+
+	log.Printf("Conectando ao servidor de sinalização")
 	log.Printf("Connecting to WebSocket server at %s", u.String())
 
-	// Estabelecer conexão real com o servidor WebSocket
+	// Configurar headers para o handshake inicial
+	headers := make(map[string][]string)
+	headers["User-Agent"] = []string{"goVPN-Client/1.0"}
+
+	// Adicionar identificador do cliente usando a chave pública armazenada diretamente
+	if s.PublicKeyStr != "" {
+		headers["X-Client-ID"] = []string{s.PublicKeyStr}
+	} else if s.VPNClient != nil && s.VPNClient.PublicKeyStr != "" {
+		// Fallback para manter compatibilidade
+		headers["X-Client-ID"] = []string{s.VPNClient.PublicKeyStr}
+	}
+
+	// Estabelecer conexão com o servidor WebSocket com retry
+	var conn *websocket.Conn
 	dialer := websocket.DefaultDialer
-	conn, _, err := dialer.Dial(u.String(), nil)
+	dialer.HandshakeTimeout = 10 * time.Second
+
+	// Try to connect up to 3 times
+	for attempts := 0; attempts < 3; attempts++ {
+		conn, _, err = dialer.Dial(u.String(), headers)
+		if err == nil {
+			break // Conexão bem-sucedida
+		}
+
+		log.Printf("Connection attempt %d failed: %v", attempts+1, err)
+
+		if attempts < 2 {
+			log.Printf("Retrying connection in 1 second...")
+			time.Sleep(1 * time.Second)
+		}
+	}
+
 	if err != nil {
-		log.Printf("Error connecting to WebSocket server: %v", err)
+		log.Printf("Failed to connect after 3 attempts: %v", err)
 		return err
 	}
+
 	s.Conn = conn
 
 	// Configurar handler para mensagens recebidas
@@ -71,6 +116,15 @@ func (s *SignalingClient) Connect(serverAddress string) error {
 	s.Connected = true
 	s.LastHeartbeat = time.Now()
 
+	// Verificar a conexão com um ping inicial
+	err = s.sendPing()
+	if err != nil {
+		log.Printf("Initial ping failed: %v", err)
+		s.Disconnect()
+		return fmt.Errorf("connected, but initial ping failed: %v", err)
+	}
+
+	log.Printf("Successfully connected to signaling server")
 	return nil
 }
 
@@ -108,12 +162,17 @@ func (s *SignalingClient) SendHeartbeat() error {
 	return nil
 }
 
-// sendPackagedMessage empacota e envia mensagem para o backend
+// sendPackagedMessage empacota e envia mensagem para o backend e espera pela resposta
 // Cria BaseRequest com a chave pública do cliente,
 // gera ID da mensagem, empacota na struct SignalingMessage e envia via WebSocket
 func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payload interface{}) error {
 	if !s.Connected || s.Conn == nil {
 		return errors.New("not connected to server")
+	}
+
+	// Automatically inject public key into BaseRequest if available
+	if s.injectPublicKey(payload) {
+		log.Printf("Automatically injected public key into payload")
 	}
 
 	// Gerar ID da mensagem
@@ -122,17 +181,8 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 		return fmt.Errorf("error generating message ID: %v", err)
 	}
 
-	// Extensão de BaseRequest - adicionar chave pública se disponível
-	var publicKey string
-	if s.VPNClient != nil {
-		publicKey = s.VPNClient.PublicKeyStr
-	}
-
-	// Add public key to the payload if it's a map
-	if payloadMap, ok := payload.(map[string]interface{}); ok {
-		payloadMap["PublicKey"] = publicKey
-		payload = payloadMap
-	}
+	// Register this message ID to track the response
+	responseChan := s.registerPendingRequest(messageID)
 
 	// Serializar payload para JSON
 	payloadBytes, err := json.Marshal(payload)
@@ -154,11 +204,30 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 		return fmt.Errorf("error sending message: %v", err)
 	}
 
-	return nil
+	// Wait for response with timeout
+	select {
+	case response := <-responseChan:
+		log.Printf("Received response for message ID %s of type %s", messageID, response.Type)
+
+		// Check if response is an error
+		if response.Type == models.TypeError {
+			var errorPayload map[string]string
+			if err := json.Unmarshal(response.Payload, &errorPayload); err == nil {
+				if errorMsg, ok := errorPayload["error"]; ok {
+					return fmt.Errorf("server error: %s", errorMsg)
+				}
+			}
+			return errors.New("unknown server error")
+		}
+
+		return nil
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("timeout waiting for response to message ID %s", messageID)
+	}
 }
 
 // CreateRoom cria uma nova sala no servidor
-func (s *SignalingClient) CreateRoom(name string, description string, password string) error {
+func (s *SignalingClient) CreateRoom(name string, password string) error {
 	if !s.Connected || s.Conn == nil {
 		return errors.New("not connected to server")
 	}
@@ -218,17 +287,6 @@ func (s *SignalingClient) LeaveRoom(roomID string) error {
 	return s.sendPackagedMessage(models.TypeLeaveRoom, payload)
 }
 
-// GetRoomList obtém a lista de salas do servidor
-func (s *SignalingClient) GetRoomList() (string, error) {
-	if !s.Connected || s.Conn == nil {
-		return "", errors.New("not connected to server")
-	}
-
-	// Esta funcionalidade não está implementada no servidor atual
-	// A lista de salas não está mais disponível por API
-	return "[]", nil
-}
-
 // RenameRoom renomeia uma sala (apenas o proprietário pode fazer isso)
 func (s *SignalingClient) RenameRoom(roomID string, newName string) error {
 	if !s.Connected || s.Conn == nil {
@@ -273,6 +331,9 @@ func (s *SignalingClient) SendMessage(messageType string, payload map[string]int
 		return errors.New("not connected to server")
 	}
 
+	// Adicionar a chave pública ao payload
+	payload["publicKey"] = s.PublicKeyStr
+
 	// Converter o messageType para o tipo apropriado
 	msgType := models.MessageType(messageType)
 
@@ -311,12 +372,243 @@ func (s *SignalingClient) listenForMessages() {
 			return
 		}
 
+		// Process the message here before passing to custom handler
+		var sigMsg models.SignalingMessage
+		err = json.Unmarshal(message, &sigMsg)
+		if err != nil {
+			log.Printf("Error parsing message: %v", err)
+			continue
+		}
+
+		log.Printf("Received message of type %s with ID %s", sigMsg.Type, sigMsg.ID)
+
+		// First check if this is a response to a pending request
+		// If it is, handlePendingResponse will deliver it to the waiting goroutine
+		if s.handlePendingResponse(sigMsg) {
+			// Message was delivered to a waiting request handler
+			// We can skip further processing
+			continue
+		}
+
+		// Handle specific message types (for notifications and unsolicited messages)
+		switch sigMsg.Type {
+		case models.TypeError:
+			// Decode error message from base64
+			var errorPayload map[string]string
+			if err := json.Unmarshal(sigMsg.Payload, &errorPayload); err == nil {
+				if errorMsg, ok := errorPayload["error"]; ok {
+					log.Printf("Server error: %s", errorMsg)
+					// You could notify the UI here
+					if s.UI != nil {
+						// Example: display error in UI
+						//s.UI.ShowErrorNotification(errorMsg)
+					}
+				}
+			} else {
+				log.Printf("Failed to decode error payload: %v", err)
+			}
+
+		case models.TypeRoomJoined:
+			var response models.JoinRoomResponse
+			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+				log.Printf("Failed to unmarshal room joined response: %v", err)
+			} else {
+				log.Printf("Successfully joined room: %s (%s)", response.RoomName, response.RoomID)
+				// Update UI if needed
+				if s.UI != nil {
+					// Handle room joined in UI
+				}
+			}
+
+		case models.TypeRoomCreated:
+			var response models.CreateRoomResponse
+			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+				log.Printf("Failed to unmarshal room created response: %v", err)
+			} else {
+				log.Printf("Successfully created room: %s (%s)", response.RoomName, response.RoomID)
+				// Update UI if needed
+				if s.UI != nil {
+					// Handle room created in UI
+				}
+			}
+
+		case models.TypeLeaveRoom:
+			var response models.LeaveRoomResponse
+			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+				log.Printf("Failed to unmarshal leave room response: %v", err)
+			} else {
+				log.Printf("Successfully left room: %s", response.RoomID)
+				// Handle client leaving room
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// Clean up network connections if needed
+				}
+			}
+
+		case models.TypeKicked:
+			var notification models.KickedNotification
+			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal kicked notification: %v", err)
+			} else {
+				reason := notification.Reason
+				if reason == "" {
+					reason = "No reason provided"
+				}
+				log.Printf("Kicked from room %s: %s", notification.RoomID, reason)
+				// Handle being kicked
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// Clean up network connections
+				}
+			}
+
+		case models.TypePeerJoined:
+			var notification models.PeerJoinedNotification
+			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal peer joined notification: %v", err)
+			} else {
+				username := notification.Username
+				if username == "" {
+					username = "Unknown user"
+				}
+				log.Printf("New peer joined room %s: %s (Key: %s)", notification.RoomID, username, notification.PublicKey)
+				// Handle new peer
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// Setup peer connection if needed
+				}
+			}
+
+		case models.TypePeerLeft:
+			var notification models.PeerLeftNotification
+			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal peer left notification: %v", err)
+			} else {
+				log.Printf("Peer left room %s: %s", notification.RoomID, notification.PublicKey)
+				// Handle peer leaving
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// Clean up peer connection if needed
+				}
+			}
+
+		case models.TypeRoomDeleted:
+			var notification models.RoomDeletedNotification
+			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal room deleted notification: %v", err)
+			} else {
+				log.Printf("Room deleted: %s", notification.RoomID)
+				s.VPNClient.NetworkManager.HandleRoomDeleted(notification.RoomID)
+			}
+		}
+
+		// Also pass to custom handler if configured
 		if s.MessageHandler != nil {
 			if err := s.MessageHandler(msgType, message); err != nil {
-				log.Printf("Error handling message: %v", err)
+				log.Printf("Error in custom message handler: %v", err)
 			}
-		} else {
-			log.Printf("Received message but no handler is configured")
 		}
 	}
+}
+
+// sendPing envia um ping para verificar a conexão
+func (s *SignalingClient) sendPing() error {
+	if !s.Connected || s.Conn == nil {
+		return errors.New("not connected to server")
+	}
+
+	log.Printf("Sending ping to server")
+
+	// Create a simple ping message
+	pingMessage := map[string]interface{}{
+		"action":    "ping",
+		"timestamp": time.Now().UnixNano(),
+		"publicKey": s.PublicKeyStr,
+	}
+
+	// Use the existing message sending infrastructure
+	return s.sendPackagedMessage(models.TypePing, pingMessage)
+}
+
+// registerPendingRequest registers a message ID and returns a channel to receive the response
+func (s *SignalingClient) registerPendingRequest(messageID string) chan models.SignalingMessage {
+	s.pendingRequestsLock.Lock()
+	defer s.pendingRequestsLock.Unlock()
+
+	// Create channel for this request
+	responseChan := make(chan models.SignalingMessage, 1)
+	s.pendingRequests[messageID] = responseChan
+	return responseChan
+}
+
+// handlePendingResponse routes responses to the appropriate waiting goroutine
+func (s *SignalingClient) handlePendingResponse(msg models.SignalingMessage) bool {
+	messageID := msg.ID
+	if messageID == "" {
+		return false
+	}
+
+	s.pendingRequestsLock.Lock()
+	defer s.pendingRequestsLock.Unlock()
+
+	// Check if we have a pending request waiting for this ID
+	if ch, exists := s.pendingRequests[messageID]; exists {
+		// Send the response
+		select {
+		case ch <- msg:
+			// Successfully delivered
+		default:
+			// Channel buffer full (shouldn't happen with buffer size 1)
+			log.Printf("Warning: response channel buffer full for message ID %s", messageID)
+		}
+
+		// Remove from pending requests after a short delay to ensure message delivery
+		go func(id string) {
+			time.Sleep(100 * time.Millisecond)
+			s.pendingRequestsLock.Lock()
+			delete(s.pendingRequests, id)
+			s.pendingRequestsLock.Unlock()
+		}(messageID)
+
+		return true
+	}
+
+	return false
+}
+
+// injectPublicKey attempts to inject the public key into any payload struct that has BaseRequest
+func (s *SignalingClient) injectPublicKey(payload interface{}) bool {
+	// Skip if no public key available
+	if s.PublicKeyStr == "" {
+		return false
+	}
+
+	// Use reflection to check if the payload has a BaseRequest field
+	val := reflect.ValueOf(payload)
+
+	// Check if payload is a pointer and not nil
+	if val.Kind() != reflect.Ptr || val.IsNil() {
+		// Handle special case for map[string]interface{}
+		if mapVal, ok := payload.(map[string]interface{}); ok {
+			mapVal["publicKey"] = s.PublicKeyStr
+			return true
+		}
+		return false
+	}
+
+	// Get the actual value the pointer points to
+	val = val.Elem()
+
+	// If it's a struct, look for BaseRequest field
+	if val.Kind() == reflect.Struct {
+		// Try to find and modify BaseRequest field
+		baseReqField := val.FieldByName("BaseRequest")
+		if baseReqField.IsValid() && baseReqField.CanSet() {
+			// Find the PublicKey field within BaseRequest
+			pubKeyField := baseReqField.FieldByName("PublicKey")
+			if pubKeyField.IsValid() && pubKeyField.CanSet() && pubKeyField.Kind() == reflect.String {
+				// Set the PublicKey field
+				pubKeyField.SetString(s.PublicKeyStr)
+				return true
+			}
+		}
+	}
+
+	return false
 }

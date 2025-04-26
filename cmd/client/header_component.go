@@ -32,6 +32,7 @@ func NewHeaderComponent(ui *UIManager) *HeaderComponent {
 	}
 
 	// Criar componentes de UI
+	// Use theme.MediaPlayIcon instead of a custom icon to avoid potential nil issues
 	hc.PowerButton = widget.NewButtonWithIcon("", theme.MediaPlayIcon(), func() {
 		hc.toggleConnection()
 	})

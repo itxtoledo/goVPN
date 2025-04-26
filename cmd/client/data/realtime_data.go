@@ -27,8 +27,8 @@ const (
 	// EventRoomJoined é emitido quando entra em uma sala
 	EventRoomJoined EventType = "room_joined"
 	// EventRoomLeft é emitido quando sai de uma sala
-	EventRoomLeft EventType = "room_left"
-	// EventSettingsChanged é emitido quando as configurações são alteradas
+	EventRoomLeft        EventType = "room_left"
+	EventRoomDeleted               = "room_deleted" // Add this constant for room deletion event
 	EventSettingsChanged EventType = "settings_changed"
 	// EventError é emitido quando ocorre um erro
 	EventError EventType = "error"
@@ -61,11 +61,11 @@ type RealtimeDataLayer struct {
 	NetworkLatency   binding.Float
 	TransferredBytes binding.Float
 	ReceivedBytes    binding.Float
+	PublicKey        binding.String // Public key identifier
 
 	// Dados de sala
-	RoomName        binding.String
-	RoomPassword    binding.String
-	RoomDescription binding.String
+	RoomName     binding.String
+	RoomPassword binding.String
 
 	// Canal de eventos
 	eventChan   chan Event
@@ -88,9 +88,9 @@ func NewRealtimeDataLayer() *RealtimeDataLayer {
 		NetworkLatency:   binding.NewFloat(),
 		TransferredBytes: binding.NewFloat(),
 		ReceivedBytes:    binding.NewFloat(),
+		PublicKey:        binding.NewString(),
 		RoomName:         binding.NewString(),
 		RoomPassword:     binding.NewString(),
-		RoomDescription:  binding.NewString(),
 
 		// Canal de eventos
 		eventChan:   make(chan Event, 100),
@@ -112,7 +112,7 @@ func (rdl *RealtimeDataLayer) InitDefaults() {
 	rdl.SetServerAddress("ws://localhost:8080")
 	rdl.SetLanguage("en")
 	rdl.SetLocalIP("YOUR IPV4")
-	rdl.SetRoomInfo("Not connected", "", "")
+	rdl.SetRoomInfo("Not connected", "")
 	rdl.UpdateNetworkStats(0, 0.0, 0.0, 0.0)
 }
 
@@ -159,10 +159,9 @@ func (rdl *RealtimeDataLayer) UpdateNetworkStats(peerCount int, latency, sent, r
 }
 
 // SetRoomInfo define as informações da sala
-func (rdl *RealtimeDataLayer) SetRoomInfo(name, password, description string) {
+func (rdl *RealtimeDataLayer) SetRoomInfo(name, password string) {
 	rdl.RoomName.Set(name)
 	rdl.RoomPassword.Set(password)
-	rdl.RoomDescription.Set(description)
 }
 
 // Subscribe inscreve um novo assinante para eventos

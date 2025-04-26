@@ -14,6 +14,14 @@ type DatabaseManager struct {
 	DB *sql.DB
 }
 
+// Room represents a VPN room
+type Room struct {
+	ID            string
+	Name          string
+	Password      string
+	LastConnected time.Time
+}
+
 // NewDatabaseManager creates and initializes a new database manager
 func NewDatabaseManager() (*DatabaseManager, error) {
 	// Create the user data directory if it doesn't exist
@@ -127,32 +135,17 @@ func (dm *DatabaseManager) SaveRoom(id, name, password string) error {
 }
 
 // GetRooms retrieves all saved rooms
-func (dm *DatabaseManager) GetRooms() ([]struct {
-	ID            string
-	Name          string
-	Password      string
-	LastConnected time.Time
-}, error) {
+func (dm *DatabaseManager) GetRooms() ([]Room, error) {
 	rows, err := dm.DB.Query("SELECT id, name, password, last_connected FROM rooms ORDER BY last_connected DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var rooms []struct {
-		ID            string
-		Name          string
-		Password      string
-		LastConnected time.Time
-	}
+	var rooms []Room
 
 	for rows.Next() {
-		var room struct {
-			ID            string
-			Name          string
-			Password      string
-			LastConnected time.Time
-		}
+		var room Room
 		if err := rows.Scan(&room.ID, &room.Name, &room.Password, &room.LastConnected); err != nil {
 			return nil, err
 		}

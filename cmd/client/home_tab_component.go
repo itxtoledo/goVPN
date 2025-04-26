@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 )
@@ -87,15 +88,50 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 
 	// Criar um botão para criar uma nova sala
 	createRoomButton := widget.NewButtonWithIcon("Create Room", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "contentAdd"), func() {
-		// Mostrar diálogo de criação de sala
 		log.Println("Create room button clicked")
-		// Implementar diálogo de criação de sala
+
+		// Check network connection status
+		if htc.UI.VPN != nil && htc.UI.VPN.NetworkManager != nil {
+			isConnected := htc.UI.VPN.NetworkManager.GetConnectionState() == ConnectionStateConnected
+			if !isConnected {
+				dialog.ShowError(fmt.Errorf("not connected to server"), htc.UI.MainWindow)
+				return
+			}
+		} else {
+			dialog.ShowError(fmt.Errorf("network manager not initialized"), htc.UI.MainWindow)
+			return
+		}
+
+		// Create and show the room creation window
+		createRoomWindow := NewCreateRoomDialog(htc.UI)
+		createRoomWindow.Show()
+	})
+
+	// Criar um botão para entrar em uma sala
+	joinRoomButton := widget.NewButtonWithIcon("Join Room", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "mail-reply"), func() {
+		log.Println("Join room button clicked")
+
+		// Check network connection status
+		if htc.UI.VPN != nil && htc.UI.VPN.NetworkManager != nil {
+			isConnected := htc.UI.VPN.NetworkManager.GetConnectionState() == ConnectionStateConnected
+			if !isConnected {
+				dialog.ShowError(fmt.Errorf("not connected to server"), htc.UI.MainWindow)
+				return
+			}
+		} else {
+			dialog.ShowError(fmt.Errorf("network manager not initialized"), htc.UI.MainWindow)
+			return
+		}
+
+		// Create and show the room joining window
+		joinRoomWindow := NewJoinRoomDialog(htc.UI)
+		joinRoomWindow.Show()
 	})
 
 	// Criar o container da aba principal
 	mainContainer := container.NewBorder(
 		nil,
-		container.NewHBox(layout.NewSpacer(), createRoomButton),
+		container.NewHBox(layout.NewSpacer(), joinRoomButton, createRoomButton),
 		nil,
 		nil,
 		container.NewVSplit(
@@ -105,9 +141,4 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	)
 
 	return mainContainer
-}
-
-// updateUI atualiza a interface do usuário
-func (htc *HomeTabComponent) updateUI() {
-	// As atualizações já são feitas pelos listeners dos bindings
 }

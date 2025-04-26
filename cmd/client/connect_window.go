@@ -84,12 +84,20 @@ func (cd *ConnectDialog) connectToRoom(roomName, password string) {
 		return
 	}
 
-	// Tentar conectar à sala
-	err := cd.UI.VPN.NetworkManager.JoinRoom(roomName, password)
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("failed to join room: %v", err), cd.UI.MainWindow)
-	} else {
-		// Atualizar a interface
-		cd.UI.refreshUI()
-	}
+	// Use goroutine to prevent UI freezing
+	go func() {
+		// Tentar conectar à sala
+		err := cd.UI.VPN.NetworkManager.JoinRoom(roomName, password)
+
+		// Use fyne.Do to safely update UI from a goroutine
+		fyne.Do(func() {
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("failed to join room: %v", err), cd.UI.MainWindow)
+			} else {
+				// Atualizar a interface
+				cd.UI.refreshUI()
+				dialog.ShowInformation("Success", "Connected to room successfully", cd.UI.MainWindow)
+			}
+		})
+	}()
 }

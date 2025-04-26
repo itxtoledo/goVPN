@@ -112,7 +112,16 @@ func (v *VPNClient) Run() {
 			log.Println("No server address configured, using default:", serverAddress)
 		}
 
+		// Inicializar o signaling client no NetworkManager se necessário
+		if v.NetworkManager.SignalingServer == nil {
+			v.NetworkManager.SignalingServer = NewSignalingClient(v.UI, v.PublicKeyStr)
+		}
+
+		// Set the reference to this VPNClient in the SignalingClient
+		v.NetworkManager.SignalingServer.SetVPNClient(v)
+
 		// Tentativa de conexão ao servidor de backend
+		log.Printf("Iniciando conexão automática com o servidor de sinalização")
 		log.Printf("Attempting to connect to backend server: %s", serverAddress)
 		v.UI.RealtimeData.SetStatusMessage("Connecting to backend...")
 

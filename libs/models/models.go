@@ -19,6 +19,7 @@ const (
 	TypeLeaveRoom  MessageType = "LeaveRoom"
 	TypeKick       MessageType = "Kick"
 	TypeRename     MessageType = "Rename"
+	TypePing       MessageType = "Ping" // Added for connection testing
 
 	// Server to client message types
 	TypeError         MessageType = "Error"
