@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/itxtoledo/govpn/cmd/client/data"
 )
@@ -12,9 +11,6 @@ import (
 type NetworkInterface interface {
 	GetLocalIP() string
 	GetPeerCount() int
-	GetAverageLatency() float64
-	GetBytesSent() int64
-	GetBytesReceived() int64
 }
 
 // Computer represents a computer in the VPN network
@@ -97,55 +93,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	// Get room list
 	nm.UI.refreshNetworkList()
 
-	// Start heartbeat
-	go nm.heartbeat()
-
 	return nil
-}
-
-// heartbeat sends heartbeat to the server
-func (nm *NetworkManager) heartbeat() {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if nm.connectionState != ConnectionStateConnected {
-				return
-			}
-
-			// Get network stats
-			var peerCount int
-			var latency float64
-			var sentBytes float64
-			var receivedBytes float64
-
-			if nm.VirtualNetwork != nil {
-				// Calcular estatísticas da rede
-				peerCount = nm.VirtualNetwork.GetPeerCount()
-				latency = nm.VirtualNetwork.GetAverageLatency()
-				sentBytes = float64(nm.VirtualNetwork.GetBytesSent())
-				receivedBytes = float64(nm.VirtualNetwork.GetBytesReceived())
-			}
-
-			// Update data layer with network stats
-			nm.UI.RealtimeData.UpdateNetworkStats(peerCount, latency, sentBytes, receivedBytes)
-
-			// Update IP info in case it changed
-			if nm.VirtualNetwork != nil {
-				nm.UI.RealtimeData.SetLocalIP(nm.VirtualNetwork.GetLocalIP())
-			}
-
-			// Send heartbeat
-			err := nm.SignalingServer.SendHeartbeat()
-			if err != nil {
-				log.Printf("Error sending heartbeat: %v", err)
-				nm.handleDisconnection()
-				return
-			}
-		}
-	}
 }
 
 // handleDisconnection handles disconnection from the server

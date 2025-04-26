@@ -150,18 +150,6 @@ func (s *SignalingClient) Disconnect() error {
 	return nil
 }
 
-// SendHeartbeat envia um heartbeat para o servidor
-func (s *SignalingClient) SendHeartbeat() error {
-	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
-	}
-
-	// Os heartbeats não são mais usados nesta versão do protocolo
-	// Todos os timestamps são controlados pelo servidor
-
-	return nil
-}
-
 // sendPackagedMessage empacota e envia mensagem para o backend e espera pela resposta
 // Cria BaseRequest com a chave pública do cliente,
 // gera ID da mensagem, empacota na struct SignalingMessage e envia via WebSocket
