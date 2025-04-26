@@ -220,6 +220,25 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 		return fmt.Errorf("failed to join room: %v", err)
 	}
 
+	// Use "Sala " + roomID as the room name since there's no GetRoomName method on the backend
+	roomName := "Sala " + roomID
+
+	// Save room to local database
+	err = nm.UI.VPN.DBManager.SaveRoom(roomID, roomName, password)
+	if err != nil {
+		log.Printf("Warning: Could not save room to database: %v", err)
+		// Continue even if database save fails
+	} else {
+		log.Printf("Room saved to database: ID=%s, Name=%s", roomID, roomName)
+	}
+
+	// Update room connection time
+	err = nm.UI.VPN.DBManager.UpdateRoomConnection(roomID)
+	if err != nil {
+		log.Printf("Warning: Could not update room connection time: %v", err)
+		// Continue even if update fails
+	}
+
 	// Store room information
 	nm.RoomID = roomID
 	nm.RoomPassword = password

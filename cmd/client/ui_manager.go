@@ -196,6 +196,20 @@ func (ui *UIManager) refreshNetworkList() {
 func (ui *UIManager) Run() {
 	log.Println("Iniciando GoVPN Client")
 
+	// Log saved rooms at startup
+	if ui.VPN != nil && ui.VPN.DBManager != nil {
+		rooms, err := ui.VPN.DBManager.GetRooms()
+		if err != nil {
+			log.Printf("Error loading saved rooms: %v", err)
+		} else {
+			log.Printf("User has %d saved rooms:", len(rooms))
+			for i, room := range rooms {
+				log.Printf("Room %d: ID=%s, Name=%s, Last Connection=%s",
+					i+1, room.ID, room.Name, room.LastConnected.Format("2006-01-02 15:04:05"))
+			}
+		}
+	}
+
 	// Garantir que as configurações sejam aplicadas antes de exibir a janela
 	if ui.VPN != nil {
 		// Carrega as configurações do ConfigManager para a camada de dados
