@@ -1,718 +1,360 @@
 package main
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
-	"sync"
-	"time"
 
-	"github.com/itxtoledo/govpn/libs/models"
-	"github.com/itxtoledo/govpn/libs/network"
-	"github.com/pion/webrtc/v3"
+	"github.com/itxtoledo/govpn/cmd/client/data"
 )
 
-// Connection state constants
+// NetworkInterface define a interface mínima para a rede virtual
+type NetworkInterface interface {
+	GetLocalIP() string
+	GetPeerCount() int
+}
+
+// Computer represents a computer in the VPN network
+type Computer struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	IP       string `json:"ip"`
+	OwnerID  string `json:"owner_id"`
+	IsOnline bool   `json:"is_online"`
+}
+
+// ConnectionState represents the state of the connection
+type ConnectionState int
+
 const (
-	ConnectionStateDisconnected = iota
+	ConnectionStateDisconnected ConnectionState = iota
 	ConnectionStateConnecting
 	ConnectionStateConnected
 )
 
-// NetworkManager manages WebRTC connections
+// NetworkManager handles the VPN network
 type NetworkManager struct {
-	SignalServer          string                            // Endereço do servidor de sinalização
-	IsConnected           bool                              // Indica se está conectado ao servidor de sinalização
-	RoomID                string                            // ID da sala atual
-	RoomName              string                            // Nome da sala atual
-	VirtualNetwork        *network.VirtualNetwork           // Rede virtual
-	PublicKey             string                            // Chave pública serializada como base64
-	PrivateKey            *rsa.PrivateKey                   // Chave privada
-	PeersConn             map[string]*webrtc.PeerConnection // Conexões com peers por ID
-	RTCConfig             webrtc.Configuration              // Configuração RTC
-	DataChannels          map[string]*webrtc.DataChannel    // Canais de dados por ID
-	PeersByPublicKey      map[string]bool                   // Peers por chave pública
-	PeerUsernames         map[string]string                 // Usernames mapeados por chave pública
-	VPNClient             *VPNClient                        // Referência para o cliente VPN
-	wg                    sync.WaitGroup
-	mu                    sync.RWMutex
-	SignalServerConnected bool                            // Indica se está conectado ao servidor de sinalização
-	Username              string                          // Nome de usuário do peer local
-	MaxRetries            int                             // Maximum number of connection retry attempts
-	CurrentRetry          int                             // Current retry attempt counter
-	OnConnectionError     func(error)                     // Callback for connection errors
-	OnRoomListUpdate      func([]models.Room)             // Callback for room list updates
-	pendingRequests       map[string]chan models.Message  // Map to track requests by their ID
-	messageCallbacks      map[string]func(models.Message) // Map for message callbacks by message ID
-	signalingServer       *SignalingServer                // Signaling server connection manager
+	UI                *UIManager
+	VirtualNetwork    NetworkInterface
+	SignalingServer   *SignalingClient
+	RoomID            string
+	RoomPassword      string
+	Computers         []Computer
+	connectionState   ConnectionState
+	ReconnectAttempts int
+	MaxReconnects     int
 }
 
-// NewNetworkManager cria um novo gerenciador de rede
-func NewNetworkManager(vpn *VPNClient) *NetworkManager {
-	// Definir servidor padrão com opção de ambiente
-	signalServer := "ws://localhost:8080/ws"
-	if serverEnv := vpn.GetConfig("SIGNAL_SERVER"); serverEnv != "" {
-		signalServer = serverEnv
-	}
-
+// NewNetworkManager creates a new instance of NetworkManager
+func NewNetworkManager(ui *UIManager) *NetworkManager {
 	nm := &NetworkManager{
-		VPNClient:    vpn,
-		SignalServer: signalServer,
-		PeersConn:    make(map[string]*webrtc.PeerConnection),
-		RTCConfig: webrtc.Configuration{
-			ICEServers: []webrtc.ICEServer{
-				{
-					URLs: []string{"stun:stun.l.google.com:19302"},
-				},
-			},
-		},
-		IsConnected:           false,
-		SignalServerConnected: false,
-		PeersByPublicKey:      make(map[string]bool),
-		MaxRetries:            3,
-		CurrentRetry:          0,
-		pendingRequests:       make(map[string]chan models.Message),
-		messageCallbacks:      make(map[string]func(models.Message)),
-	}
-
-	// Create and setup the signaling server
-	nm.signalingServer = NewSignalingServer(signalServer)
-
-	// Configure callbacks
-	nm.signalingServer.OnConnectionStatus = func(isConnected bool) {
-		nm.SignalServerConnected = isConnected
-		nm.IsConnected = isConnected
-	}
-
-	nm.signalingServer.OnConnectionError = func(err error) {
-		if nm.OnConnectionError != nil {
-			nm.OnConnectionError(err)
-		}
-	}
-
-	nm.signalingServer.OnMessage = func(msg models.Message) {
-		nm.handleReceivedMessage(msg)
+		UI:                ui,
+		connectionState:   ConnectionStateDisconnected,
+		ReconnectAttempts: 0,
+		MaxReconnects:     5,
 	}
 
 	return nm
 }
 
-// Connect conecta ao servidor de sinalização
-func (n *NetworkManager) Connect() error {
-	return n.signalingServer.Connect()
-}
+// Connect connects to the VPN network
+func (nm *NetworkManager) Connect(serverAddress string) error {
+	// Set state to connecting
+	nm.connectionState = ConnectionStateConnecting
+	// Update data layer
+	nm.UI.RealtimeData.SetConnectionState(data.StateConnecting)
+	nm.UI.RealtimeData.SetStatusMessage("Connecting...")
 
-// Disconnect desconecta do servidor de sinalização
-func (n *NetworkManager) Disconnect() {
-	n.signalingServer.Disconnect()
-	n.IsConnected = false
-	n.SignalServerConnected = false
-}
+	// Update UI
+	nm.UI.refreshUI()
 
-// GetRoomList obtém a lista de salas disponíveis apenas do banco de dados local,
-// sem chamar o backend
-func (n *NetworkManager) GetRoomList() error {
-	// Carrega apenas as salas do banco de dados local
-	localRooms, err := n.loadLocalRooms()
+	// Initialize signaling server
+	// Get public key from UI's realtime data layer
+	publicKey := nm.UI.VPN.PublicKeyStr
+	nm.SignalingServer = NewSignalingClient(nm.UI, publicKey)
+
+	// Connect to signaling server
+	err := nm.SignalingServer.Connect(serverAddress)
 	if err != nil {
-		log.Printf("Erro ao carregar salas locais: %v", err)
-		return fmt.Errorf("erro ao carregar salas do banco de dados local: %w", err)
+		nm.connectionState = ConnectionStateDisconnected
+		nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
+		nm.UI.RealtimeData.SetStatusMessage("Connection failed")
+		return fmt.Errorf("failed to connect to signaling server: %v", err)
 	}
 
-	// Notifica a UI com as salas locais
-	if n.OnRoomListUpdate != nil {
-		n.OnRoomListUpdate(localRooms)
-	}
+	// Initialize virtual network
+	// A inicialização real da rede é feita em outro lugar
+	// Para este exemplo, usamos uma implementação simulada
+
+	// Set state to connected (simulado para este exemplo)
+	nm.connectionState = ConnectionStateConnected
+	nm.UI.RealtimeData.SetConnectionState(data.StateConnected)
+	nm.UI.RealtimeData.SetStatusMessage("Connected")
+
+	// Get room list
+	nm.UI.refreshNetworkList()
 
 	return nil
 }
 
-// loadLocalRooms carrega a lista de salas do banco de dados SQLite local
-func (n *NetworkManager) loadLocalRooms() ([]models.Room, error) {
-	// Obter as salas do DatabaseManager
-	dbRooms, err := n.VPNClient.DBManager.GetRooms()
-	if err != nil {
-		return nil, fmt.Errorf("erro ao consultar banco de dados: %w", err)
-	}
+// handleDisconnection handles disconnection from the server
+func (nm *NetworkManager) handleDisconnection() {
+	if nm.connectionState != ConnectionStateDisconnected {
+		if nm.ReconnectAttempts < nm.MaxReconnects {
+			nm.ReconnectAttempts++
+			log.Printf("Disconnected from server, attempting to reconnect (%d/%d)", nm.ReconnectAttempts, nm.MaxReconnects)
 
-	// Converter para o formato models.Room
-	rooms := make([]models.Room, 0, len(dbRooms))
-	for _, dbRoom := range dbRooms {
-		room := models.Room{
-			ID:          dbRoom.ID,
-			Name:        dbRoom.Name,
-			Password:    dbRoom.Password,
-			ClientCount: 0, // Não sabemos quantos clientes até conectar
-		}
-		rooms = append(rooms, room)
-	}
+			// Set state to connecting
+			nm.connectionState = ConnectionStateConnecting
+			nm.UI.RealtimeData.SetConnectionState(data.StateConnecting)
+			nm.UI.RealtimeData.SetStatusMessage(fmt.Sprintf("Reconnecting (%d/%d)...", nm.ReconnectAttempts, nm.MaxReconnects))
+			nm.UI.refreshUI()
 
-	return rooms, nil
-}
-
-// JoinRoom entra em uma sala existente
-func (n *NetworkManager) JoinRoom(roomID, password string) error {
-	// Check if we're connected to the signaling server first
-	if !n.SignalServerConnected {
-		// Try to connect
-		if err := n.Connect(); err != nil {
-			// Display specific message about signaling server connection failure
-			if n.VPNClient.UI != nil {
-				n.VPNClient.UI.ShowMessage("Connection Error", "Could not connect to the signaling server. Please check your internet connection and try again.")
+			// Try to reconnect
+			err := nm.Connect(nm.SignalingServer.ServerAddress)
+			if err != nil {
+				log.Printf("Failed to reconnect: %v", err)
+				// Set state to disconnected
+				nm.connectionState = ConnectionStateDisconnected
+				nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
+				nm.UI.RealtimeData.SetStatusMessage("Disconnected")
+				nm.UI.refreshUI()
+			} else {
+				// Successfully reconnected
+				nm.ReconnectAttempts = 0
 			}
-			return fmt.Errorf("failed to connect to signaling server: %w", err)
-		}
-	}
-
-	// Garante que as chaves RSA estão carregadas ou cria novas se necessário
-	if err := n.VPNClient.loadOrGenerateKeys(); err != nil {
-		return fmt.Errorf("erro ao obter chaves RSA: %w", err)
-	}
-
-	// Inicializa a rede virtual com o ID e senha da sala
-	n.VirtualNetwork = network.NewVirtualNetwork(roomID, password)
-
-	// Use default username if none is set
-	username := n.Username
-	if username == "" {
-		username = "User" // Default username
-	} else if len(username) > 10 {
-		// Limita o nome de usuário a 10 caracteres
-		username = username[:10]
-	}
-
-	msg := models.Message{
-		Type:      models.TypeJoinRoom,
-		RoomID:    roomID,
-		Password:  password,
-		PublicKey: n.VPNClient.getPublicKey(), // Usa apenas a chave pública para identificação
-		Username:  username,                   // Include the username
-	}
-
-	// Envia a mensagem com timeout de 2 segundos (padrão)
-	response, err := n.SendRequestWithID(msg, 0)
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			if n.VPNClient.UI != nil {
-				n.VPNClient.UI.ShowMessage("Error", "O servidor demorou muito para responder. Por favor, tente novamente mais tarde.")
-			}
-		}
-		return err
-	}
-
-	// Verifica se a resposta é um erro
-	if response.Type == models.TypeError {
-		return fmt.Errorf("erro ao entrar na sala: %s", string(response.Data))
-	}
-
-	// Se a resposta for bem-sucedida, processa o resultado
-	if response.Type == models.TypeRoomJoined {
-		n.VPNClient.CurrentRoom = response.RoomID
-		n.RoomName = response.RoomName
-		n.VPNClient.IsConnected = true
-		log.Printf("Room successfully joined: %s (%s)", response.RoomID, response.RoomName)
-
-		// Atualizar a interface de usuário para refletir a conexão
-		if n.VPNClient.UI != nil && n.VPNClient.UI.HeaderComponent != nil {
-			// Atualiza o IP, nome de usuário e informações da sala
-			n.VPNClient.UI.HeaderComponent.updateIPInfo()
-			n.VPNClient.UI.HeaderComponent.updateUsername()
-			n.VPNClient.UI.HeaderComponent.updateRoomName()
-
-			// Atualiza o botão de energia e a lista de rede
-			n.VPNClient.UI.updatePowerButtonState()
-			n.VPNClient.UI.refreshNetworkList()
-		}
-
-		return nil
-	}
-
-	// Se chegou aqui, a resposta não é nem erro nem sucesso
-	return fmt.Errorf("resposta inesperada do servidor: %s", response.Type)
-}
-
-// CreateRoom cria uma nova sala
-func (n *NetworkManager) CreateRoom(name, password string) error {
-	// Check if we're connected to the signaling server first
-	if !n.SignalServerConnected {
-		// Try to connect
-		if err := n.Connect(); err != nil {
-			// Display specific message about signaling server connection failure
-			if n.VPNClient.UI != nil {
-				n.VPNClient.UI.ShowMessage("Connection Error", "Could not connect to the signaling server. Please check your internet connection and try again.")
-			}
-			return fmt.Errorf("failed to connect to signaling server: %w", err)
-		}
-	}
-
-	// Garante que as chaves RSA estão carregadas ou cria novas se necessário
-	if err := n.VPNClient.loadOrGenerateKeys(); err != nil {
-		return fmt.Errorf("erro ao obter chaves RSA: %w", err)
-	}
-
-	// Verifica se a chave pública está disponível
-	publicKey := n.VPNClient.getPublicKey()
-	if publicKey == "" {
-		return fmt.Errorf("não foi possível obter a chave pública")
-	}
-
-	msg := models.Message{
-		Type:      models.TypeCreateRoom,
-		RoomName:  name,
-		Password:  password,
-		PublicKey: publicKey,
-	}
-
-	// Envia a mensagem com timeout de 2 segundos (padrão)
-	response, err := n.SendRequestWithID(msg, 0)
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			if n.VPNClient.UI != nil {
-				n.VPNClient.UI.ShowMessage("Error", "O servidor demorou muito para responder. Por favor, tente novamente mais tarde.")
-			}
-		}
-		return err
-	}
-
-	// Verifica se a resposta é um erro
-	if response.Type == models.TypeError {
-		return fmt.Errorf("erro ao criar sala: %s", string(response.Data))
-	}
-
-	// Se a resposta for bem-sucedida, processa o resultado
-	if response.Type == models.TypeRoomCreated {
-		n.VPNClient.CurrentRoom = response.RoomID
-		n.RoomName = response.RoomName
-		n.VPNClient.IsConnected = true
-		log.Printf("Room successfully created: %s (%s)", response.RoomID, response.RoomName)
-
-		// Salva a sala no banco de dados local
-		if err := n.saveRoomToLocalDB(response.RoomID, response.RoomName, password); err != nil {
-			log.Printf("Aviso: Não foi possível salvar a sala no banco de dados local: %v", err)
-			// Continuamos mesmo com erro ao salvar no banco local
-		}
-
-		// Atualiza a interface de forma segura
-		if n.VPNClient != nil && n.VPNClient.UI != nil {
-			// Evita acesso direto aos componentes da UI após criar uma sala
-			// Isso previne crashes quando a atualização da UI é feita no fluxo de criação
-
-			// Em vez disso, usamos um goroutine para atrasar um pouco a atualização
-			// permitindo que a UI termine seu processamento atual
-			go func() {
-				// Pequeno delay para garantir que a UI esteja pronta
-				time.Sleep(100 * time.Millisecond)
-
-				// Atualização do cabeçalho com tratamento de erros
-				if n.VPNClient.UI.HeaderComponent != nil {
-					n.VPNClient.UI.HeaderComponent.updateIPInfo()
-					n.VPNClient.UI.HeaderComponent.updateUsername()
-					n.VPNClient.UI.HeaderComponent.updateRoomName()
-				}
-
-				// Atualizar o botão de energia
-				n.VPNClient.UI.updatePowerButtonState()
-			}()
-		}
-
-		return nil
-	}
-
-	// Se chegou aqui, a resposta não é nem erro nem sucesso
-	return fmt.Errorf("resposta inesperada do servidor: %s", response.Type)
-}
-
-// LeaveRoom sai da sala atual
-func (n *NetworkManager) LeaveRoom() error {
-	if !n.IsConnected || n.VPNClient.CurrentRoom == "" {
-		return nil
-	}
-
-	msg := models.Message{
-		Type:      models.TypeLeaveRoom,
-		RoomID:    n.VPNClient.CurrentRoom,
-		PublicKey: n.VPNClient.getPublicKey(),
-	}
-
-	// Limpa as informações da sala
-	n.RoomName = ""
-	n.VirtualNetwork = nil
-
-	return n.sendMessage(msg)
-}
-
-// sendMessage envia uma mensagem para o servidor de sinalização
-func (n *NetworkManager) sendMessage(msg interface{}) error {
-	return n.signalingServer.SendMessage(msg)
-}
-
-// handleReceivedMessage processa as mensagens recebidas do servidor de sinalização
-func (n *NetworkManager) handleReceivedMessage(msg models.Message) {
-	// Processa a mensagem com base no tipo
-	switch msg.Type {
-	case "RoomList":
-		// We need raw message for this one
-		var roomListMsg struct {
-			Type  string        `json:"type"`
-			Rooms []models.Room `json:"rooms"`
-		}
-
-		data, _ := json.Marshal(msg)
-		if err := json.Unmarshal(data, &roomListMsg); err != nil {
-			log.Printf("Error deserializing room list: %v", err)
-			return
-		}
-
-		n.handleRoomListMessage(roomListMsg.Rooms)
-	case models.TypeRoomCreated:
-		n.handleRoomCreatedMessage(msg)
-	case models.TypeRoomJoined:
-		n.handleRoomJoinedMessage(msg)
-	case models.TypePeerJoined:
-		n.handlePeerJoinedMessage(msg)
-	case models.TypePeerLeft:
-		n.handlePeerLeftMessage(msg)
-	case models.TypeOffer:
-		n.handleOfferMessage(msg)
-	case models.TypeAnswer:
-		n.handleAnswerMessage(msg)
-	case models.TypeCandidate:
-		n.handleICECandidateMessage(msg)
-	case models.TypeError:
-		n.handleErrorMessage(msg)
-	}
-
-	// Processa IDs de mensagens para callbacks ou respostas
-	if !n.processMessageID(msg) {
-		log.Printf("Message ID not processed: %s", msg.MessageID)
-	}
-}
-
-// Métodos para tratamento de mensagens específicas
-func (n *NetworkManager) handleRoomListMessage(rooms []models.Room) {
-	// Notifica a UI sobre a atualização da lista de salas
-	if n.OnRoomListUpdate != nil {
-		n.OnRoomListUpdate(rooms)
-	}
-}
-
-func (n *NetworkManager) handleRoomCreatedMessage(msg models.Message) {
-	n.VPNClient.CurrentRoom = msg.RoomID
-	n.RoomName = msg.RoomName
-	n.VPNClient.IsConnected = true
-	log.Printf("Room successfully created: %s (%s)", msg.RoomID, msg.RoomName)
-}
-
-func (n *NetworkManager) handleRoomJoinedMessage(msg models.Message) {
-	n.VPNClient.CurrentRoom = msg.RoomID
-	n.RoomName = msg.RoomName
-	n.VPNClient.IsConnected = true
-	log.Printf("Joined room: %s (%s)", msg.RoomID, msg.RoomName)
-
-	// Salva a sala no banco de dados local
-	if password, err := n.getPasswordForRoom(msg.RoomID); err == nil {
-		if err := n.saveRoomToLocalDB(msg.RoomID, msg.RoomName, password); err != nil {
-			log.Printf("Aviso: Não foi possível salvar a sala no banco de dados local: %v", err)
-		}
-	} else {
-		log.Printf("Aviso: Não foi possível recuperar senha para salvar sala: %v", err)
-	}
-
-	// Atualizar a interface de usuário para refletir a conexão
-	if n.VPNClient.UI != nil && n.VPNClient.UI.HeaderComponent != nil {
-		// Atualiza o IP, nome de usuário e informações da sala
-		n.VPNClient.UI.HeaderComponent.updateIPInfo()
-		n.VPNClient.UI.HeaderComponent.updateUsername()
-		n.VPNClient.UI.HeaderComponent.updateRoomName()
-
-		// Atualiza o botão de energia e a lista de rede
-		n.VPNClient.UI.updatePowerButtonState()
-		n.VPNClient.UI.refreshNetworkList()
-	}
-}
-
-func (n *NetworkManager) handlePeerJoinedMessage(msg models.Message) {
-	peerPublicKey := msg.PublicKey
-	username := msg.Username // Extract username from the message
-
-	log.Printf("New peer joined the room: %s (%s)", peerPublicKey, username)
-
-	// Se a chave pública está presente, podemos usá-la como identificador principal
-	if peerPublicKey != "" {
-		// Armazena o status do peer como conectado
-		n.PeersByPublicKey[peerPublicKey] = true
-
-		// Initialize the PeerUsernames map if it doesn't exist
-		if n.PeerUsernames == nil {
-			n.PeerUsernames = make(map[string]string)
-		}
-
-		// Store the username for this peer
-		if username != "" {
-			n.PeerUsernames[peerPublicKey] = username
 		} else {
-			// Use a default name if none provided
-			n.PeerUsernames[peerPublicKey] = "User"
-		}
-
-		// truncamos a chave pública para exibição por ser muito longa
-		displayID := n.GetFormattedPublicKey(peerPublicKey)
-		log.Printf("Using public key as peer identifier: %s", displayID)
-	}
-
-	// Iniciar WebRTC com o peer
-	// Na implementação real, estabelecer uma conexão WebRTC e configurar o datachannel
-}
-
-func (n *NetworkManager) handlePeerLeftMessage(msg models.Message) {
-	peerPublicKey := msg.PublicKey
-	log.Printf("Peer left the room: %s", peerPublicKey)
-	// Remover conexão WebRTC com o peer
-	if n.VirtualNetwork != nil {
-		n.VirtualNetwork.RemovePeer(peerPublicKey)
-	}
-
-	// Remove o peer dos mapeamentos
-	delete(n.PeersByPublicKey, peerPublicKey)
-}
-
-func (n *NetworkManager) handleOfferMessage(msg models.Message) {
-	// Implementar lógica para lidar com ofertas WebRTC
-	log.Printf("Offer received from peer: %s", msg.PublicKey)
-
-	// Aqui você criaria um PeerConnection, configuraria os canais de dados
-	// e responderia com uma Answer
-}
-
-func (n *NetworkManager) handleAnswerMessage(msg models.Message) {
-	// Implementar lógica para lidar com respostas WebRTC
-	log.Printf("Answer received from peer: %s", msg.PublicKey)
-
-	// Aqui você aplicaria a answer ao PeerConnection correspondente
-}
-
-func (n *NetworkManager) handleICECandidateMessage(msg models.Message) {
-	// Implementar lógica para lidar com candidatos ICE
-	log.Printf("ICE candidate received from peer: %s", msg.PublicKey)
-
-	// Aqui você adicionaria o candidato ICE ao PeerConnection correspondente
-}
-
-func (n *NetworkManager) handleErrorMessage(msg models.Message) {
-	errorMsg := string(msg.Data)
-	log.Printf("Error received from server: %s", errorMsg)
-
-	// Verifica se o erro é sobre chave pública duplicada
-	if errorStr := string(msg.Data); len(errorStr) > 0 {
-		// Busca por mensagens específicas relacionadas à chave pública
-		if publicKeyError := checkPublicKeyError(errorStr); publicKeyError != "" {
-			// Se encontrar uma sala existente, notifica o usuário
-			// Isso deve ser tratado pela UI, que pode exibir uma mensagem específica
-			if n.VPNClient.UI != nil {
-				n.VPNClient.UI.ShowMessage("Room already exists", publicKeyError)
-			}
+			log.Printf("Max reconnect attempts reached, giving up")
+			// Set state to disconnected
+			nm.connectionState = ConnectionStateDisconnected
+			nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
+			nm.UI.RealtimeData.SetStatusMessage("Connection lost")
+			nm.UI.refreshUI()
 		}
 	}
 }
 
-// checkPublicKeyError verifica se a mensagem de erro contém informações sobre chave pública duplicada
-// e extrai o ID da sala existente, se disponível
-func checkPublicKeyError(errorMsg string) string {
-	// Busca por padrões específicos de erro relacionados à chave pública duplicada
-	// Isso depende exatamente de como o servidor formata a mensagem de erro
-	if len(errorMsg) > 2 && errorMsg[0] == '"' && errorMsg[len(errorMsg)-1] == '"' {
-		// Remove as aspas da mensagem JSON
-		errorMsg = errorMsg[1 : len(errorMsg)-1]
+// GetConnectionState returns the connection state
+func (nm *NetworkManager) GetConnectionState() ConnectionState {
+	return nm.connectionState
+}
+
+// CreateRoom creates a new room
+func (nm *NetworkManager) CreateRoom(name string, password string) error {
+	if nm.connectionState != ConnectionStateConnected {
+		return fmt.Errorf("not connected to server")
 	}
 
-	// Vários padrões possíveis de erro de chave duplicada que o servidor pode retornar
-	if contains(errorMsg, "public key has already created room") {
-		return errorMsg
-	} else if contains(errorMsg, "This public key has already") {
-		return errorMsg
-	}
-
-	return ""
-}
-
-// contains verifica se uma string contém outra
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
-}
-
-// GetFormattedPublicKey retorna uma versão formatada (truncada) da chave pública para exibição
-func (n *NetworkManager) GetFormattedPublicKey(publicKey string) string {
-	if len(publicKey) <= 16 {
-		return publicKey
-	}
-
-	// Trunca a chave para exibição: primeiros 8 caracteres + ... + últimos 8 caracteres
-	return publicKey[:8] + "..." + publicKey[len(publicKey)-8:]
-}
-
-// IsBackendConnected returns whether the network manager is connected to the backend server
-func (n *NetworkManager) IsBackendConnected() bool {
-	return n.signalingServer.IsConnectionActive() && n.IsConnected
-}
-
-// GetConnectionState returns the current connection state
-func (n *NetworkManager) GetConnectionState() int {
-	if !n.signalingServer.IsConnectionActive() {
-		return ConnectionStateDisconnected
-	}
-	if n.IsConnected {
-		return ConnectionStateConnected
-	}
-	return ConnectionStateConnecting
-}
-
-// IsSignalServerConnected returns whether the network manager is connected to the signaling server
-func (n *NetworkManager) IsSignalServerConnected() bool {
-	return n.SignalServerConnected
-}
-
-// GenerateRandomID gera um ID aleatório em formato hexadecimal com base no comprimento especificado
-func GenerateRandomID(length int) (string, error) {
-	// Determine quantos bytes precisamos para gerar o ID
-	byteLength := (length + 1) / 2 // arredondamento para cima para garantir bytes suficientes
-
-	bytes := make([]byte, byteLength)
-	_, err := rand.Read(bytes)
+	// Create room
+	res, err := nm.SignalingServer.CreateRoom(name, password)
 	if err != nil {
-		return "", fmt.Errorf("falha ao gerar bytes aleatórios: %w", err)
+		return fmt.Errorf("failed to create room: %v", err)
 	}
 
-	// Converte para hexadecimal e limita ao comprimento desejado
-	id := hex.EncodeToString(bytes)
-	if len(id) > length {
-		id = id[:length]
-	}
-
-	return id, nil
-}
-
-// SendRequestWithID envia uma mensagem para o servidor com um ID único e aguarda a resposta
-// com o mesmo ID, retornando-a ou um erro se o timeout ocorrer
-func (n *NetworkManager) SendRequestWithID(msg models.Message, timeoutSeconds int) (models.Message, error) {
-	// Se não for especificado um timeout, usa 2 segundos como padrão
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = 2
-	}
-
-	// Gera um ID aleatório de 10 caracteres usando a função do pacote models
-	requestID, err := models.GenerateMessageID(10)
+	// Save room to local database
+	err = nm.UI.VPN.DBManager.SaveRoom(res.RoomID, name, password)
 	if err != nil {
-		return models.Message{}, fmt.Errorf("erro ao gerar ID da requisição: %w", err)
+		log.Printf("Warning: Could not save room to database: %v", err)
+		// Continue even if database save fails
+	} else {
+		log.Printf("Room saved to database: ID=%s, Name=%s", res.RoomID, name)
 	}
 
-	// Define o ID na mensagem
-	msg.MessageID = requestID
-
-	// Cria um canal para receber a resposta
-	responseChan := make(chan models.Message, 1)
-
-	// Registra o canal no mapa de solicitações pendentes
-	n.mu.Lock()
-	n.pendingRequests[requestID] = responseChan
-	n.mu.Unlock()
-
-	// Garante que o canal é removido ao final
-	defer func() {
-		n.mu.Lock()
-		delete(n.pendingRequests, requestID)
-		n.mu.Unlock()
-	}()
-
-	// Envia a mensagem
-	err = n.sendMessage(msg)
+	// Update room connection time
+	err = nm.UI.VPN.DBManager.UpdateRoomConnection(res.RoomID)
 	if err != nil {
-		return models.Message{}, fmt.Errorf("erro ao enviar mensagem: %w", err)
+		log.Printf("Warning: Could not update room connection time: %v", err)
+		// Continue even if update fails
 	}
 
-	// Configura um timeout
-	timeout := time.After(time.Duration(timeoutSeconds) * time.Second)
+	// Store room information
+	nm.RoomID = res.RoomID
+	nm.RoomPassword = password
 
-	// Aguarda a resposta ou o timeout
-	select {
-	case response := <-responseChan:
-		return response, nil
-	case <-timeout:
-		return models.Message{}, fmt.Errorf("timeout esperando resposta do servidor após %d segundos", timeoutSeconds)
-	}
+	// Update data layer
+	nm.UI.RealtimeData.SetRoomInfo(res.RoomID, password)
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
+
+	// Get room list
+	nm.UI.refreshNetworkList()
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
 }
 
-// RegisterMessageCallback registra um callback para ser chamado quando uma
-// mensagem com um determinado ID for recebida
-func (n *NetworkManager) RegisterMessageCallback(messageID string, callback func(models.Message)) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.messageCallbacks[messageID] = callback
-}
-
-// UnregisterMessageCallback remove um callback para um determinado ID de mensagem
-func (n *NetworkManager) UnregisterMessageCallback(messageID string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	delete(n.messageCallbacks, messageID)
-}
-
-// processMessageID processa uma mensagem recebida que contenha um ID
-// Essa função deve ser chamada do handler de mensagens WebSocket
-func (n *NetworkManager) processMessageID(msg models.Message) bool {
-	// Se a mensagem tem um ID, verifica se é uma resposta para uma solicitação pendente
-	if msg.MessageID != "" {
-		n.mu.Lock()
-		defer n.mu.Unlock()
-
-		// Verifica se existe um canal esperando esta resposta
-		if responseChan, exists := n.pendingRequests[msg.MessageID]; exists {
-			// Envia a mensagem para o canal
-			responseChan <- msg
-			return true
-		}
-
-		// Verifica se existe um callback registrado para este ID
-		if callback, exists := n.messageCallbacks[msg.MessageID]; exists {
-			// Executa o callback em uma goroutine separada para não bloquear o processamento
-			go callback(msg)
-			return true
-		}
+// JoinRoom joins a room
+func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
+	if nm.connectionState != ConnectionStateConnected {
+		return fmt.Errorf("not connected to server")
 	}
 
-	// Se chegou aqui, não é uma resposta para uma solicitação pendente nem para um callback
-	return false
-}
-
-// saveRoomToLocalDB salva ou atualiza uma sala no banco de dados local
-func (n *NetworkManager) saveRoomToLocalDB(roomID, roomName, password string) error {
-	// Verifica se o ID da sala é válido
-	if roomID == "" {
-		return fmt.Errorf("ID da sala inválido")
-	}
-
-	// Usa o DatabaseManager para salvar a sala
-	return n.VPNClient.DBManager.SaveRoom(roomID, roomName, password)
-}
-
-// getPasswordForRoom obtém a senha para uma sala específica armazenada temporariamente
-// durante o processo de conexão
-func (n *NetworkManager) getPasswordForRoom(roomID string) (string, error) {
-	// Obtém as salas do DatabaseManager
-	rooms, err := n.VPNClient.DBManager.GetRooms()
+	// Join room
+	res, err := nm.SignalingServer.JoinRoom(roomID, password)
 	if err != nil {
-		return "", fmt.Errorf("erro ao consultar banco de dados: %w", err)
+		return fmt.Errorf("failed to join room: %v", err)
 	}
 
-	// Procura a sala com o ID especificado
-	for _, room := range rooms {
-		if room.ID == roomID {
-			return room.Password, nil
+	// Use "Sala " + roomID as the room name since there's no GetRoomName method on the backend
+	roomName := res.RoomName
+
+	// Save room to local database
+	err = nm.UI.VPN.DBManager.SaveRoom(roomID, roomName, password)
+	if err != nil {
+		log.Printf("Warning: Could not save room to database: %v", err)
+		// Continue even if database save fails
+	} else {
+		log.Printf("Room saved to database: ID=%s, Name=%s", roomID, roomName)
+	}
+
+	// Update room connection time
+	err = nm.UI.VPN.DBManager.UpdateRoomConnection(roomID)
+	if err != nil {
+		log.Printf("Warning: Could not update room connection time: %v", err)
+		// Continue even if update fails
+	}
+
+	// Store room information
+	nm.RoomID = roomID
+	nm.RoomPassword = password
+
+	// Update data layer
+	nm.UI.RealtimeData.SetRoomInfo(roomID, password)
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
+}
+
+// LeaveRoom leaves the current room
+func (nm *NetworkManager) LeaveRoom() error {
+	if nm.connectionState != ConnectionStateConnected {
+		return fmt.Errorf("not connected to server")
+	}
+
+	log.Printf("Leaving room with ID: %s", nm.RoomID)
+
+	// Store room ID before clearing
+	roomID := nm.RoomID
+
+	// Leave room
+	_, err := nm.SignalingServer.LeaveRoom(roomID)
+	if err != nil {
+		log.Printf("Error from SignalingClient when leaving room: %v", err)
+		return fmt.Errorf("failed to leave room: %v", err)
+	}
+
+	// Delete the room from the local database
+	err = nm.UI.VPN.DBManager.DeleteRoom(roomID)
+	if err != nil {
+		log.Printf("Error deleting room from database: %v", err)
+		// Continue even if database deletion fails
+	}
+
+	// Clear room information
+	nm.RoomID = ""
+	nm.RoomPassword = ""
+
+	// Update data layer
+	nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
+}
+
+// LeaveRoomById leaves a specific room by ID
+func (nm *NetworkManager) LeaveRoomById(roomID string) error {
+	if nm.connectionState != ConnectionStateConnected {
+		return fmt.Errorf("not connected to server")
+	}
+
+	log.Printf("Leaving room with ID: %s", roomID)
+
+	// Leave room
+	_, err := nm.SignalingServer.LeaveRoom(roomID)
+	if err != nil {
+		log.Printf("Error from SignalingClient when leaving room: %v", err)
+		return fmt.Errorf("failed to leave room: %v", err)
+	}
+
+	// Delete the room from the local database
+	err = nm.UI.VPN.DBManager.DeleteRoom(roomID)
+	if err != nil {
+		log.Printf("Error deleting room from database: %v", err)
+		// Continue even if database deletion fails
+	}
+
+	// If we're leaving the current room, clear our room information
+	if nm.RoomID == roomID {
+		nm.RoomID = ""
+		nm.RoomPassword = ""
+
+		// Update data layer
+		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+	}
+
+	// Emit the room left event regardless
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
+}
+
+// HandleRoomDeleted handles when a room has been deleted
+func (nm *NetworkManager) HandleRoomDeleted(roomID string) error {
+	log.Printf("Handling room deletion for ID: %s", roomID)
+
+	// If we're in this room, clear our room data
+	if nm.RoomID == roomID {
+		nm.RoomID = ""
+		nm.RoomPassword = ""
+
+		// Update data layer
+		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.UI.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
+
+		// Update UI
+		nm.UI.refreshUI()
+	}
+
+	// Delete the room from the database using the existing database manager
+	return nm.UI.VPN.DBManager.DeleteRoom(roomID)
+}
+
+// Disconnect disconnects from the VPN network
+func (nm *NetworkManager) Disconnect() error {
+	if nm.connectionState == ConnectionStateDisconnected {
+		return nil
+	}
+
+	// Disconnect from signaling server
+	if nm.SignalingServer != nil {
+		err := nm.SignalingServer.Disconnect()
+		if err != nil {
+			log.Printf("Error disconnecting from signaling server: %v", err)
 		}
 	}
 
-	return "", fmt.Errorf("sala não encontrada no banco de dados")
+	// Stop virtual network
+	if nm.VirtualNetwork != nil {
+		nm.VirtualNetwork = nil
+	}
+
+	// Set state to disconnected
+	nm.connectionState = ConnectionStateDisconnected
+	nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
+	nm.UI.RealtimeData.SetStatusMessage("Disconnected")
+	nm.ReconnectAttempts = 0
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
 }

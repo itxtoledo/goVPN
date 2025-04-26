@@ -1,13 +1,18 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/theme"
+	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
-	"github.com/itxtoledo/govpn/libs/crypto_utils"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -18,64 +23,73 @@ type VPNClient struct {
 	IsConnected    bool
 	NetworkManager *NetworkManager
 	UI             *UIManager
-	Config         *storage.ConfigManager
+	ConfigManager  *ConfigManager
 
-	// Chaves RSA para identificação do usuário
-	PrivateKeyPEM string // Chave privada em formato PEM
-	PublicKeyPEM  string // Chave pública em formato PEM - Agora é o identificador principal
+	// Identificação do cliente
+	PublicKeyStr string // Identificador principal do cliente
 }
 
 // NewVPNClient cria uma nova instância do cliente VPN
-func NewVPNClient() *VPNClient {
+func NewVPNClient(ui *UIManager) *VPNClient {
 	vpn := &VPNClient{
-		IsConnected: false,
-		Config:      storage.NewConfigManager(),
+		IsConnected:   false,
+		UI:            ui,
+		ConfigManager: ui.ConfigManager,
 	}
 
 	// Inicialização do banco de dados
 	dbManager, err := storage.NewDatabaseManager()
 	if err != nil {
-		log.Fatalf("Error initializing database: %v", err)
-	}
-	vpn.DBManager = dbManager
+		log.Printf("Error initializing database: %v", err)
+	} else {
+		vpn.DBManager = dbManager
 
-	// Carrega ou gera chaves RSA para identificação do usuário
-	// Esta etapa é essencial e deve acontecer logo na inicialização
-	if err := vpn.loadOrGenerateKeys(); err != nil {
-		log.Fatalf("Critical error loading/generating RSA keys: %v", err)
-		// Se não conseguirmos gerar as chaves, não faz sentido continuar
+		// Carrega ou gera identificador do cliente
+		if err := vpn.loadOrGenerateIdentifier(); err != nil {
+			log.Printf("Critical error loading/generating client identifier: %v", err)
+			// Se não conseguirmos gerar o identificador, não faz sentido continuar
+		} else {
+			log.Printf("Client identifier successfully loaded")
+		}
 	}
-
-	log.Printf("RSA keys successfully loaded: public key available")
 
 	// Inicialização do gerenciador de rede
-	vpn.NetworkManager = NewNetworkManager(vpn)
+	vpn.NetworkManager = NewNetworkManager(ui)
 
-	// Carrega configurações do banco de dados
+	// Carrega configurações
 	vpn.loadSettings()
-
-	// Inicialização da interface gráfica (separada da inicialização completa)
-	// Isso evita dependências circulares durante a inicialização
-	vpn.UI = NewUIManager(vpn)
 
 	return vpn
 }
 
 // loadSettings carrega as configurações salvas do banco de dados
 func (v *VPNClient) loadSettings() {
-	// Carrega as configurações de sinalização
-	signalServer, err := v.DBManager.LoadSignalServer()
-	if err == nil && signalServer != "" {
-		v.NetworkManager.SignalServer = signalServer
+	// Carrega as configurações de usuário do config manager
+	config := v.ConfigManager.GetConfig()
+
+	// Atualiza o nome de usuário na camada de dados em tempo real
+	v.UI.RealtimeData.SetUsername(config.Username)
+
+	// Atualiza o endereço do servidor na camada de dados em tempo real
+	v.UI.RealtimeData.SetServerAddress(config.ServerAddress)
+
+	// Aplicar o tema
+	switch config.Theme {
+	case "light":
+		v.UI.App.Settings().SetTheme(fyne.Theme(theme.LightTheme()))
+	case "dark":
+		v.UI.App.Settings().SetTheme(fyne.Theme(theme.DarkTheme()))
+	default:
+		// Tema do sistema é o padrão, não é necessário configurá-lo explicitamente
 	}
 
-	// Carrega as configurações de STUN/ICE servers
-	iceServers, err := v.DBManager.GetICEServers()
-	if err == nil && len(iceServers) > 0 {
-		v.NetworkManager.RTCConfig.ICEServers = iceServers
+	// Configura o idioma (se implementado)
+	if config.Language != "" {
+		v.UI.RealtimeData.SetLanguage(config.Language)
 	}
 
-	// Outras configurações podem ser carregadas aqui
+	log.Printf("Settings loaded: Username=%s, Theme=%s, Language=%s, Server=%s",
+		config.Username, config.Theme, config.Language, config.ServerAddress)
 }
 
 // Run inicia o cliente VPN
@@ -84,80 +98,109 @@ func (v *VPNClient) Run() {
 
 	// Attempt to connect to the backend in a background goroutine
 	go func() {
-		log.Println("Attempting to connect to backend server...")
-		err := v.NetworkManager.Connect()
+		// Defina o estado inicial na camada de dados
+		v.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
+		v.UI.RealtimeData.SetStatusMessage("Starting...")
+
+		// Obter o endereço do servidor das configurações
+		config := v.ConfigManager.GetConfig()
+		serverAddress := config.ServerAddress
+
+		// Usar endereço padrão se não estiver definido
+		if serverAddress == "" {
+			serverAddress = "ws://localhost:8080"
+			log.Println("No server address configured, using default:", serverAddress)
+		}
+
+		// Inicializar o signaling client no NetworkManager se necessário
+		if v.NetworkManager.SignalingServer == nil {
+			v.NetworkManager.SignalingServer = NewSignalingClient(v.UI, v.PublicKeyStr)
+		}
+
+		// Set the reference to this VPNClient in the SignalingClient
+		v.NetworkManager.SignalingServer.SetVPNClient(v)
+
+		// Tentativa de conexão ao servidor de backend
+		log.Printf("Iniciando conexão automática com o servidor de sinalização")
+		log.Printf("Attempting to connect to backend server: %s", serverAddress)
+		v.UI.RealtimeData.SetStatusMessage("Connecting to backend...")
+
+		// Conectar ao servidor
+		err := v.NetworkManager.Connect(serverAddress)
+
 		if err != nil {
 			log.Printf("Background connection attempt failed: %v", err)
+			v.UI.RealtimeData.SetStatusMessage("Connection failed")
+			v.UI.RealtimeData.EmitEvent(data.EventError, fmt.Sprintf("Connection failed: %v", err), nil)
 		} else {
 			log.Println("Successfully connected to backend server in background")
-			v.NetworkManager.GetRoomList() // Fetch the room list while we're at it
+			v.UI.RealtimeData.SetStatusMessage("Connected")
 
-			// Update the UI power button state after successful connection
-			// This is safe because the Fyne UI uses a queue system that handles UI updates from goroutines
-			if v.UI != nil {
-				// A small delay to ensure UI is fully initialized
-				// This is important as UI might not be ready immediately after app start
-				time.Sleep(500 * time.Millisecond)
-				v.UI.refreshNetworkList()
-			}
+			// Atualizar a lista de salas
+			v.UI.refreshNetworkList()
 		}
 	}()
-
-	// Inicia a interface gráfica
-	v.UI.Start()
 }
 
-// loadOrGenerateKeys carrega as chaves RSA do banco ou gera novas se não existirem
-func (v *VPNClient) loadOrGenerateKeys() error {
-	// Tenta carregar as chaves existentes primeiro
-	privateKey, publicKey, err := v.DBManager.LoadRSAKeys()
+// loadOrGenerateIdentifier carrega o identificador do cliente do banco ou gera um novo se não existir
+func (v *VPNClient) loadOrGenerateIdentifier() error {
+	// Tenta carregar o identificador existente primeiro
+	_, publicKey, err := v.DBManager.LoadKeys()
 
-	if err == nil {
-		// Chaves encontradas, carrega-as
-		v.PrivateKeyPEM = privateKey
-		v.PublicKeyPEM = publicKey
-		log.Println("RSA keys successfully loaded.")
+	if err == nil && publicKey != "" {
+		// Identificador encontrado
+		v.PublicKeyStr = publicKey
+		log.Println("Client identifier successfully loaded.")
 		return nil
-	}
-
-	if err != sql.ErrNoRows {
+	} else if err != sql.ErrNoRows && err != nil {
 		// Erro diferente de "não encontrado"
 		return err
 	}
 
-	// Chaves não encontradas, gera novas
-	log.Println("Generating new RSA keys...")
-	privateKey, publicKey, err = crypto_utils.GenerateRSAKeys()
-	if err != nil {
-		return err
-	}
+	// Identificador não encontrado, gera novo
+	log.Println("No client identifier found, generating new one...")
 
-	// Armazena as chaves no banco de dados
-	err = v.DBManager.SaveRSAKeys(privateKey, publicKey)
+	// Gerar id simples (pode ser um UUID ou outro identificador único)
+	publicKey = generateClientID()
+
+	// Armazena o identificador no banco de dados
+	err = v.DBManager.SaveKeys("", publicKey)
 	if err != nil {
 		return err
 	}
 
 	// Atualiza a estrutura VPNClient
-	v.PrivateKeyPEM = privateKey
-	v.PublicKeyPEM = publicKey
-	log.Println("New RSA keys generated and stored successfully.")
+	v.PublicKeyStr = publicKey
+	log.Println("New client identifier generated and stored successfully.")
 
 	return nil
 }
 
-// getPublicKey retorna a chave pública, garantindo que ela esteja carregada
-func (v *VPNClient) getPublicKey() string {
-	// Se a chave pública não estiver carregada, tenta carregá-la
-	if v.PublicKeyPEM == "" {
-		err := v.loadOrGenerateKeys()
+// generateClientID gera um ID de cliente único
+func generateClientID() string {
+	// Geramos um identificador simples baseado em timestamp + random
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	// Adicionar 8 bytes aleatórios
+	b := make([]byte, 8)
+	rand.Read(b)
+	randomHex := hex.EncodeToString(b)
+
+	return fmt.Sprintf("%s-%s", timestamp, randomHex)
+}
+
+// GetIdentifier retorna o identificador do cliente
+func (v *VPNClient) GetIdentifier() string {
+	// Se o identificador não estiver carregado, tenta carregá-lo
+	if v.PublicKeyStr == "" {
+		err := v.loadOrGenerateIdentifier()
 		if err != nil {
-			log.Printf("Error loading/generating RSA keys: %v", err)
+			log.Printf("Error loading/generating client identifier: %v", err)
 			return ""
 		}
 	}
 
-	return v.PublicKeyPEM
+	return v.PublicKeyStr
 }
 
 // GetConfig obtém uma configuração do ambiente ou retorna um valor padrão

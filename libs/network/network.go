@@ -216,3 +216,7 @@ func (v *VirtualNetwork) CaptureAndSendPackets() {
 	// Implementação simplificada
 	log.Println("Iniciando captura de pacotes (simulação)")
 }
+
+func (v *VirtualNetwork) GetRoomPassword() string {
+	return v.roomPassword
+}

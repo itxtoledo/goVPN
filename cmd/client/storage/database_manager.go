@@ -2,18 +2,24 @@ package storage
 
 import (
 	"database/sql"
-	"errors"
 	"os"
 	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/pion/webrtc/v3"
 )
 
 // DatabaseManager handles all database interactions
 type DatabaseManager struct {
 	DB *sql.DB
+}
+
+// Room represents a VPN room
+type Room struct {
+	ID            string
+	Name          string
+	Password      string
+	LastConnected time.Time
 }
 
 // NewDatabaseManager creates and initializes a new database manager
@@ -97,42 +103,28 @@ func (dm *DatabaseManager) LoadStunServer() (string, error) {
 	return dm.GetSetting("stun_server")
 }
 
-// GetICEServers builds and returns ICE server configuration
-func (dm *DatabaseManager) GetICEServers() ([]webrtc.ICEServer, error) {
-	stunServer, err := dm.LoadStunServer()
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-
-	// If we got a valid STUN server, use it
-	if stunServer != "" {
-		return []webrtc.ICEServer{
-			{
-				URLs: []string{stunServer},
-			},
-		}, nil
-	}
-
-	// Otherwise return default configuration
-	return []webrtc.ICEServer{
-		{
-			URLs: []string{"stun:stun.l.google.com:19302"},
-		},
-	}, nil
-}
-
-// SaveRSAKeys stores RSA keys in the database
-func (dm *DatabaseManager) SaveRSAKeys(privateKey, publicKey string) error {
+// SaveKeys stores Ed25519 keys in the database
+func (dm *DatabaseManager) SaveKeys(privateKey, publicKey string) error {
 	_, err := dm.DB.Exec("INSERT OR REPLACE INTO keys (id, private_key, public_key) VALUES ('user_key', ?, ?)",
 		privateKey, publicKey)
 	return err
 }
 
-// LoadRSAKeys loads RSA keys from the database
-func (dm *DatabaseManager) LoadRSAKeys() (privateKey string, publicKey string, err error) {
+// LoadKeys loads Ed25519 keys from the database
+func (dm *DatabaseManager) LoadKeys() (privateKey string, publicKey string, err error) {
 	err = dm.DB.QueryRow("SELECT private_key, public_key FROM keys WHERE id = 'user_key' LIMIT 1").
 		Scan(&privateKey, &publicKey)
 	return privateKey, publicKey, err
+}
+
+// SaveRSAKeys is kept for backward compatibility, now uses SaveKeys
+func (dm *DatabaseManager) SaveRSAKeys(privateKey, publicKey string) error {
+	return dm.SaveKeys(privateKey, publicKey)
+}
+
+// LoadRSAKeys is kept for backward compatibility, now uses LoadKeys
+func (dm *DatabaseManager) LoadRSAKeys() (privateKey string, publicKey string, err error) {
+	return dm.LoadKeys()
 }
 
 // SaveRoom saves a room to the database
@@ -143,32 +135,17 @@ func (dm *DatabaseManager) SaveRoom(id, name, password string) error {
 }
 
 // GetRooms retrieves all saved rooms
-func (dm *DatabaseManager) GetRooms() ([]struct {
-	ID            string
-	Name          string
-	Password      string
-	LastConnected time.Time
-}, error) {
+func (dm *DatabaseManager) GetRooms() ([]Room, error) {
 	rows, err := dm.DB.Query("SELECT id, name, password, last_connected FROM rooms ORDER BY last_connected DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var rooms []struct {
-		ID            string
-		Name          string
-		Password      string
-		LastConnected time.Time
-	}
+	var rooms []Room
 
 	for rows.Next() {
-		var room struct {
-			ID            string
-			Name          string
-			Password      string
-			LastConnected time.Time
-		}
+		var room Room
 		if err := rows.Scan(&room.ID, &room.Name, &room.Password, &room.LastConnected); err != nil {
 			return nil, err
 		}

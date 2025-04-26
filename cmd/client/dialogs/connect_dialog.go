@@ -1,91 +1,91 @@
 package dialogs
 
 import (
-	"errors"
-
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
 
-// ConnectDialog manages the connect to network interface as a dialog
+// ConnectDialogManager é a interface que define as operações necessárias para o diálogo de conexão
+type ConnectDialogManager interface {
+	GetSelectedRoom() interface{}
+	ConnectToRoom(roomName, password string) error
+}
+
+// ConnectDialog representa um diálogo para conexão a uma sala
 type ConnectDialog struct {
-	MainWindow       fyne.Window
-	ConnectDialogRef *interface{}
-	ShowMessage      func(title, message string)
+	UI            ConnectDialogManager
+	Dialog        dialog.Dialog
+	PasswordEntry *widget.Entry
 }
 
-// NewConnectDialog creates a new connect dialog
-func NewConnectDialog(
-	mainWindow fyne.Window,
-	connectDialogRef *interface{},
-	showMessage func(title, message string),
-) *ConnectDialog {
-	return &ConnectDialog{
-		MainWindow:       mainWindow,
-		ConnectDialogRef: connectDialogRef,
-		ShowMessage:      showMessage,
+// NewConnectDialog cria uma nova instância do diálogo de conexão
+func NewConnectDialog(ui ConnectDialogManager) *ConnectDialog {
+	cd := &ConnectDialog{
+		UI: ui,
 	}
+	return cd
 }
 
-// Show displays the connect dialog using the form dialog approach
-func (cd *ConnectDialog) Show(
-	validatePassword func(string) bool,
-	configurePasswordEntry func(*widget.Entry),
-	connectToRoom func(roomID, password string) error,
-) {
-	// Create form inputs
-	networkIDEntry := widget.NewEntry()
-	passwordEntry := widget.NewPasswordEntry()
-
-	// Apply reusable password validation configuration
-	configurePasswordEntry(passwordEntry)
-
-	// Create form items
-	items := []*widget.FormItem{
-		widget.NewFormItem("ID", networkIDEntry),
-		widget.NewFormItem("Pass", passwordEntry),
+// Show exibe o diálogo de conexão
+func (cd *ConnectDialog) Show() {
+	// Obter a sala selecionada
+	room := cd.UI.GetSelectedRoom()
+	if room == nil {
+		return
 	}
 
-	// Show the form dialog
-	formDialog := dialog.NewForm("Connect to Network", "Connect", "Cancel", items, func(submitted bool) {
-		if !submitted {
-			// Dialog was cancelled
-			*cd.ConnectDialogRef = nil
-			return
-		}
+	// O sistema de tipos Go não nos permite acessar diretamente os campos da sala
+	// através da interface, então assumimos que o tipo de retorno é um mapa
+	roomData, ok := room.(map[string]interface{})
+	if !ok {
+		return
+	}
 
-		// Process form submission
-		networkID := networkIDEntry.Text
-		password := passwordEntry.Text
+	roomName, _ := roomData["Name"].(string)
+	passwordRequired := roomData["Password"] != nil && roomData["Password"].(string) != ""
 
-		// Basic validation
-		if networkID == "" {
-			dialog.ShowError(errors.New("Network ID cannot be empty"), cd.MainWindow)
-			return
-		}
+	var content fyne.CanvasObject
 
-		// Validate password using the abstract function
-		if !validatePassword(password) {
-			dialog.ShowError(errors.New("Password must be exactly 4 digits"), cd.MainWindow)
-			return
-		}
+	if passwordRequired {
+		// Se a sala requer senha, mostrar campo de senha
+		cd.PasswordEntry = widget.NewPasswordEntry()
+		cd.PasswordEntry.PlaceHolder = "Enter room password"
 
-		// Show connection in progress message
-		cd.ShowMessage("Connection", "Attempting to connect to room: "+networkID)
+		content = container.NewVBox(
+			widget.NewLabel("This room requires a password:"),
+			cd.PasswordEntry,
+		)
+	} else {
+		// Se a sala não requer senha, mostrar apenas uma confirmação
+		content = widget.NewLabel("Connect to this room?")
+	}
 
-		// Attempt to connect using the provided connection function
-		if err := connectToRoom(networkID, password); err != nil {
-			// If connection fails, show the error
-			dialog.ShowError(errors.New("Connection failed: "+err.Error()), cd.MainWindow)
-			return
-		}
+	// Criar o diálogo
+	cd.Dialog = dialog.NewCustomConfirm(
+		"Connect to Room",
+		"Connect",
+		"Cancel",
+		content,
+		func(confirmed bool) {
+			if confirmed {
+				password := ""
+				if cd.PasswordEntry != nil {
+					password = cd.PasswordEntry.Text
+				}
 
-		// Clear the reference only on successful connection
-		*cd.ConnectDialogRef = nil
-	}, cd.MainWindow)
+				// Tentar conectar à sala
+				err := cd.UI.ConnectToRoom(roomName, password)
+				if err != nil {
+					// Exibir erro em caso de falha
+					errorDialog := dialog.NewError(err, fyne.CurrentApp().Driver().AllWindows()[0])
+					errorDialog.Show()
+				}
+			}
+		},
+		fyne.CurrentApp().Driver().AllWindows()[0],
+	)
 
-	// Define a minimum width for the dialog
-	formDialog.Resize(fyne.NewSize(300, 200))
-	formDialog.Show()
+	cd.Dialog.Show()
 }

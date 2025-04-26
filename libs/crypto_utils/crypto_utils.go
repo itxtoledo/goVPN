@@ -1,82 +1,30 @@
 package crypto_utils
 
 import (
-	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"time"
-
-	"github.com/itxtoledo/govpn/libs/models"
+	"log"
 )
 
-// GenerateRSAKeys generates an RSA key pair and returns both keys as base64 encoded strings
-func GenerateRSAKeys() (string, string, error) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+// ParsePublicKey parses a base64 encoded public key
+func ParsePublicKey(keyStr string) (ed25519.PublicKey, error) {
+	keyBytes, err := base64.StdEncoding.DecodeString(keyStr)
 	if err != nil {
-		return "", "", err
+		log.Printf("Error decoding public key from base64: %v", err)
+		return nil, err
 	}
 
-	// Marshal the public key
-	pubKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
-	if err != nil {
-		return "", "", err
-	}
-	publicKeyStr := base64.StdEncoding.EncodeToString(pubKeyBytes)
-
-	// Marshal the private key
-	privKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyStr := base64.StdEncoding.EncodeToString(privKeyBytes)
-
-	return privateKeyStr, publicKeyStr, nil
-}
-
-// SignMessage signs a message with the private key
-func SignMessage(msg models.Message, privateKey *rsa.PrivateKey) (string, error) {
-	msgCopy := msg
-	msgCopy.Signature = ""
-	data, err := json.Marshal(msgCopy)
-	if err != nil {
-		return "", err
-	}
-	hash := sha256.Sum256(data)
-	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(signature), nil
-}
-
-// VerifySignature verifies a message signature using the public key
-func VerifySignature(msg models.Message, pubKey *rsa.PublicKey) bool {
-	if msg.Signature == "" {
-		return false
+	if len(keyBytes) != ed25519.PublicKeySize {
+		log.Printf("Invalid public key size: got %d bytes, expected %d bytes", len(keyBytes), ed25519.PublicKeySize)
+		return nil, errors.New("invalid public key size")
 	}
 
-	sigBytes, err := base64.StdEncoding.DecodeString(msg.Signature)
-	if err != nil {
-		return false
-	}
-
-	msgCopy := msg
-	msgCopy.Signature = ""
-	data, err := json.Marshal(msgCopy)
-	if err != nil {
-		return false
-	}
-	hash := sha256.Sum256(data)
-
-	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hash[:], sigBytes)
-	return err == nil
+	return ed25519.PublicKey(keyBytes), nil
 }
 
 // Encrypt encrypts data using AES-GCM
@@ -106,7 +54,6 @@ func Encrypt(plaintext []byte, key []byte) ([]byte, error) {
 func Decrypt(ciphertext []byte, key []byte) ([]byte, error) {
 	if len(ciphertext) < 12 {
 		return nil, errors.New("ciphertext too short")
-
 	}
 
 	block, err := aes.NewCipher(key)
@@ -128,20 +75,4 @@ func Decrypt(ciphertext []byte, key []byte) ([]byte, error) {
 	}
 
 	return plaintext, nil
-}
-
-// GenerateID creates a unique ID
-func GenerateID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-// GenerateRoomID creates a SHA-256 hash based on room name, salt, and timestamp
-func GenerateRoomID(roomName string) string {
-	salt := make([]byte, 16)
-	rand.Read(salt)
-	input := fmt.Sprintf("%s:%s:%d", roomName, base64.StdEncoding.EncodeToString(salt), time.Now().UnixNano())
-	hash := sha256.Sum256([]byte(input))
-	return hex.EncodeToString(hash[:])
 }
