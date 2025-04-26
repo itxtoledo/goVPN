@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -80,13 +81,19 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 							err := ntc.UI.VPN.NetworkManager.LeaveRoomById(currentRoom.ID)
 							if err != nil {
 								log.Printf("Error deleting room: %v", err)
-								fyne.Do(func() {
-									dialog := widget.NewModalPopUp(
-										widget.NewLabel("Failed to delete room: "+err.Error()),
-										ntc.UI.MainWindow.Canvas(),
-									)
-									dialog.Show()
+								fyne.CurrentApp().SendNotification(&fyne.Notification{
+									Title:   "Error",
+									Content: "Failed to leave room: " + err.Error(),
 								})
+							} else {
+								log.Println("Successfully left room:", currentRoom.Name)
+								fyne.CurrentApp().SendNotification(&fyne.Notification{
+									Title:   "Success",
+									Content: "Successfully left room: " + currentRoom.Name,
+								})
+
+								// Show success dialog on the main thread
+								dialog.NewInformation("Success", "Successfully left room: "+currentRoom.Name, ntc.UI.MainWindow).Show()
 							}
 						}()
 					}

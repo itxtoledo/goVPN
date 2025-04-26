@@ -165,9 +165,9 @@ func (s *SignalingClient) SendHeartbeat() error {
 // sendPackagedMessage empacota e envia mensagem para o backend e espera pela resposta
 // Cria BaseRequest com a chave pública do cliente,
 // gera ID da mensagem, empacota na struct SignalingMessage e envia via WebSocket
-func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payload interface{}) error {
+func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payload interface{}) (interface{}, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	// Automatically inject public key into BaseRequest if available
@@ -178,7 +178,7 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 	// Gerar ID da mensagem
 	messageID, err := models.GenerateMessageID()
 	if err != nil {
-		return fmt.Errorf("error generating message ID: %v", err)
+		return nil, fmt.Errorf("error generating message ID: %v", err)
 	}
 
 	// Register this message ID to track the response
@@ -187,7 +187,7 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 	// Serializar payload para JSON
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("error serializing payload: %v", err)
+		return nil, fmt.Errorf("error serializing payload: %v", err)
 	}
 
 	// Criar SignalingMessage
@@ -201,7 +201,7 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 	log.Printf("Sending message of type %s with ID %s", msgType, messageID)
 	err = s.Conn.WriteJSON(message)
 	if err != nil {
-		return fmt.Errorf("error sending message: %v", err)
+		return nil, fmt.Errorf("error sending message: %v", err)
 	}
 
 	// Wait for response with timeout
@@ -214,22 +214,89 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 			var errorPayload map[string]string
 			if err := json.Unmarshal(response.Payload, &errorPayload); err == nil {
 				if errorMsg, ok := errorPayload["error"]; ok {
-					return fmt.Errorf("server error: %s", errorMsg)
+					return nil, fmt.Errorf("server error: %s", errorMsg)
 				}
 			}
-			return errors.New("unknown server error")
+			return nil, errors.New("unknown server error")
 		}
 
-		return nil
+		// Parse the response payload based on the request type
+		parsedResponse, err := s.parseResponse(msgType, response)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing response: %v", err)
+		}
+		return parsedResponse, nil
+
 	case <-time.After(10 * time.Second):
-		return fmt.Errorf("timeout waiting for response to message ID %s", messageID)
+		return nil, fmt.Errorf("timeout waiting for response to message ID %s", messageID)
 	}
 }
 
+// parseResponse parses the response payload based on the request type
+func (s *SignalingClient) parseResponse(requestType models.MessageType, response models.SignalingMessage) (interface{}, error) {
+	switch requestType {
+	case models.TypeCreateRoom:
+		if response.Type == models.TypeRoomCreated {
+			var resp models.CreateRoomResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal create room response: %v", err)
+			}
+			return resp, nil
+		}
+
+	case models.TypeJoinRoom:
+		if response.Type == models.TypeRoomJoined {
+			var resp models.JoinRoomResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal join room response: %v", err)
+			}
+			return resp, nil
+		}
+
+	case models.TypeLeaveRoom:
+		if response.Type == models.TypeLeaveRoom {
+			var resp models.LeaveRoomResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal leave room response: %v", err)
+			}
+			return resp, nil
+		}
+
+	case models.TypeKick:
+		if response.Type == models.TypeKickSuccess {
+			var resp models.KickResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal kick response: %v", err)
+			}
+			return resp, nil
+		}
+
+	case models.TypeRename:
+		if response.Type == models.TypeRenameSuccess {
+			var resp models.RenameResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal rename response: %v", err)
+			}
+			return resp, nil
+		}
+
+	case models.TypePing:
+		// For ping, we just return a simple success message
+		return map[string]interface{}{"status": "success"}, nil
+	}
+
+	// If we can't determine the response type, return the raw payload as a map
+	var genericResponse map[string]interface{}
+	if err := json.Unmarshal(response.Payload, &genericResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal generic response: %v", err)
+	}
+	return genericResponse, nil
+}
+
 // CreateRoom cria uma nova sala no servidor
-func (s *SignalingClient) CreateRoom(name string, password string) error {
+func (s *SignalingClient) CreateRoom(name string, password string) (*models.CreateRoomResponse, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Creating room: %s", name)
@@ -242,13 +309,23 @@ func (s *SignalingClient) CreateRoom(name string, password string) error {
 	}
 
 	// Enviar solicitação de criação de sala usando a função de empacotamento
-	return s.sendPackagedMessage(models.TypeCreateRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeCreateRoom, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.CreateRoomResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
 }
 
 // JoinRoom entra em uma sala
-func (s *SignalingClient) JoinRoom(roomID string, password string) error {
+func (s *SignalingClient) JoinRoom(roomID string, password string) (*models.JoinRoomResponse, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Joining room: %s", roomID)
@@ -265,32 +342,51 @@ func (s *SignalingClient) JoinRoom(roomID string, password string) error {
 	}
 
 	// Enviar solicitação para entrar na sala usando a função de empacotamento
-	return s.sendPackagedMessage(models.TypeJoinRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeJoinRoom, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.JoinRoomResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
 }
 
 // LeaveRoom sai de uma sala
-func (s *SignalingClient) LeaveRoom(roomID string) error {
+func (s *SignalingClient) LeaveRoom(roomID string) (*models.LeaveRoomResponse, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Leaving room: %s", roomID)
 
 	// Criar payload para leave room
 	payload := &models.LeaveRoomRequest{
-		BaseRequest:  models.BaseRequest{},
-		RoomID:       roomID,
-		PreserveRoom: true, // Por padrão, preserva a sala quando um cliente sai
+		BaseRequest: models.BaseRequest{},
+		RoomID:      roomID,
 	}
 
 	// Enviar solicitação para sair da sala usando a função de empacotamento
-	return s.sendPackagedMessage(models.TypeLeaveRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeLeaveRoom, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.LeaveRoomResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
 }
 
 // RenameRoom renomeia uma sala (apenas o proprietário pode fazer isso)
-func (s *SignalingClient) RenameRoom(roomID string, newName string) error {
+func (s *SignalingClient) RenameRoom(roomID string, newName string) (*models.RenameResponse, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Renaming room %s to %s", roomID, newName)
@@ -303,13 +399,23 @@ func (s *SignalingClient) RenameRoom(roomID string, newName string) error {
 	}
 
 	// Enviar solicitação para renomear a sala usando a função de empacotamento
-	return s.sendPackagedMessage(models.TypeRename, payload)
+	response, err := s.sendPackagedMessage(models.TypeRename, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.RenameResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
 }
 
 // KickUser expulsa um usuário da sala (apenas o proprietário pode fazer isso)
-func (s *SignalingClient) KickUser(roomID string, targetID string) error {
+func (s *SignalingClient) KickUser(roomID string, targetID string) (*models.KickResponse, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Kicking user %s from room %s", targetID, roomID)
@@ -322,13 +428,23 @@ func (s *SignalingClient) KickUser(roomID string, targetID string) error {
 	}
 
 	// Enviar solicitação para expulsar o usuário usando a função de empacotamento
-	return s.sendPackagedMessage(models.TypeKick, payload)
+	response, err := s.sendPackagedMessage(models.TypeKick, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.KickResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
 }
 
 // SendMessage envia uma mensagem para o servidor
-func (s *SignalingClient) SendMessage(messageType string, payload map[string]interface{}) error {
+func (s *SignalingClient) SendMessage(messageType string, payload map[string]interface{}) (interface{}, error) {
 	if !s.Connected || s.Conn == nil {
-		return errors.New("not connected to server")
+		return nil, errors.New("not connected to server")
 	}
 
 	// Adicionar a chave pública ao payload
@@ -523,7 +639,8 @@ func (s *SignalingClient) sendPing() error {
 	}
 
 	// Use the existing message sending infrastructure
-	return s.sendPackagedMessage(models.TypePing, pingMessage)
+	_, err := s.sendPackagedMessage(models.TypePing, pingMessage)
+	return err
 }
 
 // registerPendingRequest registers a message ID and returns a channel to receive the response

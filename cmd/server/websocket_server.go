@@ -383,11 +383,7 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 	}
 
 	// Recupera a chave pública do cliente
-	publicKey, hasPublicKey := s.clientToPublicKey[conn]
-	if !hasPublicKey {
-		s.sendErrorSignal(conn, "Public key not found for this connection", originalID)
-		return
-	}
+	publicKey := req.PublicKey
 
 	// Busca a sala para verificar se o cliente é o dono
 	room, err := s.supabaseManager.GetRoom(roomID)
@@ -399,11 +395,8 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 	// Verifica se o cliente é o dono da sala
 	isCreator := (publicKey == room.PublicKeyB64)
 
-	// Use the PreserveRoom flag from the message
-	preserveRoom := req.PreserveRoom
-
 	// Se for o dono da sala e não for para preservar
-	if isCreator && !preserveRoom {
+	if isCreator {
 		log.Printf("Room owner is leaving room %s, intentionally deleting the room", roomID)
 
 		// Notificar todos os outros clientes que a sala foi excluída
@@ -433,8 +426,8 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 
 		log.Printf("Room %s deleted because owner left", roomID)
 	} else {
-		// Se não for o dono, ou for para preservar, apenas remove o cliente da sala
-		s.removeClient(conn, roomID, preserveRoom)
+		// Se não for o dono, apenas remove o cliente da sala
+		s.removeClient(conn, roomID)
 	}
 
 	// Confirma a saída
@@ -443,8 +436,8 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 	}
 	s.sendSignal(conn, models.TypeLeaveRoom, leaveSuccessPayload, originalID)
 
-	log.Printf("Client %s left room %s via explicit leave (isCreator=%v, preserveRoom=%v)",
-		conn.RemoteAddr().String(), roomID, isCreator, preserveRoom)
+	log.Printf("Client %s left room %s via explicit leave (isCreator=%v)",
+		conn.RemoteAddr().String(), roomID, isCreator)
 }
 
 // handleKick processes a request to kick a user from the room
@@ -473,7 +466,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 			s.sendSignal(peer, models.TypeKicked, kickedPayload, "")
 
 			peer.Close()
-			s.removeClient(peer, req.RoomID, false)
+			s.removeClient(peer, req.RoomID)
 			log.Printf("Client %s kicked from room %s", req.TargetID, req.RoomID)
 
 			kickSuccessPayload := map[string]interface{}{
@@ -695,8 +688,8 @@ func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, origi
 }
 
 // removeClient remove um cliente da sala e, se necessário, a sala do Supabase
-// Logic: Clean up client references and potentially delete room if owner leaves with preserveRoom=false
-func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string, preserveRoom bool) {
+// Logic: Clean up client references and potentially delete room if owner leaves
+func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 	// Se o roomID não foi fornecido, não há nada a fazer
 	if roomID == "" {
 		// Limpa a chave pública do cliente
@@ -737,8 +730,8 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string, pres
 		}
 	}
 
-	// Se for o criador e NÃO for para preservar a sala, deleta a sala do banco de dados
-	if isCreator && !preserveRoom {
+	// Se for o criador, deleta a sala do banco de dados
+	if isCreator {
 		err := s.supabaseManager.DeleteRoom(roomID)
 		if err != nil && (s.config.LogLevel == "debug") {
 			log.Printf("Error deleting room from Supabase on creator disconnect: %v", err)
@@ -762,21 +755,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string, pres
 				delete(s.clients, c)
 			}
 		}
-		log.Printf("Room %s deleted because owner disconnected (and preserveRoom=false)", roomID)
-	} else if isCreator {
-		// Se é o criador mas deve preservar a sala
-		log.Printf("Room %s preserved even though owner disconnected", roomID)
-
-		// Atualiza o último acesso para evitar que seja removida pela limpeza de salas antigas
-		err := s.supabaseManager.UpdateRoomActivity(roomID)
-		if err != nil && (s.config.LogLevel == "debug") {
-			log.Printf("Error updating room activity on creator disconnect: %v", err)
-		}
-
-		// Se não tiver mais clientes na sala, remove da memória mas mantém no Supabase
-		if len(s.networks[roomID]) == 0 {
-			delete(s.networks, roomID)
-		}
+		log.Printf("Room %s deleted because owner disconnected", roomID)
 	} else if len(s.networks[roomID]) == 0 {
 		// Se não houver mais clientes na sala, remove a referência da sala
 		delete(s.networks, roomID)

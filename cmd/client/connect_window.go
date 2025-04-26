@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
@@ -34,24 +33,7 @@ func (cd *ConnectDialog) Show() {
 		return
 	}
 
-	roomName := room.Name
-	passwordRequired := room.Password != ""
-
-	var content fyne.CanvasObject
-
-	if passwordRequired {
-		// Se a sala requer senha, mostrar campo de senha
-		cd.PasswordEntry = widget.NewPasswordEntry()
-		cd.PasswordEntry.PlaceHolder = "Enter room password"
-
-		content = container.NewVBox(
-			widget.NewLabel("This room requires a password:"),
-			cd.PasswordEntry,
-		)
-	} else {
-		// Se a sala não requer senha, mostrar apenas uma confirmação
-		content = widget.NewLabel("Connect to this room?")
-	}
+	content := widget.NewLabel("Connect to this room?")
 
 	// Criar o diálogo
 	cd.Dialog = dialog.NewCustomConfirm(
@@ -61,13 +43,8 @@ func (cd *ConnectDialog) Show() {
 		content,
 		func(confirmed bool) {
 			if confirmed {
-				password := ""
-				if cd.PasswordEntry != nil {
-					password = cd.PasswordEntry.Text
-				}
-
 				// Tentar conectar à sala
-				cd.connectToRoom(roomName, password)
+				cd.connectToRoom(room.ID, room.Password)
 			}
 		},
 		cd.UI.MainWindow,
@@ -77,7 +54,7 @@ func (cd *ConnectDialog) Show() {
 }
 
 // connectToRoom conecta o cliente à sala especificada
-func (cd *ConnectDialog) connectToRoom(roomName, password string) {
+func (cd *ConnectDialog) connectToRoom(roomID, password string) {
 	// Verificar se o cliente está conectado
 	if cd.UI.VPN.NetworkManager == nil || cd.UI.VPN.NetworkManager.GetConnectionState() != ConnectionStateConnected {
 		dialog.ShowError(fmt.Errorf("not connected to server"), cd.UI.MainWindow)
@@ -87,7 +64,7 @@ func (cd *ConnectDialog) connectToRoom(roomName, password string) {
 	// Use goroutine to prevent UI freezing
 	go func() {
 		// Tentar conectar à sala
-		err := cd.UI.VPN.NetworkManager.JoinRoom(roomName, password)
+		err := cd.UI.VPN.NetworkManager.JoinRoom(roomID, password)
 
 		// Use fyne.Do to safely update UI from a goroutine
 		fyne.Do(func() {

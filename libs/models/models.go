@@ -100,8 +100,7 @@ type JoinRoomResponse struct {
 // LeaveRoomRequest represents a request to leave a room
 type LeaveRoomRequest struct {
 	BaseRequest
-	RoomID       string `json:"room_id"`
-	PreserveRoom bool   `json:"preserve_room,omitempty"`
+	RoomID string `json:"room_id"`
 }
 
 // LeaveRoomResponse confirms a client has left a room

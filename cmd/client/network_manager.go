@@ -197,13 +197,40 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 	}
 
 	// Create room
-	err := nm.SignalingServer.CreateRoom(name, password)
+	res, err := nm.SignalingServer.CreateRoom(name, password)
 	if err != nil {
 		return fmt.Errorf("failed to create room: %v", err)
 	}
 
+	// Save room to local database
+	err = nm.UI.VPN.DBManager.SaveRoom(res.RoomID, name, password)
+	if err != nil {
+		log.Printf("Warning: Could not save room to database: %v", err)
+		// Continue even if database save fails
+	} else {
+		log.Printf("Room saved to database: ID=%s, Name=%s", res.RoomID, name)
+	}
+
+	// Update room connection time
+	err = nm.UI.VPN.DBManager.UpdateRoomConnection(res.RoomID)
+	if err != nil {
+		log.Printf("Warning: Could not update room connection time: %v", err)
+		// Continue even if update fails
+	}
+
+	// Store room information
+	nm.RoomID = res.RoomID
+	nm.RoomPassword = password
+
+	// Update data layer
+	nm.UI.RealtimeData.SetRoomInfo(res.RoomID, password)
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
+
 	// Get room list
 	nm.UI.refreshNetworkList()
+
+	// Update UI
+	nm.UI.refreshUI()
 
 	return nil
 }
@@ -215,13 +242,13 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 	}
 
 	// Join room
-	err := nm.SignalingServer.JoinRoom(roomID, password)
+	res, err := nm.SignalingServer.JoinRoom(roomID, password)
 	if err != nil {
 		return fmt.Errorf("failed to join room: %v", err)
 	}
 
 	// Use "Sala " + roomID as the room name since there's no GetRoomName method on the backend
-	roomName := "Sala " + roomID
+	roomName := res.RoomName
 
 	// Save room to local database
 	err = nm.UI.VPN.DBManager.SaveRoom(roomID, roomName, password)
@@ -265,7 +292,7 @@ func (nm *NetworkManager) LeaveRoom() error {
 	roomID := nm.RoomID
 
 	// Leave room
-	err := nm.SignalingServer.LeaveRoom(roomID)
+	_, err := nm.SignalingServer.LeaveRoom(roomID)
 	if err != nil {
 		log.Printf("Error from SignalingClient when leaving room: %v", err)
 		return fmt.Errorf("failed to leave room: %v", err)
@@ -301,7 +328,7 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 	log.Printf("Leaving room with ID: %s", roomID)
 
 	// Leave room
-	err := nm.SignalingServer.LeaveRoom(roomID)
+	_, err := nm.SignalingServer.LeaveRoom(roomID)
 	if err != nil {
 		log.Printf("Error from SignalingClient when leaving room: %v", err)
 		return fmt.Errorf("failed to leave room: %v", err)
