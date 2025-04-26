@@ -15,14 +15,16 @@ This document describes the WebSocket API for the GoVPN server, allowing develop
    - [Deleting a Room](#deleting-a-room)
 5. [User Management](#user-management)
    - [Kicking a User](#kicking-a-user)
-6. [WebRTC Signaling](#webrtc-signaling)
+6. [Connection Management](#connection-management)
+   - [Ping/Pong](#pingpong)
+7. [WebRTC Signaling](#webrtc-signaling)
    - [Sending Offers](#sending-offers)
    - [Sending Answers](#sending-answers)
    - [Exchanging ICE Candidates](#exchanging-ice-candidates)
-7. [Error Handling](#error-handling)
-8. [Message ID Tracking](#message-id-tracking)
-9. [Rate Limiting](#rate-limiting)
-10. [Room Expiration](#room-expiration)
+8. [Error Handling](#error-handling)
+9. [Message ID Tracking](#message-id-tracking)
+10. [Rate Limiting](#rate-limiting)
+11. [Room Expiration](#room-expiration)
 
 ## Connection Establishment
 
@@ -40,40 +42,28 @@ wss://<server-host>:<port>/ws
 
 ## Message Format
 
-The GoVPN system uses two distinct message types:
+The GoVPN system uses a message format that encapsulates all communications:
 
-1. **ClientMessage** - Messages sent from clients to the server (requires authentication)
-2. **ServerMessage** - Messages sent from server to clients (no authentication needed)
-
-### ClientMessage Format
-
-All messages sent from the client to the server must include a `signature` and `publicKey` field to verify the authenticity of the sender. A `ClientMessage` has the following structure:
+### SignalingMessage Format
 
 ```json
 {
-  "public_key": "<base64-encoded-ed25519-public-key>",
-  "signature": "<base64-encoded-signature>",
+  "message_id": "<unique-message-id>", 
   "type": "<message-type>",
-  "other_fields": "...",
+  "payload": <json-payload-as-bytes>
 }
 ```
 
-### ServerMessage Format
-
-Messages sent from the server to clients do not include authentication fields. A `ServerMessage` has the following structure:
-
-```json
-{
-  "type": "<message-type>",
-  "other_fields": "...",
-}
-```
+- `message_id`: A unique identifier for tracking request/response pairs
+- `type`: The type of message (see types below)
+- `payload`: The message content as a JSON object serialized to bytes
 
 ### Client to Server Message Types
 
 - `CreateRoom`: Create a new VPN room
 - `JoinRoom`: Join an existing room
 - `LeaveRoom`: Leave a room
+- `Ping`: Check connection and measure latency
 - `Offer`: Send a WebRTC offer to a peer
 - `Answer`: Send a WebRTC answer to a peer
 - `Candidate`: Send an ICE candidate to a peer
@@ -97,7 +87,7 @@ Messages sent from the server to clients do not include authentication fields. A
 
 ## Authentication and Security
 
-The server uses Ed25519 key pairs for room ownership verification and client authentication. All client messages must be signed with the client's private key. The client that creates a room must provide its public key during room creation. Any operations that require room ownership (such as kicking users, renaming, or deleting the room) must be signed with the corresponding private key.
+The server uses Ed25519 key pairs for room ownership verification and client authentication. All messages that require authentication must include the client's public key in the payload. The client that creates a room must provide its public key during room creation. Any operations that require room ownership (such as kicking users, renaming, or deleting the room) must be performed using the same public key used to create the room.
 
 ### Password Requirements
 
@@ -111,30 +101,32 @@ Room passwords must match the following pattern: exactly 4 numeric digits (e.g.,
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "CreateRoom",
-  "room_name": "My VPN Room",
-  "password": "1234",
-  "public_key": "<base64-encoded-public-key>",
-  "signature": "<base64-encoded-signature>",
-  "message_id": "<unique-message-id>"
+  "payload": {
+    "room_name": "My VPN Room",
+    "password": "1234",
+    "public_key": "<base64-encoded-public-key>"
+  }
 }
 ```
 
 - `room_name`: A name for the room
 - `password`: A password for the room (must be 4 digits)
 - `public_key`: Base64-encoded Ed25519 public key
-- `signature`: Base64-encoded Ed25519 signature
-- `message_id`: Optional unique identifier for tracking the response
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
+  "message_id": "<same-message-id-from-request>",
   "type": "RoomCreated",
-  "room_id": "abc123",
-  "room_name": "My VPN Room",
-  "password": "1234",
-  "message_id": "<same-message-id-from-request>"
+  "payload": {
+    "room_id": "abc123",
+    "room_name": "My VPN Room",
+    "password": "1234",
+    "public_key": "<base64-encoded-public-key>"
+  }
 }
 ```
 
@@ -142,9 +134,11 @@ Room passwords must match the following pattern: exactly 4 numeric digits (e.g.,
 
 ```json
 {
+  "message_id": "<same-message-id-from-request>",
   "type": "Error",
-  "data": "Error message here",
-  "message_id": "<same-message-id-from-request>"
+  "payload": {
+    "error": "Error message here"
+  }
 }
 ```
 
@@ -162,31 +156,32 @@ Common error messages include:
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "JoinRoom",
-  "room_id": "abc123",
-  "password": "1234",
-  "public_key": "<base64-encoded-public-key>",
-  "username": "User1",
-  "signature": "<base64-encoded-signature>",
-  "message_id": "<unique-message-id>"
+  "payload": {
+    "room_id": "abc123",
+    "password": "1234",
+    "public_key": "<base64-encoded-public-key>",
+    "username": "User1"
+  }
 }
 ```
 
 - `room_id`: ID of the room to join
 - `password`: Password for the room
 - `public_key`: Base64-encoded Ed25519 public key
-- `signature`: Base64-encoded Ed25519 signature
 - `username`: Optional username to display
-- `message_id`: Optional unique identifier for tracking the response
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
+  "message_id": "<same-message-id-from-request>",
   "type": "RoomJoined",
-  "room_id": "abc123",
-  "room_name": "My VPN Room",
-  "message_id": "<same-message-id-from-request>"
+  "payload": {
+    "room_id": "abc123",
+    "room_name": "My VPN Room"
+  }
 }
 ```
 
@@ -195,9 +190,11 @@ Common error messages include:
 ```json
 {
   "type": "PeerJoined",
-  "room_id": "abc123",
-  "public_key": "<new-user-public-key>",
-  "username": "User1"
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<new-user-public-key>",
+    "username": "User1"
+  }
 }
 ```
 
@@ -205,9 +202,11 @@ Common error messages include:
 
 ```json
 {
+  "message_id": "<same-message-id-from-request>",
   "type": "Error",
-  "data": "Error message here",
-  "message_id": "<same-message-id-from-request>"
+  "payload": {
+    "error": "Error message here"
+  }
 }
 ```
 
@@ -224,26 +223,27 @@ Common error messages include:
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "LeaveRoom",
-  "room_id": "abc123",
-  "public_key": "<base64-encoded-public-key>",
-  "signature": "<base64-encoded-signature>",
-  "message_id": "<unique-message-id>"
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<base64-encoded-public-key>"
+  }
 }
 ```
 
 - `room_id`: ID of the room to leave (if not provided, the server will use the room ID associated with the connection)
 - `public_key`: Base64-encoded Ed25519 public key
-- `signature`: Base64-encoded Ed25519 signature
-- `message_id`: Optional unique identifier for tracking the response
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
-  "type": "LeaveRoomSuccess",
-  "room_id": "abc123",
-  "message_id": "<same-message-id-from-request>"
+  "message_id": "<same-message-id-from-request>",
+  "type": "LeaveRoom",
+  "payload": {
+    "room_id": "abc123"
+  }
 }
 ```
 
@@ -253,9 +253,10 @@ Common error messages include:
 
 ```json
 {
-  "type": "Kicked",
-  "room_id": "abc123",
-  "data": "Room owner has left and closed the room"
+  "type": "RoomDeleted",
+  "payload": {
+    "room_id": "abc123"
+  }
 }
 ```
 
@@ -265,29 +266,30 @@ Common error messages include:
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "Rename",
-  "room_id": "abc123",
-  "room_name": "New Room Name",
-  "public_key": "<base64-encoded-public-key>",
-  "signature": "<base64-encoded-signature>",
-  "message_id": "<unique-message-id>"
+  "payload": {
+    "room_id": "abc123",
+    "room_name": "New Room Name",
+    "public_key": "<base64-encoded-public-key>"
+  }
 }
 ```
 
 - `room_id`: ID of the room to rename
 - `room_name`: New name for the room
 - `public_key`: Base64-encoded Ed25519 public key
-- `signature`: Base64-encoded Ed25519 signature
-- `message_id`: Optional unique identifier for tracking the response
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
+  "message_id": "<same-message-id-from-request>",
   "type": "RenameSuccess",
-  "room_id": "abc123",
-  "room_name": "New Room Name",
-  "message_id": "<same-message-id-from-request>"
+  "payload": {
+    "room_id": "abc123",
+    "room_name": "New Room Name"
+  }
 }
 ```
 
@@ -296,8 +298,10 @@ Common error messages include:
 ```json
 {
   "type": "RoomRenamed",
-  "room_id": "abc123",
-  "room_name": "New Room Name"
+  "payload": {
+    "room_id": "abc123",
+    "room_name": "New Room Name"
+  }
 }
 ```
 
@@ -313,29 +317,30 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "Kick",
-  "room_id": "abc123",
-  "target_id": "<target-client-connection-id>",
-  "public_key": "<base64-encoded-public-key>",
-  "signature": "<base64-encoded-signature>",
-  "message_id": "<unique-message-id>"
+  "payload": {
+    "room_id": "abc123",
+    "target_id": "<target-client-connection-id>",
+    "public_key": "<base64-encoded-public-key>"
+  }
 }
 ```
 
 - `room_id`: ID of the room
 - `target_id`: Connection ID of the user to kick
 - `public_key`: Base64-encoded Ed25519 public key
-- `signature`: Base64-encoded Ed25519 signature
-- `message_id`: Optional unique identifier for tracking the response
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
+  "message_id": "<same-message-id-from-request>",
   "type": "KickSuccess",
-  "room_id": "abc123",
-  "target_id": "<target-client-connection-id>",
-  "message_id": "<same-message-id-from-request>"
+  "payload": {
+    "room_id": "abc123",
+    "target_id": "<target-client-connection-id>"
+  }
 }
 ```
 
@@ -344,9 +349,53 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 ```json
 {
   "type": "Kicked",
-  "room_id": "abc123"
+  "payload": {
+    "room_id": "abc123"
+  }
 }
 ```
+
+## Connection Management
+
+### Ping/Pong
+
+The ping/pong mechanism allows clients to verify their connection to the server and measure latency.
+
+**Request (ClientMessage):**
+
+```json
+{
+  "message_id": "<unique-message-id>",
+  "type": "Ping",
+  "payload": {
+    "timestamp": <current-unix-timestamp>,
+    "public_key": "<base64-encoded-public-key>",
+    "action": "ping"
+  }
+}
+```
+
+- `timestamp`: Current client timestamp (in nanoseconds, Unix format)
+- `public_key`: Base64-encoded Ed25519 public key (optional)
+- `action`: Set to "ping" to identify the request type
+
+**Response (ServerMessage):**
+
+```json
+{
+  "message_id": "<same-message-id-from-request>",
+  "type": "Ping",
+  "payload": {
+    "client_timestamp": <original-timestamp-from-request>,
+    "server_timestamp": <current-server-timestamp>,
+    "status": "ok"
+  }
+}
+```
+
+- `client_timestamp`: The original timestamp sent by the client
+- `server_timestamp`: Current server timestamp (in nanoseconds, Unix format)
+- `status`: Always "ok" if the ping was successful
 
 ## WebRTC Signaling
 
@@ -356,12 +405,14 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "Offer",
-  "room_id": "abc123",
-  "public_key": "<base64-encoded-public-key>",
-  "destination_id": "<destination-connection-id>",
-  "offer": "<webrtc-offer-string>",
-  "signature": "<base64-encoded-signature>"
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<base64-encoded-public-key>",
+    "destination_id": "<destination-connection-id>",
+    "offer": "<webrtc-offer-string>"
+  }
 }
 ```
 
@@ -369,7 +420,6 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 - `public_key`: Sender's public key
 - `destination_id`: Connection ID of the destination user
 - `offer`: WebRTC offer in serialized format
-- `signature`: Base64-encoded Ed25519 signature
 
 ### Sending Answers
 
@@ -377,12 +427,14 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "Answer",
-  "room_id": "abc123",
-  "public_key": "<base64-encoded-public-key>",
-  "destination_id": "<destination-connection-id>",
-  "answer": "<webrtc-answer-string>",
-  "signature": "<base64-encoded-signature>"
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<base64-encoded-public-key>",
+    "destination_id": "<destination-connection-id>",
+    "answer": "<webrtc-answer-string>"
+  }
 }
 ```
 
@@ -390,7 +442,6 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 - `public_key`: Sender's public key
 - `destination_id`: Connection ID of the destination user
 - `answer`: WebRTC answer in serialized format
-- `signature`: Base64-encoded Ed25519 signature
 
 ### Exchanging ICE Candidates
 
@@ -398,12 +449,14 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 
 ```json
 {
+  "message_id": "<unique-message-id>",
   "type": "Candidate",
-  "room_id": "abc123",
-  "public_key": "<base64-encoded-public-key>",
-  "destination_id": "<destination-connection-id>",
-  "candidate": "<webrtc-ice-candidate-string>",
-  "signature": "<base64-encoded-signature>"
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<base64-encoded-public-key>",
+    "destination_id": "<destination-connection-id>",
+    "candidate": "<webrtc-ice-candidate-string>"
+  }
 }
 ```
 
@@ -411,7 +464,6 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 - `public_key`: Sender's public key
 - `destination_id`: Connection ID of the destination user
 - `candidate`: WebRTC ICE candidate in serialized format
-- `signature`: Base64-encoded Ed25519 signature
 
 ## Error Handling
 
@@ -419,9 +471,11 @@ Error messages have the following format (ServerMessage):
 
 ```json
 {
+  "message_id": "<message-id-from-original-request>",
   "type": "Error",
-  "data": "Error message here",
-  "message_id": "<message-id-from-original-request>"
+  "payload": {
+    "error": "Error message here"
+  }
 }
 ```
 
@@ -430,7 +484,6 @@ Common error conditions include:
 - Invalid password
 - Room is full
 - Rate limit exceeded
-- Invalid signature
 - Invalid public key format
 - Missing required fields
 
@@ -440,9 +493,11 @@ To track message responses, include a unique `message_id` field in your requests
 
 ```json
 {
-  "type": "YourMessageType",
   "message_id": "unique-id-123",
-  // other fields...
+  "type": "YourMessageType",
+  "payload": {
+    // other fields...
+  }
 }
 ```
 
@@ -453,17 +508,6 @@ The server implements rate limiting to prevent abuse. The default rate limiting 
 ## Room Expiration
 
 Rooms will automatically expire after a period of inactivity (default: 30 days). The server periodically cleans up inactive rooms. Room activity is updated whenever a client joins or performs actions in the room.
-
-## Signature Generation
-
-To generate signatures for ClientMessages:
-
-1. Create a copy of the message object
-2. Set the `signature` field to `""` (empty string)
-3. Serialize the message to JSON
-4. Sign the JSON data using your Ed25519 private key
-5. Base64-encode the signature
-6. Add the signature to the original message
 
 ## Implementation Example (Pseudocode)
 
@@ -476,39 +520,63 @@ publicKeyBase64 = base64Encode(publicKey)
 websocket = new WebSocket("ws://server:port/ws")
 
 // Create a room
-clientMessage = {
-  type: "CreateRoom",
+messageID = generateUUID()
+payload = {
   room_name: "My Room",
   password: "1234",
-  public_key: publicKeyBase64,
-  message_id: generateUUID()
+  public_key: publicKeyBase64
 }
 
-// Sign the message
-messageCopy = copy(clientMessage)
-messageCopy.signature = ""
-jsonData = JSON.stringify(messageCopy)
-signature = ed25519Sign(privateKey, jsonData)
-clientMessage.signature = base64Encode(signature)
+message = {
+  message_id: messageID,
+  type: "CreateRoom",
+  payload: JSON.stringify(payload)
+}
 
-websocket.send(JSON.stringify(clientMessage))
+websocket.send(JSON.stringify(message))
 
 // Handle incoming messages
 websocket.onMessage = function(event) {
   const serverMessage = JSON.parse(event.data)
+  
   switch(serverMessage.type) {
     case "RoomCreated":
-      console.log("Room created:", serverMessage.room_id)
+      const responsePayload = JSON.parse(serverMessage.payload)
+      console.log("Room created:", responsePayload.room_id)
       break
+      
     case "PeerJoined":
-      console.log("Peer joined:", serverMessage.public_key)
-      initiateWebRTCConnection(serverMessage.public_key)
+      const peerPayload = JSON.parse(serverMessage.payload)
+      console.log("Peer joined:", peerPayload.public_key)
+      initiateWebRTCConnection(peerPayload.public_key)
       break
-    case "Offer":
-      handleWebRTCOffer(serverMessage.offer, serverMessage.public_key)
+      
+    case "Ping":
+      const pingResponse = JSON.parse(serverMessage.payload)
+      const latency = (Date.now() - pingResponse.client_timestamp) / 1000000 // ms
+      console.log("Ping latency:", latency, "ms")
       break
+      
     // Handle other message types...
   }
+}
+
+// To check connection and measure latency
+function sendPing() {
+  const messageID = generateUUID()
+  const pingPayload = {
+    timestamp: Date.now(),
+    action: "ping",
+    public_key: publicKeyBase64
+  }
+  
+  const message = {
+    message_id: messageID,
+    type: "Ping",
+    payload: JSON.stringify(pingPayload)
+  }
+  
+  websocket.send(JSON.stringify(message))
 }
 ```
 
@@ -519,8 +587,8 @@ websocket.onMessage = function(event) {
 3. Store private keys securely
 4. Use HTTPS/WSS in production
 5. Implement client-side rate limiting to avoid server-side rate limit errors
-6. Always sign your client messages with your Ed25519 private key
-7. Verify that the signature of incoming messages matches the sender's public key
+6. Regularly send ping messages to keep the connection alive
+7. Handle connection errors and implement reconnection logic
 
 ---
 
