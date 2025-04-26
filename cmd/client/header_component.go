@@ -208,12 +208,6 @@ func (hc *HeaderComponent) showMenu() {
 	menu := widget.NewPopUpMenu(
 		fyne.NewMenu(
 			"Options",
-			fyne.NewMenuItem("Settings", func() {
-				if hc.UI.SettingsWindow == nil {
-					hc.UI.SettingsWindow = NewSettingsWindow(hc.UI)
-				}
-				hc.UI.SettingsWindow.Show()
-			}),
 			fyne.NewMenuItem("About", func() {
 				if hc.UI.AboutWindow == nil {
 					hc.UI.AboutWindow = NewAboutWindow(hc.UI)

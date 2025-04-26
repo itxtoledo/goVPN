@@ -22,7 +22,6 @@ type UIManager struct {
 	HomeTabComponent  *HomeTabComponent
 	HeaderComponent   *HeaderComponent
 	AboutWindow       *AboutWindow
-	SettingsWindow    *SettingsWindow
 	ConnectDialog     *ConnectDialog
 	Rooms             []*storage.Room
 	ComputerList      []Computer

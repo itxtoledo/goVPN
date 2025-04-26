@@ -14,7 +14,10 @@ import (
 
 // HomeTabComponent representa o componente da aba principal
 type HomeTabComponent struct {
-	UI *UIManager
+	UI                *UIManager
+	SettingsTab       *SettingsTabComponent
+	AppTabs           *container.AppTabs
+	NetworksContainer *fyne.Container
 }
 
 // NewHomeTabComponent cria uma nova instância do componente da aba principal
@@ -22,6 +25,10 @@ func NewHomeTabComponent(ui *UIManager) *HomeTabComponent {
 	htc := &HomeTabComponent{
 		UI: ui,
 	}
+
+	// Inicializar a aba de configurações
+	htc.SettingsTab = NewSettingsTabComponent(ui)
+
 	return htc
 }
 
@@ -29,6 +36,7 @@ func NewHomeTabComponent(ui *UIManager) *HomeTabComponent {
 func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	// Criar o container de salas disponíveis
 	roomsContainer := htc.UI.NetworkTreeComp.GetContainer()
+	htc.NetworksContainer = roomsContainer
 
 	// Criar um botão para criar uma nova sala
 	createRoomButton := widget.NewButtonWithIcon("Create Room", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "contentAdd"), func() {
@@ -72,8 +80,8 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 		joinRoomWindow.Show()
 	})
 
-	// Criar o container da aba principal
-	mainContainer := container.NewBorder(
+	// Criar o container da aba de salas
+	networksTabContent := container.NewBorder(
 		nil,
 		container.NewHBox(layout.NewSpacer(), joinRoomButton, createRoomButton),
 		nil,
@@ -81,5 +89,18 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 		roomsContainer,
 	)
 
-	return mainContainer
+	// Criar o container da aba de configurações
+	settingsTabContent := htc.SettingsTab.CreateSettingsContainer()
+
+	// Criar o AppTabs com múltiplas abas
+	htc.AppTabs = container.NewAppTabs(
+		container.NewTabItem("Networks", networksTabContent),
+		container.NewTabItem("Settings", settingsTabContent),
+	)
+
+	// Definir a posição das abas na parte superior (abaixo do cabeçalho)
+	htc.AppTabs.SetTabLocation(container.TabLocationTop)
+
+	// Envolva o AppTabs em um container para retornar o tipo correto *fyne.Container
+	return container.NewMax(htc.AppTabs)
 }
