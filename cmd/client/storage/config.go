@@ -5,97 +5,145 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
-// Config represents application settings
+// Config representa as configurações da aplicação
 type Config struct {
-	SignalServer    string `json:"signal_server"`
-	ThemePreference string `json:"theme_preference"`
-	Username        string `json:"username"` // Added username field
+	Username      string `json:"username"`
+	ServerAddress string `json:"server_address"`
+	Theme         string `json:"theme"`
+	Language      string `json:"language"`
 }
 
-// DefaultConfig returns configuration with default values
-func DefaultConfig() *Config {
-	return &Config{
-		SignalServer:    "localhost:8080",
-		ThemePreference: "System Default",
-		Username:        "",
-	}
-}
-
-// ConfigManager manages application configuration
+// ConfigManager gerencia as configurações da aplicação
 type ConfigManager struct {
+	config     Config
 	configPath string
-	config     *Config
+	mutex      sync.Mutex
 }
 
-// NewConfigManager creates a new configuration manager
+// NewConfigManager cria uma nova instância do gerenciador de configurações
 func NewConfigManager() *ConfigManager {
-	// Get user config directory
-	configDir, err := os.UserConfigDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Printf("Failed to get user config directory: %v", err)
-		configDir = "."
+		log.Printf("Error getting user home directory: %v", err)
+		homeDir = "."
 	}
 
-	// Create goVPN directory if it doesn't exist
-	goVPNDir := filepath.Join(configDir, "goVPN")
-	if err := os.MkdirAll(goVPNDir, 0755); err != nil {
-		log.Printf("Failed to create config directory: %v", err)
-	}
-
-	configPath := filepath.Join(goVPNDir, "config.json")
+	dataPath := filepath.Join(homeDir, ".govpn")
+	configPath := filepath.Join(dataPath, "config.json")
 
 	cm := &ConfigManager{
 		configPath: configPath,
-		config:     DefaultConfig(),
+		config: Config{
+			Username:      "User",
+			ServerAddress: "wss://echo.websocket.org",
+			Theme:         "system",
+			Language:      "en",
+		},
 	}
 
-	// Try to load existing configuration
+	// Cria o diretório de dados se não existir
+	err = os.MkdirAll(dataPath, 0755)
+	if err != nil {
+		log.Printf("Error creating data directory: %v", err)
+	}
+
+	// Carrega as configurações do arquivo
 	cm.LoadConfig()
 
 	return cm
 }
 
-// LoadConfig loads configuration from file
-func (cm *ConfigManager) LoadConfig() {
-	data, err := os.ReadFile(cm.configPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("Failed to read config file: %v", err)
-		}
-		return
-	}
+// GetConfig retorna as configurações atuais
+func (cm *ConfigManager) GetConfig() Config {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
 
-	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		log.Printf("Failed to parse config file: %v", err)
-		return
-	}
-
-	cm.config = &config
-}
-
-// SaveConfig saves configuration to file
-func (cm *ConfigManager) SaveConfig() {
-	data, err := json.MarshalIndent(cm.config, "", "  ")
-	if err != nil {
-		log.Printf("Failed to marshal config: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(cm.configPath, data, 0644); err != nil {
-		log.Printf("Failed to write config file: %v", err)
-	}
-}
-
-// GetConfig returns current configuration
-func (cm *ConfigManager) GetConfig() *Config {
 	return cm.config
 }
 
-// UpdateConfig updates configuration
-func (cm *ConfigManager) UpdateConfig(config *Config) {
+// UpdateConfig atualiza as configurações
+func (cm *ConfigManager) UpdateConfig(config Config) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
 	cm.config = config
-	cm.SaveConfig()
+	return cm.SaveConfig()
+}
+
+// UpdateUsername atualiza o nome de usuário
+func (cm *ConfigManager) UpdateUsername(username string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.config.Username = username
+	return cm.SaveConfig()
+}
+
+// UpdateServerAddress atualiza o endereço do servidor
+func (cm *ConfigManager) UpdateServerAddress(address string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.config.ServerAddress = address
+	return cm.SaveConfig()
+}
+
+// UpdateTheme atualiza o tema
+func (cm *ConfigManager) UpdateTheme(theme string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.config.Theme = theme
+	return cm.SaveConfig()
+}
+
+// UpdateLanguage atualiza o idioma
+func (cm *ConfigManager) UpdateLanguage(language string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.config.Language = language
+	return cm.SaveConfig()
+}
+
+// LoadConfig carrega as configurações do arquivo
+func (cm *ConfigManager) LoadConfig() {
+	file, err := os.Open(cm.configPath)
+	if err != nil {
+		// Se o arquivo não existe, cria com valores padrão
+		if os.IsNotExist(err) {
+			cm.SaveConfig()
+		}
+		return
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&cm.config)
+	if err != nil {
+		log.Printf("Error decoding config file: %v", err)
+	}
+}
+
+// SaveConfig salva as configurações no arquivo
+func (cm *ConfigManager) SaveConfig() error {
+	file, err := os.Create(cm.configPath)
+	if err != nil {
+		log.Printf("Error creating config file: %v", err)
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	err = encoder.Encode(cm.config)
+	if err != nil {
+		log.Printf("Error encoding config file: %v", err)
+		return err
+	}
+
+	return nil
 }

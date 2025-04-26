@@ -2,13 +2,11 @@ package storage
 
 import (
 	"database/sql"
-	"errors"
 	"os"
 	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/pion/webrtc/v3"
 )
 
 // DatabaseManager handles all database interactions
@@ -97,42 +95,28 @@ func (dm *DatabaseManager) LoadStunServer() (string, error) {
 	return dm.GetSetting("stun_server")
 }
 
-// GetICEServers builds and returns ICE server configuration
-func (dm *DatabaseManager) GetICEServers() ([]webrtc.ICEServer, error) {
-	stunServer, err := dm.LoadStunServer()
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-
-	// If we got a valid STUN server, use it
-	if stunServer != "" {
-		return []webrtc.ICEServer{
-			{
-				URLs: []string{stunServer},
-			},
-		}, nil
-	}
-
-	// Otherwise return default configuration
-	return []webrtc.ICEServer{
-		{
-			URLs: []string{"stun:stun.l.google.com:19302"},
-		},
-	}, nil
-}
-
-// SaveRSAKeys stores RSA keys in the database
-func (dm *DatabaseManager) SaveRSAKeys(privateKey, publicKey string) error {
+// SaveKeys stores Ed25519 keys in the database
+func (dm *DatabaseManager) SaveKeys(privateKey, publicKey string) error {
 	_, err := dm.DB.Exec("INSERT OR REPLACE INTO keys (id, private_key, public_key) VALUES ('user_key', ?, ?)",
 		privateKey, publicKey)
 	return err
 }
 
-// LoadRSAKeys loads RSA keys from the database
-func (dm *DatabaseManager) LoadRSAKeys() (privateKey string, publicKey string, err error) {
+// LoadKeys loads Ed25519 keys from the database
+func (dm *DatabaseManager) LoadKeys() (privateKey string, publicKey string, err error) {
 	err = dm.DB.QueryRow("SELECT private_key, public_key FROM keys WHERE id = 'user_key' LIMIT 1").
 		Scan(&privateKey, &publicKey)
 	return privateKey, publicKey, err
+}
+
+// SaveRSAKeys is kept for backward compatibility, now uses SaveKeys
+func (dm *DatabaseManager) SaveRSAKeys(privateKey, publicKey string) error {
+	return dm.SaveKeys(privateKey, publicKey)
+}
+
+// LoadRSAKeys is kept for backward compatibility, now uses LoadKeys
+func (dm *DatabaseManager) LoadRSAKeys() (privateKey string, publicKey string, err error) {
+	return dm.LoadKeys()
 }
 
 // SaveRoom saves a room to the database

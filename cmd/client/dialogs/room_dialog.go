@@ -94,7 +94,7 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 			err := rd.CreateRoom(name, password)
 
 			// Hide progress dialog
-			progressDialog.Hide()
+			progressDialog.Dismiss()
 
 			if err != nil {
 				dialog.ShowError(fmt.Errorf("Failed to create network: %v", err), rd.MainWindow)
@@ -137,7 +137,7 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 			}
 
 			// Clear the reference
-			*rd.RoomDialogRef = nil
+			// *rd.RoomDialogRef = nil
 		}()
 	}, rd.MainWindow)
 

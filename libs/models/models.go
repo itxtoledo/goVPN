@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"regexp"
+	"time"
 )
 
 // MessageType defines the type of messages that can be sent between client and server
@@ -15,12 +17,8 @@ const (
 	TypeCreateRoom MessageType = "CreateRoom"
 	TypeJoinRoom   MessageType = "JoinRoom"
 	TypeLeaveRoom  MessageType = "LeaveRoom"
-	TypeOffer      MessageType = "Offer"
-	TypeAnswer     MessageType = "Answer"
-	TypeCandidate  MessageType = "Candidate"
 	TypeKick       MessageType = "Kick"
 	TypeRename     MessageType = "Rename"
-	TypeDelete     MessageType = "Delete"
 
 	// Server to client message types
 	TypeError         MessageType = "Error"
@@ -36,22 +34,27 @@ const (
 	TypeDeleteSuccess MessageType = "DeleteSuccess"
 )
 
-// Message represents a message in the system
-type Message struct {
-	Type          MessageType `json:"type"` // Changed from string to MessageType
-	RoomID        string      `json:"room_id,omitempty"`
-	RoomName      string      `json:"room_name,omitempty"`
-	PublicKey     string      `json:"public_key,omitempty"`
-	Password      string      `json:"password,omitempty"`
-	DestinationID string      `json:"destination_id,omitempty"`
-	TargetID      string      `json:"target_id,omitempty"`
-	Username      string      `json:"username,omitempty"`
-	Offer         string      `json:"offer,omitempty"`
-	Answer        string      `json:"answer,omitempty"`
-	Candidate     string      `json:"candidate,omitempty"`
-	Data          []byte      `json:"data,omitempty"`
-	Signature     string      `json:"signature,omitempty"`
-	MessageID     string      `json:"message_id,omitempty"` // ID único para rastreamento de mensagens
+// Password validation constants
+const (
+	// DefaultPasswordPattern é o padrão de validação de senha padrão: exatamente 4 dígitos numéricos
+	DefaultPasswordPattern = `^\d{4}$`
+)
+
+// SignalingMessage represents the wrapper structure for WebSocket communication
+type SignalingMessage struct {
+	ID      string      `json:"message_id"`
+	Type    MessageType `json:"type"`
+	Payload []byte      `json:"payload"`
+}
+
+// BaseRequest contains common fields used in all messages from client to server
+type BaseRequest struct {
+	PublicKey string `json:"public_key"` // Base64-encoded Ed25519 public key
+}
+
+// ErrorResponse is sent when an error occurs
+type ErrorResponse struct {
+	Error string `json:"error"`
 }
 
 // Room represents a network or room
@@ -62,8 +65,124 @@ type Room struct {
 	ClientCount int    `json:"client_count"`
 }
 
+// Event-specific request structs
+
+// CreateRoomRequest represents a request to create a new room
+type CreateRoomRequest struct {
+	BaseRequest
+	RoomName string `json:"room_name"`
+	Password string `json:"password"`
+}
+
+// CreateRoomResponse represents a response to a room creation request
+type CreateRoomResponse struct {
+	RoomID    string `json:"room_id"`
+	RoomName  string `json:"room_name"`
+	Password  string `json:"password"`
+	PublicKey string `json:"public_key"`
+}
+
+// JoinRoomRequest represents a request to join an existing room
+type JoinRoomRequest struct {
+	BaseRequest
+	RoomID   string `json:"room_id"`
+	Password string `json:"password"`
+	Username string `json:"username,omitempty"`
+}
+
+// JoinRoomResponse represents a response to a room join request
+type JoinRoomResponse struct {
+	RoomID   string `json:"room_id"`
+	RoomName string `json:"room_name"`
+}
+
+// LeaveRoomRequest represents a request to leave a room
+type LeaveRoomRequest struct {
+	BaseRequest
+	RoomID       string `json:"room_id"`
+	PreserveRoom bool   `json:"preserve_room,omitempty"`
+}
+
+// LeaveRoomResponse confirms a client has left a room
+type LeaveRoomResponse struct {
+	RoomID string `json:"room_id"`
+}
+
+// Room management structs
+
+// KickRequest represents a request to kick a user from a room
+type KickRequest struct {
+	BaseRequest
+	RoomID   string `json:"room_id"`
+	TargetID string `json:"target_id"`
+}
+
+// KickResponse confirms a user has been kicked
+type KickResponse struct {
+	RoomID   string `json:"room_id"`
+	TargetID string `json:"target_id"`
+}
+
+// RenameRequest represents a request to rename a room
+type RenameRequest struct {
+	BaseRequest
+	RoomID   string `json:"room_id"`
+	RoomName string `json:"room_name"`
+}
+
+// RenameResponse confirms a room has been renamed
+type RenameResponse struct {
+	RoomID   string `json:"room_id"`
+	RoomName string `json:"room_name"`
+}
+
+// Peer notification structs
+
+// PeerJoinedNotification notifies that a peer has joined the room
+type PeerJoinedNotification struct {
+	RoomID    string `json:"room_id"`
+	PublicKey string `json:"public_key"`
+	Username  string `json:"username,omitempty"`
+}
+
+// PeerLeftNotification notifies that a peer has left the room
+type PeerLeftNotification struct {
+	RoomID    string `json:"room_id"`
+	PublicKey string `json:"public_key"`
+}
+
+// RoomDeletedNotification notifies that a room has been deleted
+type RoomDeletedNotification struct {
+	RoomID string `json:"room_id"`
+}
+
+// KickedNotification notifies a user they've been kicked
+type KickedNotification struct {
+	RoomID string `json:"room_id"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// Helper functions
+
 // GenerateMessageID gera um ID aleatório em formato hexadecimal com base no comprimento especificado
-func GenerateMessageID(length int) (string, error) {
+func GenerateMessageID() (string, error) {
+	return GenerateRandomID(8)
+}
+
+func GenerateRoomID() string {
+	id, err := GenerateRandomID(16)
+
+	if err != nil {
+		// Fall back to a timestamp-based ID if random generation fails
+		return fmt.Sprintf("%06x", time.Now().UnixNano()%0xFFFFFF)
+	}
+
+	return id
+}
+
+// GenerateRandomID gera um ID aleatório em formato hexadecimal com o comprimento desejado
+// Logic: Generate cryptographically secure random bytes and convert to hexadecimal format
+func GenerateRandomID(length int) (string, error) {
 	// Determine quantos bytes precisamos para gerar o ID
 	byteLength := (length + 1) / 2 // arredondamento para cima para garantir bytes suficientes
 
@@ -80,4 +199,18 @@ func GenerateMessageID(length int) (string, error) {
 	}
 
 	return id, nil
+}
+
+// PasswordRegex returns a compiled regex for the default password pattern
+func PasswordRegex() (*regexp.Regexp, error) {
+	return regexp.Compile(DefaultPasswordPattern)
+}
+
+// ValidatePassword checks if a password matches the default password pattern
+func ValidatePassword(password string) bool {
+	regex, err := PasswordRegex()
+	if err != nil {
+		return false
+	}
+	return regex.MatchString(password)
 }

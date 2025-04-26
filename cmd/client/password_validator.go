@@ -5,19 +5,16 @@ import (
 	"regexp"
 
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/libs/models"
 )
 
 // ConfigurePasswordEntry configura um campo de entrada de senha com validação de 4 dígitos
 // e aplicação automática de regras de formato de senha (somente 4 dígitos numéricos)
 func ConfigurePasswordEntry(passwordEntry *widget.Entry) {
-	// Define o validador para verificar que a senha tem exatamente 4 dígitos numéricos
+	// Define o validador para verificar a senha usando o validador do pacote models
 	passwordEntry.Validator = func(s string) error {
-		if len(s) != 4 {
+		if !models.ValidatePassword(s) {
 			return errors.New("Password must be exactly 4 digits")
-		}
-		matched, _ := regexp.MatchString("^[0-9]{4}$", s)
-		if !matched {
-			return errors.New("Password must contain only numbers")
 		}
 		return nil
 	}
@@ -40,12 +37,7 @@ func ConfigurePasswordEntry(passwordEntry *widget.Entry) {
 	}
 }
 
-// ValidatePassword verifica se uma senha atende ao requisito de 4 dígitos numéricos
+// ValidatePassword verifica se uma senha atende ao padrão definido no pacote models
 func ValidatePassword(password string) bool {
-	if len(password) != 4 {
-		return false
-	}
-
-	matched, _ := regexp.MatchString("^[0-9]{4}$", password)
-	return matched
+	return models.ValidatePassword(password)
 }
