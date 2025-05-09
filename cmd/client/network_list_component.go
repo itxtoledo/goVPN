@@ -57,9 +57,60 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 	ntc.RoomAccordion.CloseAll()
 	ntc.RoomAccordion.Items = []*widget.AccordionItem{}
 
+	// Get the current room ID from the network manager (if connected)
+	currentRoomID := ""
+	if ntc.UI.VPN.NetworkManager != nil {
+		currentRoomID = ntc.UI.VPN.NetworkManager.RoomID
+	}
+
+	// Get username from config for display
+	username := ntc.UI.ConfigManager.GetConfig().Username
+	if username == "" {
+		username = "You"
+	}
+
 	// Adicionar cada sala como um item de accordion
 	if ntc.UI.Rooms != nil {
 		for _, room := range ntc.UI.Rooms {
+			// Check if this room is the one we're currently connected to
+			isConnected := room.ID == currentRoomID
+
+			// Create members container
+			membersContainer := container.NewVBox()
+
+			// Add current user to members list
+			userLabel := widget.NewLabel("• " + username + " (you)")
+			membersContainer.Add(userLabel)
+
+			// Add other room members if we're connected to this room
+			if isConnected && ntc.UI.VPN.NetworkManager != nil {
+				// Get computers in the room from the NetworkManager
+				for _, computer := range ntc.UI.VPN.NetworkManager.Computers {
+					// Skip our own computer
+					if computer.OwnerID == ntc.UI.VPN.PublicKeyStr {
+						continue
+					}
+
+					// Create status text based on online status
+					statusText := ""
+					if computer.IsOnline {
+						statusText = " (online)"
+					} else {
+						statusText = " (offline)"
+					}
+
+					// Add this computer to the members list
+					computerLabel := widget.NewLabel("• " + computer.Name + statusText)
+					membersContainer.Add(computerLabel)
+				}
+			}
+
+			// Add "Members" header
+			membersBox := container.NewVBox(
+				widget.NewLabelWithStyle("Room Members:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				membersContainer,
+			)
+
 			// Criar botões para as ações da sala
 			connectButton := widget.NewButtonWithIcon("Connect", theme.LoginIcon(), func(currentRoom *storage.Room) func() {
 				return func() {
@@ -72,6 +123,11 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 					ntc.UI.ConnectDialog.Show()
 				}
 			}(room))
+
+			// Disable connect button if already connected to this room
+			if isConnected {
+				connectButton.Disable()
+			}
 
 			leaveButton := widget.NewButtonWithIcon("Leave", theme.LogoutIcon(), func(currentRoom *storage.Room) func() {
 				return func() {
@@ -107,14 +163,33 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				leaveButton,
 			)
 
-			content := container.NewVBox(
+			// Create room info container
+			infoBox := container.NewVBox(
+				membersBox,
 				widget.NewLabel("Last connected: "+room.LastConnected.Local().String()),
+			)
+
+			content := container.NewVBox(
+				infoBox,
 				buttonBox,
 			)
 
+			// Create title with status indicator
+			var titleText string
+			if isConnected {
+				titleText = "🟢 " + room.Name // Green circle for connected
+			} else {
+				titleText = "⚪ " + room.Name // White circle for available
+			}
+
 			// Criar item de accordion para a sala
-			accordionItem := widget.NewAccordionItem(room.Name, content)
+			accordionItem := widget.NewAccordionItem(titleText, content)
 			ntc.RoomAccordion.Append(accordionItem)
+
+			// Open the accordion for the currently connected room
+			if isConnected {
+				accordionItem.Open = true
+			}
 		}
 	}
 

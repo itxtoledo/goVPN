@@ -521,6 +521,22 @@ func (s *SignalingClient) listenForMessages() {
 				// Update UI if needed
 				if s.UI != nil {
 					// Handle room joined in UI
+					// Refresh the UI to show user in room
+					s.UI.refreshNetworkList()
+				}
+
+				// Initialize computers list for the room
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// Initialize with just this user for now
+					s.VPNClient.NetworkManager.Computers = []Computer{
+						{
+							ID:       s.VPNClient.PublicKeyStr,
+							Name:     s.UI.ConfigManager.GetConfig().Username,
+							IP:       "10.0.0.1", // Default IP
+							OwnerID:  s.VPNClient.PublicKeyStr,
+							IsOnline: true,
+						},
+					}
 				}
 			}
 
@@ -533,6 +549,22 @@ func (s *SignalingClient) listenForMessages() {
 				// Update UI if needed
 				if s.UI != nil {
 					// Handle room created in UI
+					// Refresh the UI to show user in room
+					s.UI.refreshNetworkList()
+				}
+
+				// Initialize computers list for the room
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// When creating a room, just add this user as the only member
+					s.VPNClient.NetworkManager.Computers = []Computer{
+						{
+							ID:       s.VPNClient.PublicKeyStr,
+							Name:     s.UI.ConfigManager.GetConfig().Username,
+							IP:       "10.0.0.1", // Default IP
+							OwnerID:  s.VPNClient.PublicKeyStr,
+							IsOnline: true,
+						},
+					}
 				}
 			}
 
@@ -544,7 +576,12 @@ func (s *SignalingClient) listenForMessages() {
 				log.Printf("Successfully left room: %s", response.RoomID)
 				// Handle client leaving room
 				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Clean up network connections if needed
+					// Clean up computers list when leaving a room
+					s.VPNClient.NetworkManager.Computers = []Computer{}
+					// Refresh the UI to update room members
+					if s.UI != nil {
+						s.UI.refreshNetworkList()
+					}
 				}
 			}
 
@@ -560,7 +597,12 @@ func (s *SignalingClient) listenForMessages() {
 				log.Printf("Kicked from room %s: %s", notification.RoomID, reason)
 				// Handle being kicked
 				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Clean up network connections
+					// Clean up computers list when kicked from a room
+					s.VPNClient.NetworkManager.Computers = []Computer{}
+					// Refresh the UI to update room members
+					if s.UI != nil {
+						s.UI.refreshNetworkList()
+					}
 				}
 			}
 
@@ -574,9 +616,33 @@ func (s *SignalingClient) listenForMessages() {
 					username = "Unknown user"
 				}
 				log.Printf("New peer joined room %s: %s (Key: %s)", notification.RoomID, username, notification.PublicKey)
-				// Handle new peer
+
+				// Add the new peer to the computers list
 				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Setup peer connection if needed
+					// Skip if this is our own public key
+					if notification.PublicKey != s.VPNClient.PublicKeyStr {
+						// Generate a simple IP based on the computer count (for display purposes)
+						ip := fmt.Sprintf("10.0.0.%d", len(s.VPNClient.NetworkManager.Computers)+1)
+
+						// Add the new peer to the computers list
+						newComputer := Computer{
+							ID:       notification.PublicKey,
+							Name:     username,
+							IP:       ip,
+							OwnerID:  notification.PublicKey,
+							IsOnline: true,
+						}
+
+						s.VPNClient.NetworkManager.Computers = append(
+							s.VPNClient.NetworkManager.Computers,
+							newComputer,
+						)
+
+						// Refresh the UI to show the new peer
+						if s.UI != nil {
+							s.UI.refreshNetworkList()
+						}
+					}
 				}
 			}
 
@@ -586,9 +652,25 @@ func (s *SignalingClient) listenForMessages() {
 				log.Printf("Failed to unmarshal peer left notification: %v", err)
 			} else {
 				log.Printf("Peer left room %s: %s", notification.RoomID, notification.PublicKey)
-				// Handle peer leaving
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Clean up peer connection if needed
+
+				// Remove the peer from the computers list
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil && len(s.VPNClient.NetworkManager.Computers) > 0 {
+					// Skip if this is our own public key
+					if notification.PublicKey != s.VPNClient.PublicKeyStr {
+						// Find and remove the peer from the computers list
+						updatedComputers := []Computer{}
+						for _, computer := range s.VPNClient.NetworkManager.Computers {
+							if computer.ID != notification.PublicKey {
+								updatedComputers = append(updatedComputers, computer)
+							}
+						}
+						s.VPNClient.NetworkManager.Computers = updatedComputers
+
+						// Refresh the UI to update the peer list
+						if s.UI != nil {
+							s.UI.refreshNetworkList()
+						}
+					}
 				}
 			}
 
@@ -598,6 +680,10 @@ func (s *SignalingClient) listenForMessages() {
 				log.Printf("Failed to unmarshal room deleted notification: %v", err)
 			} else {
 				log.Printf("Room deleted: %s", notification.RoomID)
+				// Clear computers list when a room is deleted
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					s.VPNClient.NetworkManager.Computers = []Computer{}
+				}
 				s.VPNClient.NetworkManager.HandleRoomDeleted(notification.RoomID)
 			}
 		}
