@@ -46,6 +46,9 @@ type WebSocketServer struct {
 	supabaseManager   *SupabaseManager
 	upgrader          websocket.Upgrader
 	passwordRegex     *regexp.Regexp
+
+	// Server statistics
+	statsManager *StatsManager
 }
 
 // NewWebSocketServer creates a new WebSocket server instance
@@ -73,6 +76,9 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		WriteBufferSize: cfg.WriteBufferSize,
 	}
 
+	// Create stats manager
+	statsManager := NewStatsManager(cfg)
+
 	return &WebSocketServer{
 		clients:           make(map[*websocket.Conn]string),
 		networks:          make(map[string][]*websocket.Conn),
@@ -81,6 +87,7 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		supabaseManager:   supaMgr,
 		upgrader:          upgrader,
 		passwordRegex:     passwordRegex,
+		statsManager:      statsManager,
 	}, nil
 }
 
@@ -95,6 +102,9 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	}
 	defer conn.Close()
 
+	s.statsManager.IncrementConnectionsTotal()
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+
 	for {
 		var sigMsg models.SignalingMessage
 		err := conn.ReadJSON(&sigMsg)
@@ -102,6 +112,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 			s.handleDisconnect(conn)
 			return
 		}
+
+		s.statsManager.IncrementMessagesProcessed()
 
 		// Salva o ID da mensagem original para incluir na resposta
 		originalID := sigMsg.ID
@@ -270,6 +282,8 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 		log.Printf("Room %s (%s) created by %s", roomID, req.RoomName, conn.RemoteAddr().String())
 	}
 
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+
 	// Prepare response payload
 	responsePayload := map[string]interface{}{
 		"room_id":    roomID,
@@ -332,6 +346,8 @@ func (s *WebSocketServer) handleJoinRoom(conn *websocket.Conn, req models.JoinRo
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
 		log.Printf("Client %s joined room %s (active clients: %d)", conn.RemoteAddr().String(), req.RoomID, clientCount)
 	}
+
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 	// Envia a resposta ao cliente
 	responsePayload := map[string]interface{}{
@@ -430,6 +446,8 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 		s.removeClient(conn, roomID)
 	}
 
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+
 	// Confirma a saída
 	leaveSuccessPayload := map[string]interface{}{
 		"room_id": roomID,
@@ -468,6 +486,8 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 			peer.Close()
 			s.removeClient(peer, req.RoomID)
 			log.Printf("Client %s kicked from room %s", req.TargetID, req.RoomID)
+
+			s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 			kickSuccessPayload := map[string]interface{}{
 				"room_id":   req.RoomID,
@@ -614,6 +634,8 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		// Cliente não estava em nenhuma sala
 		delete(s.clientToPublicKey, conn)
 	}
+
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 }
 
 // DeleteStaleRooms removes rooms that have not been active for a specified period
@@ -625,14 +647,18 @@ func (s *WebSocketServer) DeleteStaleRooms() {
 		return
 	}
 
+	numRemoved := 0
 	for _, room := range staleRooms {
 		err := s.supabaseManager.DeleteRoom(room.ID)
 		if err != nil {
 			log.Printf("Error deleting stale room %s: %v", room.ID, err)
 		} else {
 			log.Printf("Deleted stale room %s", room.ID)
+			numRemoved++
 		}
 	}
+
+	s.statsManager.UpdateCleanupStats(numRemoved)
 }
 
 // Start initializes and starts the WebSocket server
@@ -645,6 +671,9 @@ func (s *WebSocketServer) Start(port string) error {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
+
+	// Add stats endpoint
+	http.HandleFunc("/stats", s.handleStatsEndpoint)
 
 	// Periodically delete stale rooms
 	go func() {
@@ -761,5 +790,36 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 		delete(s.networks, roomID)
 	}
 
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+
 	log.Printf("Client %s left room %s", conn.RemoteAddr().String(), roomID)
+}
+
+// handleStatsEndpoint is the HTTP handler for the /stats endpoint
+func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Request) {
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Create response with current statistics
+	statsResponse := map[string]interface{}{
+		"server_stats": s.statsManager.GetStats(),
+		"config": map[string]interface{}{
+			"max_clients_per_room": s.config.MaxClientsPerRoom,
+			"room_expiry_days":     s.config.RoomExpiryDays,
+			"cleanup_interval":     s.config.CleanupInterval.String(),
+			"allow_all_origins":    s.config.AllowAllOrigins,
+		},
+	}
+
+	// Convert to JSON and send response
+	jsonBytes, err := json.Marshal(statsResponse)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "Failed to generate statistics"}`))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
 }
