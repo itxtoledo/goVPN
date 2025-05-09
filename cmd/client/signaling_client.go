@@ -268,6 +268,15 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 			return resp, nil
 		}
 
+	case models.TypeGetUserRooms:
+		if response.Type == models.TypeUserRooms {
+			var resp models.UserRoomsResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal user rooms response: %v", err)
+			}
+			return resp, nil
+		}
+
 	case models.TypePing:
 		// For ping, we just return a simple success message
 		return map[string]interface{}{"status": "success"}, nil
@@ -686,6 +695,30 @@ func (s *SignalingClient) listenForMessages() {
 				}
 				s.VPNClient.NetworkManager.HandleRoomDeleted(notification.RoomID)
 			}
+
+		case models.TypeUserRooms:
+			var response models.UserRoomsResponse
+			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+				log.Printf("Failed to unmarshal user rooms response: %v", err)
+			} else {
+				log.Printf("========== USER ROOMS RECEIVED ==========")
+				log.Printf("Total rooms found: %d", len(response.Rooms))
+
+				for i, room := range response.Rooms {
+					connectionStatus := "Disconnected"
+					if room.IsConnected {
+						connectionStatus = "Connected"
+					}
+
+					log.Printf("Room %d: %s (ID: %s)", i+1, room.RoomName, room.RoomID)
+					log.Printf("  Status: %s", connectionStatus)
+					log.Printf("  Joined at: %s", room.JoinedAt.Format(time.RFC1123))
+					log.Printf("  Last connected: %s", room.LastConnected.Format(time.RFC1123))
+					log.Printf("  ---")
+				}
+
+				log.Printf("========================================")
+			}
 		}
 
 		// Also pass to custom handler if configured
@@ -802,4 +835,31 @@ func (s *SignalingClient) injectPublicKey(payload interface{}) bool {
 	}
 
 	return false
+}
+
+// GetUserRooms requests all rooms the user has joined from the server
+func (s *SignalingClient) GetUserRooms() (*models.UserRoomsResponse, error) {
+	if !s.Connected || s.Conn == nil {
+		return nil, errors.New("not connected to server")
+	}
+
+	log.Printf("Requesting user rooms from server")
+
+	// Create payload for the request
+	payload := &models.GetUserRoomsRequest{
+		BaseRequest: models.BaseRequest{},
+	}
+
+	// Send request using the packaging function
+	response, err := s.sendPackagedMessage(models.TypeGetUserRooms, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.UserRoomsResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
 }

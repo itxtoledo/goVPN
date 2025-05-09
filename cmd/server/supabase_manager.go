@@ -268,7 +268,7 @@ func (sm *SupabaseManager) UpdateUserRoomConnection(roomID, publicKey string, is
 		logger.Debug("Updating user room connection", "roomID", roomID, "publicKey", publicKey, "isConnected", isConnected)
 	}
 
-	_, _, err := sm.client.From("user_rooms").Update(updateData).Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+	_, _, err := sm.client.From("user_rooms").Update(updateData, "", "").Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
 	if err != nil {
 		return fmt.Errorf("failed to update user room connection: %w", err)
 	}
