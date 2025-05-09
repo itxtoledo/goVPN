@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/itxtoledo/govpn/cmd/server/logger"
 	"github.com/itxtoledo/govpn/libs/models"
 	"github.com/supabase-community/supabase-go"
 )
@@ -43,7 +43,7 @@ func (sm *SupabaseManager) CreateRoom(room ServerRoom) error {
 	}
 
 	if sm.logLevel == "debug" {
-		log.Printf("Creating room in Supabase: %s (%s)", room.ID, room.Name)
+		logger.Debug("Creating room in Supabase", "roomID", room.ID, "roomName", room.Name)
 	}
 
 	_, _, err := sm.client.From(sm.roomsTable).Insert(roomData, false, "", "", "").Execute()
@@ -93,7 +93,7 @@ func (sm *SupabaseManager) UpdateRoomActivity(roomID string) error {
 	}
 
 	if sm.logLevel == "debug" {
-		log.Printf("Updating last_active for room %s to %s", roomID, now)
+		logger.Debug("Updating last_active for room", "roomID", roomID, "timestamp", now)
 	}
 
 	_, _, err := sm.client.From(sm.roomsTable).Update(updateData, "", "").Eq("id", roomID).Execute()
@@ -112,7 +112,7 @@ func (sm *SupabaseManager) UpdateRoomName(roomID, newName string) error {
 	}
 
 	if sm.logLevel == "debug" {
-		log.Printf("Updating name for room %s to %s", roomID, newName)
+		logger.Debug("Updating name for room", "roomID", roomID, "newName", newName)
 	}
 
 	_, _, err := sm.client.From(sm.roomsTable).Update(updateData, "", "").Eq("id", roomID).Execute()
@@ -126,7 +126,7 @@ func (sm *SupabaseManager) UpdateRoomName(roomID, newName string) error {
 // DeleteRoom removes a room from the Supabase database
 func (sm *SupabaseManager) DeleteRoom(roomID string) error {
 	if sm.logLevel == "debug" {
-		log.Printf("Deleting room %s from Supabase", roomID)
+		logger.Debug("Deleting room from Supabase", "roomID", roomID)
 	}
 
 	_, _, err := sm.client.From(sm.roomsTable).Delete("", "").Eq("id", roomID).Execute()
@@ -172,6 +172,10 @@ func (sm *SupabaseManager) GetStaleRooms(expiryDays int) ([]SupabaseRoom, error)
 	expiryDuration := time.Hour * 24 * time.Duration(expiryDays)
 	cutoffTime := time.Now().Add(-expiryDuration)
 	cutoffTimeStr := cutoffTime.Format(time.RFC3339)
+
+	if sm.logLevel == "debug" {
+		logger.Debug("Fetching stale rooms", "cutoffTime", cutoffTimeStr, "expiryDays", expiryDays)
+	}
 
 	var staleRooms []SupabaseRoom
 	data, _, err := sm.client.From(sm.roomsTable).Select("*", "", false).Lt("last_active", cutoffTimeStr).Execute()

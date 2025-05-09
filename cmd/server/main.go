@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/itxtoledo/govpn/cmd/server/logger"
 	"github.com/joho/godotenv"
 )
 
@@ -42,7 +42,9 @@ func main() {
 	envPath := filepath.Join(".", ".env")
 	err := godotenv.Load(envPath)
 	if err != nil {
-		log.Printf("Warning: Could not load .env file: %v", err)
+		// Will initialize logger first with default level before accessing config
+		logger.Init(logger.InfoLevel)
+		logger.Warn("Could not load .env file", "error", err)
 	}
 
 	// Default configuration
@@ -60,6 +62,9 @@ func main() {
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		ShutdownTimeout:    15 * time.Second, // Default timeout for graceful shutdown
 	}
+
+	// Initialize logger with configured log level
+	logger.Init(logger.LogLevel(cfg.LogLevel))
 
 	// Parse numeric environment variables
 	if readSize := getEnv("READ_BUFFER_SIZE", ""); readSize != "" {
@@ -107,14 +112,14 @@ func main() {
 	// Create new WebSocket server with the configuration
 	server, err := NewWebSocketServer(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create WebSocket server: %v", err)
+		logger.Fatal("Failed to create WebSocket server", "error", err)
 	}
 
 	// Start the server
-	log.Printf("Starting WebSocket server on port %s", cfg.Port)
+	logger.Info("Starting WebSocket server", "port", cfg.Port)
 	err = server.Start(cfg.Port)
 	if err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Fatal("Failed to start server", "error", err)
 	}
 
 	// Set up signal handling for graceful shutdown
@@ -123,7 +128,7 @@ func main() {
 
 	// Block until we receive a termination signal
 	sig := <-signalChan
-	log.Printf("Received signal: %v. Starting graceful shutdown...", sig)
+	logger.Info("Received signal, starting graceful shutdown", "signal", sig)
 
 	// Set an appropriate restart message based on signal
 	restartInfo := "Server will be back soon."
@@ -136,5 +141,8 @@ func main() {
 
 	// Wait for shutdown to complete
 	server.WaitForShutdown()
-	log.Println("Server has shut down gracefully")
+	logger.Info("Server has shut down gracefully")
+
+	// Ensure all logs are flushed
+	logger.Sync()
 }
