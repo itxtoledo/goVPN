@@ -90,10 +90,10 @@ Este documento detalha as funcionalidades já implementadas e as pendentes no se
   - [ ] Mecanismo para reconectar clientes temporariamente desconectados
   - [ ] Manter estado da sala por um período após desconexão
 
-- [ ] **Graceful Shutdown**
-  - [ ] Tratamento de sinais (SIGTERM, SIGINT)
-  - [ ] Notificação a clientes sobre encerramento
-  - [ ] Persistência de estado para reinício
+- [x] **Graceful Shutdown**
+  - [x] Tratamento de sinais (SIGTERM, SIGINT)
+  - [x] Notificação a clientes sobre encerramento
+  - [x] Persistência de estado para reinício
 
 ### Monitoramento e Estatísticas
 - [x] **Endpoints de Status**
