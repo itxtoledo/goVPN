@@ -3,8 +3,10 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -23,6 +25,7 @@ type Config struct {
 	AllowAllOrigins    bool          // Whether to allow all origins for WebSocket connections
 	CleanupInterval    time.Duration // Interval at which to clean up stale rooms
 	LogLevel           string        // Log level (debug, info, warn, error)
+	ShutdownTimeout    time.Duration // Timeout for graceful shutdown
 }
 
 // getEnv retrieves the value of an environment variable, prioritizing the .env file
@@ -55,6 +58,7 @@ func main() {
 		AllowAllOrigins:    true,
 		CleanupInterval:    24 * time.Hour, // Run cleanup once a day
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
+		ShutdownTimeout:    15 * time.Second, // Default timeout for graceful shutdown
 	}
 
 	// Parse numeric environment variables
@@ -88,6 +92,13 @@ func main() {
 		}
 	}
 
+	// Parse shutdown timeout
+	if shutdownTimeout := getEnv("SHUTDOWN_TIMEOUT_SECONDS", "2"); shutdownTimeout != "" {
+		if seconds, err := strconv.Atoi(shutdownTimeout); err == nil && seconds > 0 {
+			cfg.ShutdownTimeout = time.Duration(seconds) * time.Second
+		}
+	}
+
 	// Parse boolean environment variables
 	if allowAllOrigins := getEnv("ALLOW_ALL_ORIGINS", ""); allowAllOrigins != "" {
 		cfg.AllowAllOrigins = allowAllOrigins == "true"
@@ -105,4 +116,25 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+
+	// Set up signal handling for graceful shutdown
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+
+	// Block until we receive a termination signal
+	sig := <-signalChan
+	log.Printf("Received signal: %v. Starting graceful shutdown...", sig)
+
+	// Set an appropriate restart message based on signal
+	restartInfo := "Server will be back soon."
+	if sig == syscall.SIGTERM {
+		restartInfo = "Server is being restarted for maintenance."
+	}
+
+	// Initiate graceful shutdown
+	server.InitiateGracefulShutdown(cfg.ShutdownTimeout, restartInfo)
+
+	// Wait for shutdown to complete
+	server.WaitForShutdown()
+	log.Println("Server has shut down gracefully")
 }

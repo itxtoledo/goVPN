@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -49,6 +50,11 @@ type WebSocketServer struct {
 
 	// Server statistics
 	statsManager *StatsManager
+
+	// Graceful shutdown
+	shutdownChan chan struct{}
+	httpServer   *http.Server
+	isShutdown   bool
 }
 
 // NewWebSocketServer creates a new WebSocket server instance
@@ -88,6 +94,9 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		upgrader:          upgrader,
 		passwordRegex:     passwordRegex,
 		statsManager:      statsManager,
+		shutdownChan:      make(chan struct{}),
+		httpServer:        &http.Server{},
+		isShutdown:        false,
 	}, nil
 }
 
@@ -664,28 +673,50 @@ func (s *WebSocketServer) DeleteStaleRooms() {
 // Start initializes and starts the WebSocket server
 // Logic: Set up HTTP handlers, start room cleanup routine, and listen for incoming connections
 func (s *WebSocketServer) Start(port string) error {
-	http.HandleFunc("/ws", s.HandleWebSocketEndpoint)
+	mux := http.NewServeMux()
+
+	// Add handlers to the mux
+	mux.HandleFunc("/ws", s.HandleWebSocketEndpoint)
 
 	// Add health check endpoint
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 
 	// Add stats endpoint
-	http.HandleFunc("/stats", s.handleStatsEndpoint)
+	mux.HandleFunc("/stats", s.handleStatsEndpoint)
+
+	// Create an HTTP server with the mux
+	s.httpServer = &http.Server{
+		Addr:    ":" + port,
+		Handler: mux,
+	}
 
 	// Periodically delete stale rooms
 	go func() {
 		ticker := time.NewTicker(s.config.CleanupInterval)
 		defer ticker.Stop()
-		for range ticker.C {
-			s.DeleteStaleRooms()
+		for {
+			select {
+			case <-ticker.C:
+				s.DeleteStaleRooms()
+			case <-s.shutdownChan:
+				return // Stop cleanup goroutine when server shuts down
+			}
 		}
 	}()
 
 	log.Printf("WebSocket server starting on :%s", port)
-	return http.ListenAndServe(":"+port, nil)
+
+	// Start HTTP server in a separate goroutine so we can return errors
+	go func() {
+		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v", err)
+		}
+	}()
+
+	return nil
 }
 
 // handlePing processes ping messages from clients and responds with a pong
@@ -822,4 +853,97 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
+}
+
+// InitiateGracefulShutdown starts the graceful shutdown process
+func (s *WebSocketServer) InitiateGracefulShutdown(timeout time.Duration, restartInfo string) {
+	if s.isShutdown {
+		log.Println("Shutdown already in progress")
+		return
+	}
+
+	s.isShutdown = true
+	log.Printf("Initiating graceful shutdown (timeout: %v)", timeout)
+
+	// Wait a short amount of time for in-flight requests to complete
+	time.Sleep(500 * time.Millisecond)
+
+	// First step: Notify all connected clients about impending shutdown
+	s.notifyClientsAboutShutdown(int(timeout.Seconds()), restartInfo)
+
+	// Allow some time for notification messages to be sent
+	time.Sleep(1 * time.Second)
+
+	// Set a deadline for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Start persisting server state
+	s.persistStateForRestart()
+
+	// Actually shutdown the HTTP server
+	if s.httpServer != nil {
+		if err := s.httpServer.Shutdown(ctx); err != nil {
+			log.Printf("HTTP server shutdown error: %v", err)
+		}
+	}
+
+	// Signal successful shutdown
+	close(s.shutdownChan)
+	log.Println("Graceful shutdown completed")
+}
+
+// notifyClientsAboutShutdown sends a shutdown notification to all connected clients
+func (s *WebSocketServer) notifyClientsAboutShutdown(shutdownSeconds int, restartInfo string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	log.Printf("Notifying %d clients about server shutdown", len(s.clients))
+
+	notification := models.ServerShutdownNotification{
+		Message:     "Server is shutting down for maintenance",
+		ShutdownIn:  shutdownSeconds,
+		RestartInfo: restartInfo,
+	}
+
+	// Send notification to all clients
+	for conn := range s.clients {
+		// Generate a random message ID
+		msgID, err := models.GenerateMessageID()
+		if err != nil {
+			msgID = ""
+		}
+
+		err = s.sendSignal(conn, models.TypeServerShutdown, notification, msgID)
+		if err != nil {
+			log.Printf("Error notifying client %s: %v", conn.RemoteAddr().String(), err)
+		}
+	}
+}
+
+// persistStateForRestart saves the current server state to enable a clean restart
+func (s *WebSocketServer) persistStateForRestart() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	log.Println("Persisting state for potential server restart")
+
+	// Update all active room timestamps in the database
+	for roomID := range s.networks {
+		// Ensure this room's activity is updated to prevent cleanup
+		err := s.supabaseManager.UpdateRoomActivity(roomID)
+		if err != nil {
+			log.Printf("Error updating room %s activity: %v", roomID, err)
+		} else {
+			log.Printf("Room %s state persisted", roomID)
+		}
+	}
+
+	// Could add more state persistence here if needed
+	log.Println("Server state persistence completed")
+}
+
+// WaitForShutdown blocks until the server has shut down
+func (s *WebSocketServer) WaitForShutdown() {
+	<-s.shutdownChan
 }

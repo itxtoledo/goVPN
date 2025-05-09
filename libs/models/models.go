@@ -22,17 +22,18 @@ const (
 	TypePing       MessageType = "Ping" // Added for connection testing
 
 	// Server to client message types
-	TypeError         MessageType = "Error"
-	TypeRoomCreated   MessageType = "RoomCreated"
-	TypeRoomJoined    MessageType = "RoomJoined"
-	TypeRoomDeleted   MessageType = "RoomDeleted"
-	TypeRoomRenamed   MessageType = "RoomRenamed"
-	TypePeerJoined    MessageType = "PeerJoined"
-	TypePeerLeft      MessageType = "PeerLeft"
-	TypeKicked        MessageType = "Kicked"
-	TypeKickSuccess   MessageType = "KickSuccess"
-	TypeRenameSuccess MessageType = "RenameSuccess"
-	TypeDeleteSuccess MessageType = "DeleteSuccess"
+	TypeError          MessageType = "Error"
+	TypeRoomCreated    MessageType = "RoomCreated"
+	TypeRoomJoined     MessageType = "RoomJoined"
+	TypeRoomDeleted    MessageType = "RoomDeleted"
+	TypeRoomRenamed    MessageType = "RoomRenamed"
+	TypePeerJoined     MessageType = "PeerJoined"
+	TypePeerLeft       MessageType = "PeerLeft"
+	TypeKicked         MessageType = "Kicked"
+	TypeKickSuccess    MessageType = "KickSuccess"
+	TypeRenameSuccess  MessageType = "RenameSuccess"
+	TypeDeleteSuccess  MessageType = "DeleteSuccess"
+	TypeServerShutdown MessageType = "ServerShutdown"
 )
 
 // Password validation constants
@@ -160,6 +161,13 @@ type RoomDeletedNotification struct {
 type KickedNotification struct {
 	RoomID string `json:"room_id"`
 	Reason string `json:"reason,omitempty"`
+}
+
+// ServerShutdownNotification notifies clients that the server is shutting down
+type ServerShutdownNotification struct {
+	Message     string `json:"message"`
+	ShutdownIn  int    `json:"shutdown_in_seconds"` // Seconds until server shutdown
+	RestartInfo string `json:"restart_info,omitempty"`
 }
 
 // Helper functions
