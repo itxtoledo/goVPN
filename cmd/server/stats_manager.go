@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/itxtoledo/govpn/cmd/server/logger"
 )
 
 // StatsManager gerencia as estatísticas do servidor WebSocket
@@ -33,6 +35,7 @@ type ServerStats struct {
 
 // NewStatsManager cria uma nova instância do gerenciador de estatísticas
 func NewStatsManager(cfg Config) *StatsManager {
+	logger.Debug("Initializing stats manager")
 	return &StatsManager{
 		stats: ServerStats{
 			StartTime:         time.Now(),
@@ -49,6 +52,10 @@ func (sm *StatsManager) UpdateStats(activeConnections, activeRooms int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	// Track if we hit a new peak for logging
+	connectionPeak := false
+	roomsPeak := false
+
 	// Atualiza estatísticas
 	sm.stats.ActiveConnections = activeConnections
 	sm.stats.ActiveRooms = activeRooms
@@ -56,10 +63,23 @@ func (sm *StatsManager) UpdateStats(activeConnections, activeRooms int) {
 	// Atualiza valores de pico se os contadores atuais forem mais altos
 	if activeConnections > sm.stats.PeakConnections {
 		sm.stats.PeakConnections = activeConnections
+		connectionPeak = true
 	}
 
 	if activeRooms > sm.stats.PeakRooms {
 		sm.stats.PeakRooms = activeRooms
+		roomsPeak = true
+	}
+
+	// Log new peaks when they happen
+	if connectionPeak && sm.config.LogLevel == "debug" {
+		logger.Debug("New peak connections reached",
+			"connections", activeConnections)
+	}
+
+	if roomsPeak && sm.config.LogLevel == "debug" {
+		logger.Debug("New peak rooms count reached",
+			"rooms", activeRooms)
 	}
 
 	// Atualiza a string de tempo de atividade
@@ -77,6 +97,12 @@ func (sm *StatsManager) IncrementConnectionsTotal() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.ConnectionsTotal++
+
+	// Log connection milestones
+	if sm.stats.ConnectionsTotal > 0 && sm.stats.ConnectionsTotal%100 == 0 {
+		logger.Info("Connection milestone reached",
+			"totalConnections", sm.stats.ConnectionsTotal)
+	}
 }
 
 // IncrementMessagesProcessed incrementa o contador de mensagens processadas
@@ -84,6 +110,12 @@ func (sm *StatsManager) IncrementMessagesProcessed() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.MessagesProcessed++
+
+	// Log message milestones
+	if sm.stats.MessagesProcessed > 0 && sm.stats.MessagesProcessed%1000 == 0 {
+		logger.Debug("Message milestone reached",
+			"messagesProcessed", sm.stats.MessagesProcessed)
+	}
 }
 
 // UpdateCleanupStats atualiza as estatísticas após uma operação de limpeza
@@ -92,6 +124,11 @@ func (sm *StatsManager) UpdateCleanupStats(numRemoved int) {
 	defer sm.mu.Unlock()
 	sm.stats.LastCleanupTime = time.Now()
 	sm.stats.StaleRoomsRemoved += numRemoved
+
+	logger.Info("Room cleanup completed",
+		"roomsRemoved", numRemoved,
+		"totalRoomsRemovedSinceStart", sm.stats.StaleRoomsRemoved,
+		"timestamp", sm.stats.LastCleanupTime.Format(time.RFC3339))
 }
 
 // GetStats retorna uma cópia da estrutura de estatísticas atual
@@ -104,6 +141,11 @@ func (sm *StatsManager) GetStats() ServerStats {
 // HandleStatsEndpoint é o manipulador HTTP para o endpoint /stats
 func (sm *StatsManager) HandleStatsEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	// Log stats request
+	logger.Debug("Stats endpoint requested",
+		"remoteAddr", r.RemoteAddr,
+		"userAgent", r.UserAgent())
 
 	// Obtem estatísticas atualizadas
 	stats := sm.GetStats()
@@ -122,6 +164,7 @@ func (sm *StatsManager) HandleStatsEndpoint(w http.ResponseWriter, r *http.Reque
 	// Converte para JSON e envia resposta
 	jsonBytes, err := json.Marshal(statsResponse)
 	if err != nil {
+		logger.Error("Failed to generate statistics JSON", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "Failed to generate statistics"}`))
 		return

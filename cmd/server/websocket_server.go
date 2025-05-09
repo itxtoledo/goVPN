@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/itxtoledo/govpn/cmd/server/logger"
 	"github.com/itxtoledo/govpn/libs/crypto_utils"
 	"github.com/itxtoledo/govpn/libs/models"
 )
@@ -106,7 +106,7 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("Failed to upgrade connection: %v", err)
+		logger.Error("Failed to upgrade connection", "error", err)
 		return
 	}
 	defer conn.Close()
@@ -179,7 +179,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 			s.handlePing(conn, sigMsg.Payload, originalID)
 
 		default:
-			log.Printf("Unknown message type: %s", sigMsg.Type)
+			logger.Warn("Unknown message type", "type", sigMsg.Type)
 			if originalID != "" {
 				s.sendErrorSignal(conn, "Unknown message type", originalID)
 			}
@@ -230,7 +230,7 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 	// Verifica se a chave pública já tem uma sala
 	hasRoom, existingRoomID, err := s.supabaseManager.PublicKeyHasRoom(req.PublicKey)
 	if err != nil {
-		log.Printf("Error checking if public key has a room: %v", err)
+		logger.Error("Error checking if public key has a room", "error", err)
 	} else if hasRoom {
 		s.sendErrorSignal(conn, fmt.Sprintf("This public key has already created room: %s", existingRoomID), originalID)
 		return
@@ -241,7 +241,7 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 	// Verifica se o ID da sala já existe
 	exists, err := s.supabaseManager.RoomExists(roomID)
 	if err != nil {
-		log.Printf("Error checking if room exists: %v", err)
+		logger.Error("Error checking if room exists", "error", err)
 	} else if exists {
 		s.sendErrorSignal(conn, "Room ID conflict, please try again", originalID)
 		return
@@ -270,7 +270,7 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 	// Store room in Supabase
 	err = s.supabaseManager.CreateRoom(room)
 	if err != nil {
-		log.Printf("Error creating room in Supabase: %v", err)
+		logger.Error("Error creating room in Supabase", "error", err)
 		s.sendErrorSignal(conn, "Error creating room in database", originalID)
 		return
 	}
@@ -288,7 +288,10 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 	s.networks[roomID] = append(s.networks[roomID], conn)
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		log.Printf("Room %s (%s) created by %s", roomID, req.RoomName, conn.RemoteAddr().String())
+		logger.Info("Room created",
+			"roomID", roomID,
+			"roomName", req.RoomName,
+			"clientAddr", conn.RemoteAddr().String())
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
@@ -349,11 +352,14 @@ func (s *WebSocketServer) handleJoinRoom(conn *websocket.Conn, req models.JoinRo
 	// Update last activity time in Supabase
 	err = s.supabaseManager.UpdateRoomActivity(req.RoomID)
 	if err != nil && (s.config.LogLevel == "debug") {
-		log.Printf("Error updating room activity: %v", err)
+		logger.Debug("Error updating room activity", "error", err)
 	}
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		log.Printf("Client %s joined room %s (active clients: %d)", conn.RemoteAddr().String(), req.RoomID, clientCount)
+		logger.Info("Client joined room",
+			"clientAddr", conn.RemoteAddr().String(),
+			"roomID", req.RoomID,
+			"activeClients", clientCount)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
@@ -422,7 +428,7 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 
 	// Se for o dono da sala e não for para preservar
 	if isCreator {
-		log.Printf("Room owner is leaving room %s, intentionally deleting the room", roomID)
+		logger.Info("Room owner leaving", "roomID", roomID, "intentionalDelete", true)
 
 		// Notificar todos os outros clientes que a sala foi excluída
 		for _, peer := range s.networks[roomID] {
@@ -438,7 +444,7 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 		// Excluir a sala do Supabase
 		err := s.supabaseManager.DeleteRoom(roomID)
 		if err != nil {
-			log.Printf("Error deleting room from Supabase: %v", err)
+			logger.Error("Error deleting room from Supabase", "error", err)
 		}
 
 		// Limpar todas as referências da sala em memória
@@ -449,7 +455,7 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 			}
 		}
 
-		log.Printf("Room %s deleted because owner left", roomID)
+		logger.Info("Room deleted because owner left", "roomID", roomID)
 	} else {
 		// Se não for o dono, apenas remove o cliente da sala
 		s.removeClient(conn, roomID)
@@ -463,8 +469,10 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 	}
 	s.sendSignal(conn, models.TypeLeaveRoom, leaveSuccessPayload, originalID)
 
-	log.Printf("Client %s left room %s via explicit leave (isCreator=%v)",
-		conn.RemoteAddr().String(), roomID, isCreator)
+	logger.Info("Client left room via explicit leave",
+		"clientAddr", conn.RemoteAddr().String(),
+		"roomID", roomID,
+		"isCreator", isCreator)
 }
 
 // handleKick processes a request to kick a user from the room
@@ -494,7 +502,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 
 			peer.Close()
 			s.removeClient(peer, req.RoomID)
-			log.Printf("Client %s kicked from room %s", req.TargetID, req.RoomID)
+			logger.Info("Client kicked from room", "targetID", req.TargetID, "roomID", req.RoomID)
 
 			s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
@@ -530,12 +538,12 @@ func (s *WebSocketServer) handleRename(conn *websocket.Conn, req models.RenameRe
 
 	err = s.supabaseManager.UpdateRoomName(req.RoomID, req.RoomName)
 	if err != nil {
-		log.Printf("Error updating room name: %v", err)
+		logger.Error("Error updating room name", "error", err)
 		s.sendErrorSignal(conn, "Error updating room name in database", originalID)
 		return
 	}
 
-	log.Printf("Room %s renamed to %s", req.RoomID, req.RoomName)
+	logger.Info("Room renamed", "roomID", req.RoomID, "newName", req.RoomName)
 
 	// Notify all clients in the room about the rename
 	renamePayload := map[string]interface{}{
@@ -554,19 +562,21 @@ func (s *WebSocketServer) handleRename(conn *websocket.Conn, req models.RenameRe
 // validatePublicKey processa a chave pública fornecida na mensagem
 func (s *WebSocketServer) validatePublicKey(publicKeyBase64 string) (bool, ed25519.PublicKey, error) {
 	if publicKeyBase64 == "" {
-		log.Printf("Empty public key received")
+		logger.Warn("Empty public key received")
 		return false, nil, errors.New("chave pública vazia")
 	}
 
-	log.Printf("Validating public key: %s (length: %d)", publicKeyBase64[:10]+"...", len(publicKeyBase64))
+	logger.Debug("Validating public key",
+		"keyPrefix", publicKeyBase64[:10]+"...",
+		"keyLength", len(publicKeyBase64))
 
 	pubKey, err := crypto_utils.ParsePublicKey(publicKeyBase64)
 	if err != nil {
-		log.Printf("Failed to parse public key: %v", err)
+		logger.Error("Failed to parse public key", "error", err)
 		return false, nil, fmt.Errorf("falha ao processar chave pública: %w", err)
 	}
 
-	log.Printf("Public key validated successfully, size: %d bytes", len(pubKey))
+	logger.Debug("Public key validated successfully", "keySize", len(pubKey))
 	return true, pubKey, nil
 }
 
@@ -590,12 +600,13 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 			if err == nil && publicKey == room.PublicKeyB64 {
 				// A chave pública do cliente que está saindo coincide com a do criador da sala
 				isOwner = true
-				log.Printf("Room owner with public key %s disconnected", publicKey[:10]+"...")
+				logger.Info("Room owner disconnected",
+					"keyPrefix", publicKey[:10]+"...")
 
 				// Update room activity to prevent it from being removed during cleanup
 				err := s.supabaseManager.UpdateRoomActivity(roomID)
 				if err != nil {
-					log.Printf("Error updating room activity: %v", err)
+					logger.Error("Error updating room activity", "error", err)
 				}
 			}
 		}
@@ -635,9 +646,13 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		}
 
 		if isOwner {
-			log.Printf("Owner %s disconnected but room %s preserved", conn.RemoteAddr().String(), roomID)
+			logger.Info("Owner disconnected but room preserved",
+				"clientAddr", conn.RemoteAddr().String(),
+				"roomID", roomID)
 		} else {
-			log.Printf("Client %s disconnected from room %s", conn.RemoteAddr().String(), roomID)
+			logger.Info("Client disconnected from room",
+				"clientAddr", conn.RemoteAddr().String(),
+				"roomID", roomID)
 		}
 	} else {
 		// Cliente não estava em nenhuma sala
@@ -652,7 +667,7 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 func (s *WebSocketServer) DeleteStaleRooms() {
 	staleRooms, err := s.supabaseManager.GetStaleRooms(s.config.RoomExpiryDays)
 	if err != nil {
-		log.Printf("Error fetching stale rooms: %v", err)
+		logger.Error("Error fetching stale rooms", "error", err)
 		return
 	}
 
@@ -660,9 +675,9 @@ func (s *WebSocketServer) DeleteStaleRooms() {
 	for _, room := range staleRooms {
 		err := s.supabaseManager.DeleteRoom(room.ID)
 		if err != nil {
-			log.Printf("Error deleting stale room %s: %v", room.ID, err)
+			logger.Error("Error deleting stale room", "roomID", room.ID, "error", err)
 		} else {
-			log.Printf("Deleted stale room %s", room.ID)
+			logger.Info("Deleted stale room", "roomID", room.ID)
 			numRemoved++
 		}
 	}
@@ -707,12 +722,12 @@ func (s *WebSocketServer) Start(port string) error {
 		}
 	}()
 
-	log.Printf("WebSocket server starting on :%s", port)
+	logger.Info("WebSocket server starting", "port", port)
 
 	// Start HTTP server in a separate goroutine so we can return errors
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			log.Printf("HTTP server error: %v", err)
+			logger.Error("HTTP server error", "error", err)
 		}
 	}()
 
@@ -725,7 +740,7 @@ func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, origi
 	// Parse the ping message
 	var pingData map[string]interface{}
 	if err := json.Unmarshal(payload, &pingData); err != nil {
-		log.Printf("Error parsing ping payload: %v", err)
+		logger.Error("Error parsing ping payload", "error", err)
 		s.sendErrorSignal(conn, "Invalid ping format", originalID)
 		return
 	}
@@ -740,7 +755,7 @@ func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, origi
 	// Log ping if in debug mode
 	if s.config.LogLevel == "debug" {
 		clientAddr := conn.RemoteAddr().String()
-		log.Printf("Received ping from client %s", clientAddr)
+		logger.Debug("Received ping from client", "clientAddr", clientAddr)
 	}
 
 	// Send pong response with the same message ID
@@ -786,7 +801,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 		if err == nil && publicKey == room.PublicKeyB64 {
 			// A chave pública do cliente que está saindo coincide com a do criador da sala
 			isCreator = true
-			log.Printf("Room creator disconnected: %s", publicKey)
+			logger.Info("Room creator disconnected", "publicKey", publicKey)
 		}
 	}
 
@@ -794,7 +809,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 	if isCreator {
 		err := s.supabaseManager.DeleteRoom(roomID)
 		if err != nil && (s.config.LogLevel == "debug") {
-			log.Printf("Error deleting room from Supabase on creator disconnect: %v", err)
+			logger.Debug("Error deleting room from Supabase on creator disconnect", "error", err)
 		}
 
 		// Notifica todos os outros participantes da sala que ela foi excluída
@@ -815,7 +830,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 				delete(s.clients, c)
 			}
 		}
-		log.Printf("Room %s deleted because owner disconnected", roomID)
+		logger.Info("Room deleted because owner disconnected", "roomID", roomID)
 	} else if len(s.networks[roomID]) == 0 {
 		// Se não houver mais clientes na sala, remove a referência da sala
 		delete(s.networks, roomID)
@@ -823,7 +838,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
-	log.Printf("Client %s left room %s", conn.RemoteAddr().String(), roomID)
+	logger.Info("Client left room", "clientAddr", conn.RemoteAddr().String(), "roomID", roomID)
 }
 
 // handleStatsEndpoint is the HTTP handler for the /stats endpoint
@@ -858,12 +873,12 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 // InitiateGracefulShutdown starts the graceful shutdown process
 func (s *WebSocketServer) InitiateGracefulShutdown(timeout time.Duration, restartInfo string) {
 	if s.isShutdown {
-		log.Println("Shutdown already in progress")
+		logger.Warn("Shutdown already in progress")
 		return
 	}
 
 	s.isShutdown = true
-	log.Printf("Initiating graceful shutdown (timeout: %v)", timeout)
+	logger.Info("Initiating graceful shutdown", "timeout", timeout)
 
 	// Wait a short amount of time for in-flight requests to complete
 	time.Sleep(500 * time.Millisecond)
@@ -884,13 +899,13 @@ func (s *WebSocketServer) InitiateGracefulShutdown(timeout time.Duration, restar
 	// Actually shutdown the HTTP server
 	if s.httpServer != nil {
 		if err := s.httpServer.Shutdown(ctx); err != nil {
-			log.Printf("HTTP server shutdown error: %v", err)
+			logger.Error("HTTP server shutdown error", "error", err)
 		}
 	}
 
 	// Signal successful shutdown
 	close(s.shutdownChan)
-	log.Println("Graceful shutdown completed")
+	logger.Info("Graceful shutdown completed")
 }
 
 // notifyClientsAboutShutdown sends a shutdown notification to all connected clients
@@ -898,7 +913,7 @@ func (s *WebSocketServer) notifyClientsAboutShutdown(shutdownSeconds int, restar
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	log.Printf("Notifying %d clients about server shutdown", len(s.clients))
+	logger.Info("Notifying clients about server shutdown", "clientCount", len(s.clients))
 
 	notification := models.ServerShutdownNotification{
 		Message:     "Server is shutting down for maintenance",
@@ -916,7 +931,7 @@ func (s *WebSocketServer) notifyClientsAboutShutdown(shutdownSeconds int, restar
 
 		err = s.sendSignal(conn, models.TypeServerShutdown, notification, msgID)
 		if err != nil {
-			log.Printf("Error notifying client %s: %v", conn.RemoteAddr().String(), err)
+			logger.Error("Error notifying client", "clientAddr", conn.RemoteAddr().String(), "error", err)
 		}
 	}
 }
@@ -926,21 +941,21 @@ func (s *WebSocketServer) persistStateForRestart() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	log.Println("Persisting state for potential server restart")
+	logger.Info("Persisting state for potential server restart")
 
 	// Update all active room timestamps in the database
 	for roomID := range s.networks {
 		// Ensure this room's activity is updated to prevent cleanup
 		err := s.supabaseManager.UpdateRoomActivity(roomID)
 		if err != nil {
-			log.Printf("Error updating room %s activity: %v", roomID, err)
+			logger.Error("Error updating room activity", "roomID", roomID, "error", err)
 		} else {
-			log.Printf("Room %s state persisted", roomID)
+			logger.Info("Room state persisted", "roomID", roomID)
 		}
 	}
 
 	// Could add more state persistence here if needed
-	log.Println("Server state persistence completed")
+	logger.Info("Server state persistence completed")
 }
 
 // WaitForShutdown blocks until the server has shut down

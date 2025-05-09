@@ -101,10 +101,10 @@ Este documento detalha as funcionalidades já implementadas e as pendentes no se
   - [x] Contadores de conexões e salas ativas
   - [x] Tempo de atividade do servidor
 
-- [ ] **Logs Estruturados**
-  - [ ] Formato JSON para logs
-  - [ ] Níveis adequados para produção
-  - [ ] Rotação de arquivos de log
+- [x] **Logs Estruturados**
+  - [x] Formato JSON para logs
+  - [x] Níveis adequados para produção
+  - [x] Rotação de arquivos de log
 
 ### Testes
 - [ ] **Testes Unitários**
