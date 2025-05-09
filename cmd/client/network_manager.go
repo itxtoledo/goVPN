@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/itxtoledo/govpn/cmd/client/data"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // NetworkInterface define a interface mínima para a rede virtual
@@ -150,23 +152,26 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 		return fmt.Errorf("failed to create room: %v", err)
 	}
 
-	// Save room to local database
-	err = nm.UI.VPN.DBManager.SaveRoom(res.RoomID, name, password)
-	if err != nil {
-		log.Printf("Warning: Could not save room to database: %v", err)
-		// Continue even if database save fails
-	} else {
-		log.Printf("Room saved to database: ID=%s, Name=%s", res.RoomID, name)
+	// Check if the room was successfully created and has a valid ID
+	if res == nil || res.RoomID == "" {
+		return fmt.Errorf("failed to create room: invalid server response")
 	}
 
-	// Update room connection time
-	err = nm.UI.VPN.DBManager.UpdateRoomConnection(res.RoomID)
-	if err != nil {
-		log.Printf("Warning: Could not update room connection time: %v", err)
-		// Continue even if update fails
+	log.Printf("Room created: ID=%s, Name=%s", res.RoomID, name)
+
+	// Store room information in memory
+	room := &storage.Room{
+		ID:            res.RoomID,
+		Name:          name,
+		Password:      password,
+		LastConnected: time.Now(),
 	}
 
-	// Store room information
+	// Add the room to the UI's in-memory room list
+	// Use append to add the new room to the existing slice
+	nm.UI.Rooms = append(nm.UI.Rooms, room)
+
+	// Store room information for current connection
 	nm.RoomID = res.RoomID
 	nm.RoomPassword = password
 
@@ -174,7 +179,7 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 	nm.UI.RealtimeData.SetRoomInfo(res.RoomID, password)
 	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
 
-	// Get room list
+	// Refresh network list now that we have added the room to memory
 	nm.UI.refreshNetworkList()
 
 	// Update UI
@@ -195,32 +200,45 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 		return fmt.Errorf("failed to join room: %v", err)
 	}
 
-	// Use "Sala " + roomID as the room name since there's no GetRoomName method on the backend
+	// Use roomName from the response
 	roomName := res.RoomName
 
-	// Save room to local database
-	err = nm.UI.VPN.DBManager.SaveRoom(roomID, roomName, password)
-	if err != nil {
-		log.Printf("Warning: Could not save room to database: %v", err)
-		// Continue even if database save fails
-	} else {
-		log.Printf("Room saved to database: ID=%s, Name=%s", roomID, roomName)
+	// Store room information in memory
+	room := &storage.Room{
+		ID:            roomID,
+		Name:          roomName,
+		Password:      password,
+		LastConnected: time.Now(),
 	}
 
-	// Update room connection time
-	err = nm.UI.VPN.DBManager.UpdateRoomConnection(roomID)
-	if err != nil {
-		log.Printf("Warning: Could not update room connection time: %v", err)
-		// Continue even if update fails
+	// Check if the room already exists in memory
+	roomExists := false
+	for i, existingRoom := range nm.UI.Rooms {
+		if existingRoom.ID == roomID {
+			// Update existing room
+			nm.UI.Rooms[i] = room
+			roomExists = true
+			break
+		}
 	}
 
-	// Store room information
+	// If room doesn't exist, add it
+	if !roomExists {
+		nm.UI.Rooms = append(nm.UI.Rooms, room)
+	}
+
+	log.Printf("Room joined: ID=%s, Name=%s", roomID, roomName)
+
+	// Store room information for current connection
 	nm.RoomID = roomID
 	nm.RoomPassword = password
 
 	// Update data layer
 	nm.UI.RealtimeData.SetRoomInfo(roomID, password)
 	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+
+	// Refresh network list now that we have added the room to memory
+	nm.UI.refreshNetworkList()
 
 	// Update UI
 	nm.UI.refreshUI()
@@ -246,11 +264,13 @@ func (nm *NetworkManager) LeaveRoom() error {
 		return fmt.Errorf("failed to leave room: %v", err)
 	}
 
-	// Delete the room from the local database
-	err = nm.UI.VPN.DBManager.DeleteRoom(roomID)
-	if err != nil {
-		log.Printf("Error deleting room from database: %v", err)
-		// Continue even if database deletion fails
+	// Remove the room from memory
+	for i, room := range nm.UI.Rooms {
+		if room.ID == roomID {
+			// Remove this room from the slice
+			nm.UI.Rooms = append(nm.UI.Rooms[:i], nm.UI.Rooms[i+1:]...)
+			break
+		}
 	}
 
 	// Clear room information
@@ -260,6 +280,9 @@ func (nm *NetworkManager) LeaveRoom() error {
 	// Update data layer
 	nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
 	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+
+	// Refresh the network list UI
+	nm.UI.refreshNetworkList()
 
 	// Update UI
 	nm.UI.refreshUI()
@@ -282,11 +305,13 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 		return fmt.Errorf("failed to leave room: %v", err)
 	}
 
-	// Delete the room from the local database
-	err = nm.UI.VPN.DBManager.DeleteRoom(roomID)
-	if err != nil {
-		log.Printf("Error deleting room from database: %v", err)
-		// Continue even if database deletion fails
+	// Remove room from memory
+	for i, room := range nm.UI.Rooms {
+		if room.ID == roomID {
+			// Remove this room from the slice
+			nm.UI.Rooms = append(nm.UI.Rooms[:i], nm.UI.Rooms[i+1:]...)
+			break
+		}
 	}
 
 	// If we're leaving the current room, clear our room information
@@ -300,6 +325,9 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 
 	// Emit the room left event regardless
 	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+
+	// Refresh the network list UI
+	nm.UI.refreshNetworkList()
 
 	// Update UI
 	nm.UI.refreshUI()
@@ -318,14 +346,27 @@ func (nm *NetworkManager) HandleRoomDeleted(roomID string) error {
 
 		// Update data layer
 		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
-		nm.UI.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
-
-		// Update UI
-		nm.UI.refreshUI()
 	}
 
-	// Delete the room from the database using the existing database manager
-	return nm.UI.VPN.DBManager.DeleteRoom(roomID)
+	// Remove room from memory
+	for i, room := range nm.UI.Rooms {
+		if room.ID == roomID {
+			// Remove this room from the slice
+			nm.UI.Rooms = append(nm.UI.Rooms[:i], nm.UI.Rooms[i+1:]...)
+			break
+		}
+	}
+
+	// Emit the event
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
+
+	// Refresh the network list UI
+	nm.UI.refreshNetworkList()
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
 }
 
 // Disconnect disconnects from the VPN network

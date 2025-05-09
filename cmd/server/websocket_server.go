@@ -114,6 +114,25 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	s.statsManager.IncrementConnectionsTotal()
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
+	// Extract client ID (public key) from header if available
+	publicKeyHeader := r.Header.Get("X-Client-ID")
+	if publicKeyHeader != "" && s.config.LogLevel == "debug" {
+		logger.Debug("Client connected with public key", "publicKey", publicKeyHeader)
+
+		// When client connects with public key, automatically send their rooms
+		msgID, _ := models.GenerateMessageID()
+
+		// Create and handle a request to get user rooms
+		req := models.GetUserRoomsRequest{
+			BaseRequest: models.BaseRequest{
+				PublicKey: publicKeyHeader,
+			},
+		}
+
+		// Send the user rooms in a separate goroutine to avoid blocking the connection setup
+		go s.handleGetUserRooms(conn, req, msgID)
+	}
+
 	for {
 		var sigMsg models.SignalingMessage
 		err := conn.ReadJSON(&sigMsg)
@@ -147,6 +166,24 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleJoinRoom(conn, req, originalID)
 
+		case models.TypeConnectRoom:
+			var req models.ConnectRoomRequest
+			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
+				s.sendErrorSignal(conn, "Invalid connect room request format", originalID)
+				continue
+			}
+
+			s.handleConnectRoom(conn, req, originalID)
+
+		case models.TypeDisconnectRoom:
+			var req models.DisconnectRoomRequest
+			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
+				s.sendErrorSignal(conn, "Invalid disconnect room request format", originalID)
+				continue
+			}
+
+			s.handleDisconnectRoom(conn, req, originalID)
+
 		case models.TypeLeaveRoom:
 			var req models.LeaveRoomRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
@@ -177,6 +214,15 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 		case models.TypePing:
 			// Handle ping message - simple connection check
 			s.handlePing(conn, sigMsg.Payload, originalID)
+
+		case models.TypeGetUserRooms:
+			var req models.GetUserRoomsRequest
+			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
+				s.sendErrorSignal(conn, "Invalid get user rooms request format", originalID)
+				continue
+			}
+
+			s.handleGetUserRooms(conn, req, originalID)
 
 		default:
 			logger.Warn("Unknown message type", "type", sigMsg.Type)
@@ -336,6 +382,28 @@ func (s *WebSocketServer) handleJoinRoom(conn *websocket.Conn, req models.JoinRo
 		return
 	}
 
+	// Check if user is already a member of this room
+	isInRoom, err := s.supabaseManager.IsUserInRoom(req.RoomID, req.PublicKey)
+	if err != nil {
+		logger.Error("Error checking if user is in room", "error", err)
+	}
+
+	// If user is not already a member, add them to the user_rooms table
+	if !isInRoom {
+		err = s.supabaseManager.AddUserToRoom(req.RoomID, req.PublicKey, req.Username)
+		if err != nil {
+			logger.Error("Error adding user to room", "error", err)
+			// Continue anyway, as this is not a critical error
+		}
+	} else {
+		// Update the user's connection status to connected
+		err = s.supabaseManager.UpdateUserRoomConnection(req.RoomID, req.PublicKey, true)
+		if err != nil {
+			logger.Error("Error updating user room connection", "error", err)
+			// Continue anyway, as this is not a critical error
+		}
+	}
+
 	// Armazena a chave pública do cliente que entrou na sala
 	s.clientToPublicKey[conn] = req.PublicKey
 
@@ -396,6 +464,206 @@ func (s *WebSocketServer) handleJoinRoom(conn *websocket.Conn, req models.JoinRo
 	}
 }
 
+// handleConnectRoom processes a request to connect to a previously joined room
+// This allows a client to connect to a room without providing the password again
+func (s *WebSocketServer) handleConnectRoom(conn *websocket.Conn, req models.ConnectRoomRequest, originalID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Fetch room from Supabase
+	room, err := s.supabaseManager.GetRoom(req.RoomID)
+	if err != nil {
+		s.sendErrorSignal(conn, "Room does not exist", originalID)
+		return
+	}
+
+	if req.PublicKey == "" {
+		s.sendErrorSignal(conn, "Public key is required", originalID)
+		return
+	}
+
+	// Check if user is a member of this room
+	isInRoom, err := s.supabaseManager.IsUserInRoom(req.RoomID, req.PublicKey)
+	if err != nil {
+		logger.Error("Error checking if user is in room", "error", err)
+		s.sendErrorSignal(conn, "Error verifying room membership", originalID)
+		return
+	}
+
+	if !isInRoom {
+		s.sendErrorSignal(conn, "You must join this room first", originalID)
+		return
+	}
+
+	// Check if room is full
+	connections := s.networks[req.RoomID]
+	if len(connections) >= s.config.MaxClientsPerRoom {
+		s.sendErrorSignal(conn, "Room is full", originalID)
+		return
+	}
+
+	// Update the user's connection status in the database
+	err = s.supabaseManager.UpdateUserRoomConnection(req.RoomID, req.PublicKey, true)
+	if err != nil {
+		logger.Error("Error updating user room connection", "error", err)
+		// Continue anyway as this is not critical
+	}
+
+	// Store the client's public key
+	s.clientToPublicKey[conn] = req.PublicKey
+
+	// Add the client to the room
+	s.clients[conn] = req.RoomID
+	if _, exists := s.networks[req.RoomID]; !exists {
+		s.networks[req.RoomID] = []*websocket.Conn{}
+	}
+	s.networks[req.RoomID] = append(s.networks[req.RoomID], conn)
+
+	// Update last activity time in Supabase
+	err = s.supabaseManager.UpdateRoomActivity(req.RoomID)
+	if err != nil && (s.config.LogLevel == "debug") {
+		logger.Debug("Error updating room activity", "error", err)
+	}
+
+	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
+		logger.Info("Client connected to room (reconnect)",
+			"clientAddr", conn.RemoteAddr().String(),
+			"roomID", req.RoomID,
+			"activeClients", len(s.networks[req.RoomID]))
+	}
+
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+
+	// Send the response to the client
+	responsePayload := map[string]interface{}{
+		"room_id":   req.RoomID,
+		"room_name": room.Name,
+	}
+	s.sendSignal(conn, models.TypeRoomConnected, responsePayload, originalID)
+
+	// Notify other participants in the room about the new peer connection
+	for _, peer := range s.networks[req.RoomID] {
+		if peer != conn {
+			// Inform peers that a new client connected
+			peerConnectedPayload := map[string]interface{}{
+				"room_id":    req.RoomID,
+				"public_key": req.PublicKey,
+				"username":   req.Username,
+			}
+			s.sendSignal(peer, models.TypePeerConnected, peerConnectedPayload, "")
+
+			// Inform the new client about existing peers
+			peerPublicKey, hasPeerKey := s.clientToPublicKey[peer]
+			if hasPeerKey {
+				existingPeerPayload := map[string]interface{}{
+					"room_id":    req.RoomID,
+					"public_key": peerPublicKey,
+					"username":   "Peer", // Default username
+				}
+				s.sendSignal(conn, models.TypePeerConnected, existingPeerPayload, "")
+			}
+		}
+	}
+}
+
+// handleDisconnectRoom processes a request to disconnect from a room without leaving it
+// This allows clients to disconnect temporarily but remain as members of the room
+func (s *WebSocketServer) handleDisconnectRoom(conn *websocket.Conn, req models.DisconnectRoomRequest, originalID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	roomID := req.RoomID
+
+	// If roomID wasn't provided, use the roomID associated with this connection
+	if roomID == "" {
+		roomID = s.clients[conn]
+		if roomID == "" {
+			// Client isn't in any room
+			s.sendErrorSignal(conn, "Not connected to any room", originalID)
+			return
+		}
+	}
+
+	// Verify the client is actually in this room
+	if s.clients[conn] != roomID {
+		s.sendErrorSignal(conn, "Not connected to this room", originalID)
+		return
+	}
+
+	// Get the public key before removing the client
+	publicKey, hasPublicKey := s.clientToPublicKey[conn]
+	if !hasPublicKey {
+		s.sendErrorSignal(conn, "Public key not found for this connection", originalID)
+		return
+	}
+
+	// Check if this client is the room owner
+	room, err := s.supabaseManager.GetRoom(roomID)
+	if err != nil {
+		s.sendErrorSignal(conn, "Room not found", originalID)
+		return
+	}
+
+	isOwner := (publicKey == room.PublicKeyB64)
+
+	// If this is the owner, we need to update the room activity timestamp
+	// to ensure the room doesn't get deleted during cleanup
+	if isOwner {
+		err = s.supabaseManager.UpdateRoomActivity(roomID)
+		if err != nil && (s.config.LogLevel == "debug") {
+			logger.Debug("Error updating room activity", "error", err)
+		}
+	}
+
+	// Update the user's connection status in the database
+	err = s.supabaseManager.UpdateUserRoomConnection(roomID, publicKey, false)
+	if err != nil {
+		logger.Error("Error updating user room connection status", "error", err)
+		// Continue anyway as this is not critical
+	}
+
+	// Remove client from the networks map but DO NOT remove from the clients map
+	// This allows the server to remember which room the client belongs to
+	if networks, exists := s.networks[roomID]; exists {
+		for i, peer := range networks {
+			if peer == conn {
+				s.networks[roomID] = append(networks[:i], networks[i+1:]...)
+				break
+			}
+		}
+
+		// If no more clients in the room's network list, remove the network entry
+		// but don't delete the room from Supabase
+		if len(s.networks[roomID]) == 0 {
+			delete(s.networks, roomID)
+		} else {
+			// Notify other participants that this client disconnected
+			for _, peer := range s.networks[roomID] {
+				peerDisconnectedPayload := map[string]interface{}{
+					"room_id":    roomID,
+					"public_key": publicKey,
+				}
+				s.sendSignal(peer, models.TypePeerDisconnected, peerDisconnectedPayload, "")
+			}
+		}
+	}
+
+	// Send disconnect confirmation
+	disconnectResponse := map[string]interface{}{
+		"room_id": roomID,
+	}
+	s.sendSignal(conn, models.TypeRoomDisconnected, disconnectResponse, originalID)
+
+	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
+		logger.Info("Client disconnected from room (but still a member)",
+			"clientAddr", conn.RemoteAddr().String(),
+			"roomID", roomID,
+			"isOwner", isOwner)
+	}
+
+	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
+}
+
 // handleLeaveRoom processes a request from a client to leave a room
 func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.LeaveRoomRequest, originalID string) {
 	s.mu.Lock()
@@ -415,6 +683,13 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 
 	// Recupera a chave pública do cliente
 	publicKey := req.PublicKey
+	if publicKey == "" {
+		publicKey, _ = s.clientToPublicKey[conn]
+		if publicKey == "" {
+			s.sendErrorSignal(conn, "Public key is required", originalID)
+			return
+		}
+	}
 
 	// Busca a sala para verificar se o cliente é o dono
 	room, err := s.supabaseManager.GetRoom(roomID)
@@ -425,6 +700,13 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 
 	// Verifica se o cliente é o dono da sala
 	isCreator := (publicKey == room.PublicKeyB64)
+
+	// Remove the user from the user_rooms table
+	err = s.supabaseManager.RemoveUserFromRoom(roomID, publicKey)
+	if err != nil {
+		logger.Error("Error removing user from user_rooms table", "error", err)
+		// Continue anyway, as this is not a critical error
+	}
 
 	// Se for o dono da sala e não for para preservar
 	if isCreator {
@@ -868,6 +1150,58 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
+}
+
+// handleGetUserRooms processes a request to get all rooms a user has joined
+func (s *WebSocketServer) handleGetUserRooms(conn *websocket.Conn, req models.GetUserRoomsRequest, originalID string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if req.PublicKey == "" {
+		s.sendErrorSignal(conn, "Public key is required", originalID)
+		return
+	}
+
+	// Get all rooms for this user
+	userRooms, err := s.supabaseManager.GetUserRooms(req.PublicKey)
+	if err != nil {
+		logger.Error("Error fetching user rooms", "error", err, "publicKey", req.PublicKey)
+		s.sendErrorSignal(conn, "Error fetching user rooms", originalID)
+		return
+	}
+
+	// Build response with room details
+	response := models.UserRoomsResponse{
+		Rooms: make([]models.UserRoomInfo, 0, len(userRooms)),
+	}
+
+	for _, userRoom := range userRooms {
+		// Get room details
+		room, err := s.supabaseManager.GetRoom(userRoom.RoomID)
+		if err != nil {
+			// Skip rooms that no longer exist
+			logger.Debug("Room no longer exists", "roomID", userRoom.RoomID)
+			continue
+		}
+
+		roomInfo := models.UserRoomInfo{
+			RoomID:        userRoom.RoomID,
+			RoomName:      room.Name,
+			IsConnected:   userRoom.IsConnected,
+			JoinedAt:      userRoom.JoinedAt,
+			LastConnected: userRoom.LastConnected,
+		}
+		response.Rooms = append(response.Rooms, roomInfo)
+	}
+
+	if s.config.LogLevel == "debug" {
+		logger.Debug("Sending user rooms",
+			"publicKey", req.PublicKey,
+			"roomCount", len(response.Rooms))
+	}
+
+	// Send response
+	s.sendSignal(conn, models.TypeUserRooms, response, originalID)
 }
 
 // InitiateGracefulShutdown starts the graceful shutdown process

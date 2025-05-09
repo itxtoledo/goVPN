@@ -1,8 +1,9 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
-	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -13,53 +14,50 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // VPNClient é a estrutura principal do cliente VPN
 type VPNClient struct {
-	DBManager      *storage.DatabaseManager
+	PrivateKey     interface{}
+	PublicKey      interface{}
+	PublicKeyStr   string // Identificador principal do cliente
+	Computers      []Computer
 	CurrentRoom    string
 	IsConnected    bool
 	NetworkManager *NetworkManager
 	UI             *UIManager
 	ConfigManager  *ConfigManager
-
-	// Identificação do cliente
-	PublicKeyStr string // Identificador principal do cliente
 }
 
-// NewVPNClient cria uma nova instância do cliente VPN
+// NewVPNClient creates a new VPN client
 func NewVPNClient(ui *UIManager) *VPNClient {
-	vpn := &VPNClient{
-		IsConnected:   false,
-		UI:            ui,
-		ConfigManager: ui.ConfigManager,
-	}
-
-	// Inicialização do banco de dados
-	dbManager, err := storage.NewDatabaseManager()
+	// Generate an Ed25519 key pair
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		log.Printf("Error initializing database: %v", err)
-	} else {
-		vpn.DBManager = dbManager
-
-		// Carrega ou gera identificador do cliente
-		if err := vpn.loadOrGenerateIdentifier(); err != nil {
-			log.Printf("Critical error loading/generating client identifier: %v", err)
-			// Se não conseguirmos gerar o identificador, não faz sentido continuar
-		} else {
-			log.Printf("Client identifier successfully loaded")
-		}
+		log.Printf("Error generating key pair: %v", err)
 	}
 
-	// Inicialização do gerenciador de rede
-	vpn.NetworkManager = NewNetworkManager(ui)
+	// Convert public key to string for storage
+	publicKeyStr := base64.StdEncoding.EncodeToString(publicKey)
 
-	// Carrega configurações
-	vpn.loadSettings()
+	// Create VPN client
+	client := &VPNClient{
+		UI:            ui,
+		IsConnected:   false,
+		PrivateKey:    privateKey,
+		PublicKey:     publicKey,
+		PublicKeyStr:  publicKeyStr,
+		Computers:     make([]Computer, 0),
+		ConfigManager: ui.ConfigManager, // Set ConfigManager from UI manager
+	}
 
-	return vpn
+	// Initialize rooms as an empty slice (in-memory storage only)
+	ui.Rooms = make([]*storage.Room, 0)
+
+	// Create network manager
+	client.NetworkManager = NewNetworkManager(ui)
+
+	return client
 }
 
 // loadSettings carrega as configurações salvas do banco de dados
@@ -142,40 +140,6 @@ func (v *VPNClient) Run() {
 	}()
 }
 
-// loadOrGenerateIdentifier carrega o identificador do cliente do banco ou gera um novo se não existir
-func (v *VPNClient) loadOrGenerateIdentifier() error {
-	// Tenta carregar o identificador existente primeiro
-	_, publicKey, err := v.DBManager.LoadKeys()
-
-	if err == nil && publicKey != "" {
-		// Identificador encontrado
-		v.PublicKeyStr = publicKey
-		log.Println("Client identifier successfully loaded.")
-		return nil
-	} else if err != sql.ErrNoRows && err != nil {
-		// Erro diferente de "não encontrado"
-		return err
-	}
-
-	// Identificador não encontrado, gera novo
-	log.Println("No client identifier found, generating new one...")
-
-	// Gerar id simples (pode ser um UUID ou outro identificador único)
-	publicKey = generateClientID()
-
-	// Armazena o identificador no banco de dados
-	err = v.DBManager.SaveKeys("", publicKey)
-	if err != nil {
-		return err
-	}
-
-	// Atualiza a estrutura VPNClient
-	v.PublicKeyStr = publicKey
-	log.Println("New client identifier generated and stored successfully.")
-
-	return nil
-}
-
 // generateClientID gera um ID de cliente único
 func generateClientID() string {
 	// Geramos um identificador simples baseado em timestamp + random
@@ -191,15 +155,6 @@ func generateClientID() string {
 
 // GetIdentifier retorna o identificador do cliente
 func (v *VPNClient) GetIdentifier() string {
-	// Se o identificador não estiver carregado, tenta carregá-lo
-	if v.PublicKeyStr == "" {
-		err := v.loadOrGenerateIdentifier()
-		if err != nil {
-			log.Printf("Error loading/generating client identifier: %v", err)
-			return ""
-		}
-	}
-
 	return v.PublicKeyStr
 }
 

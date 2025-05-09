@@ -222,3 +222,115 @@ func (sm *SupabaseManager) PublicKeyHasRoom(publicKey string) (bool, string, err
 	}
 	return false, "", nil
 }
+
+// UserRoom represents a record in the user_rooms table linking users to rooms
+type UserRoom struct {
+	ID            int       `json:"id"`
+	RoomID        string    `json:"room_id"`
+	PublicKey     string    `json:"public_key"`
+	Username      string    `json:"username"`
+	JoinedAt      time.Time `json:"joined_at"`
+	LastConnected time.Time `json:"last_connected"`
+	IsConnected   bool      `json:"is_connected"`
+}
+
+// AddUserToRoom adds a user to a room in the user_rooms table
+func (sm *SupabaseManager) AddUserToRoom(roomID, publicKey, username string) error {
+	userRoomData := map[string]interface{}{
+		"room_id":        roomID,
+		"public_key":     publicKey,
+		"username":       username,
+		"joined_at":      time.Now().Format(time.RFC3339),
+		"last_connected": time.Now().Format(time.RFC3339),
+		"is_connected":   true,
+	}
+
+	if sm.logLevel == "debug" {
+		logger.Debug("Adding user to room", "roomID", roomID, "publicKey", publicKey)
+	}
+
+	_, _, err := sm.client.From("user_rooms").Insert(userRoomData, false, "", "", "").Execute()
+	if err != nil {
+		return fmt.Errorf("failed to add user to room in Supabase: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateUserRoomConnection updates the connection status and last_connected timestamp for a user in a room
+func (sm *SupabaseManager) UpdateUserRoomConnection(roomID, publicKey string, isConnected bool) error {
+	updateData := map[string]interface{}{
+		"last_connected": time.Now().Format(time.RFC3339),
+		"is_connected":   isConnected,
+	}
+
+	if sm.logLevel == "debug" {
+		logger.Debug("Updating user room connection", "roomID", roomID, "publicKey", publicKey, "isConnected", isConnected)
+	}
+
+	_, _, err := sm.client.From("user_rooms").Update(updateData).Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return fmt.Errorf("failed to update user room connection: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveUserFromRoom removes a user from a room
+func (sm *SupabaseManager) RemoveUserFromRoom(roomID, publicKey string) error {
+	if sm.logLevel == "debug" {
+		logger.Debug("Removing user from room", "roomID", roomID, "publicKey", publicKey)
+	}
+
+	_, _, err := sm.client.From("user_rooms").Delete("", "").Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return fmt.Errorf("failed to remove user from room: %w", err)
+	}
+
+	return nil
+}
+
+// GetRoomUsers gets all users for a specific room
+func (sm *SupabaseManager) GetRoomUsers(roomID string) ([]UserRoom, error) {
+	var userRooms []UserRoom
+	data, _, err := sm.client.From("user_rooms").Select("*", "", false).Eq("room_id", roomID).Execute()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get room users: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &userRooms); err != nil {
+		return nil, fmt.Errorf("failed to parse user room data: %w", err)
+	}
+
+	return userRooms, nil
+}
+
+// GetUserRooms gets all rooms a user has joined
+func (sm *SupabaseManager) GetUserRooms(publicKey string) ([]UserRoom, error) {
+	var userRooms []UserRoom
+	data, _, err := sm.client.From("user_rooms").Select("*", "", false).Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user rooms: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &userRooms); err != nil {
+		return nil, fmt.Errorf("failed to parse user room data: %w", err)
+	}
+
+	return userRooms, nil
+}
+
+// IsUserInRoom checks if a user is already in a room
+func (sm *SupabaseManager) IsUserInRoom(roomID, publicKey string) (bool, error) {
+	var userRooms []UserRoom
+	data, _, err := sm.client.From("user_rooms").Select("id", "", false).Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return false, fmt.Errorf("failed to check if user is in room: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &userRooms); err != nil {
+		return false, fmt.Errorf("failed to parse user room data: %w", err)
+	}
+
+	return len(userRooms) > 0, nil
+}

@@ -13,6 +13,8 @@ This document describes the WebSocket API for the GoVPN server, allowing develop
    - [Leaving a Room](#leaving-a-room)
    - [Renaming a Room](#renaming-a-room)
    - [Deleting a Room](#deleting-a-room)
+   - [Connecting to a Previously Joined Room](#connecting-to-a-previously-joined-room)
+   - [Disconnecting from a Room](#disconnecting-from-a-room)
 5. [User Management](#user-management)
    - [Kicking a User](#kicking-a-user)
 6. [Connection Management](#connection-management)
@@ -62,6 +64,8 @@ The GoVPN system uses a message format that encapsulates all communications:
 
 - `CreateRoom`: Create a new VPN room
 - `JoinRoom`: Join an existing room
+- `ConnectRoom`: Connect to a previously joined room without providing password again
+- `DisconnectRoom`: Temporarily disconnect from a room without leaving it
 - `LeaveRoom`: Leave a room
 - `Ping`: Check connection and measure latency
 - `Offer`: Send a WebRTC offer to a peer
@@ -75,10 +79,14 @@ The GoVPN system uses a message format that encapsulates all communications:
 - `Error`: An error occurred
 - `RoomCreated`: A room was successfully created
 - `RoomJoined`: Successfully joined a room
+- `RoomConnected`: Successfully connected to a previously joined room  
+- `RoomDisconnected`: Successfully disconnected from a room (but still a member)
 - `RoomDeleted`: A room was deleted
 - `RoomRenamed`: A room was renamed
 - `PeerJoined`: A new peer joined the room
 - `PeerLeft`: A peer left the room
+- `PeerConnected`: A peer connected to the room (after previously joining)
+- `PeerDisconnected`: A peer disconnected from the room (without leaving)
 - `Kicked`: You were kicked from a room
 - `KickSuccess`: Successfully kicked a user
 - `RenameSuccess`: Successfully renamed a room
@@ -308,6 +316,111 @@ Common error messages include:
 ### Deleting a Room
 
 Room deletion happens automatically when the owner leaves a room. There's no explicit delete message type needed.
+
+### Connecting to a Previously Joined Room
+
+**Request (ClientMessage):**
+
+```json
+{
+  "message_id": "<unique-message-id>",
+  "type": "ConnectRoom",
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<base64-encoded-public-key>",
+    "username": "User1"
+  }
+}
+```
+
+- `room_id`: ID of the room to connect to
+- `public_key`: Base64-encoded Ed25519 public key
+- `username`: Optional username to display
+
+**Response (Success - ServerMessage):**
+
+```json
+{
+  "message_id": "<same-message-id-from-request>",
+  "type": "RoomConnected",
+  "payload": {
+    "room_id": "abc123",
+    "room_name": "My VPN Room"
+  }
+}
+```
+
+**Additional Messages (to all users in the room - ServerMessage):**
+
+```json
+{
+  "type": "PeerConnected",
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<user-public-key>",
+    "username": "User1"
+  }
+}
+```
+
+**Response (Error - ServerMessage):**
+
+```json
+{
+  "message_id": "<same-message-id-from-request>",
+  "type": "Error",
+  "payload": {
+    "error": "Error message here"
+  }
+}
+```
+
+Common error messages include:
+- "Room does not exist"
+- "Public key is required"
+- "Room is full"
+
+### Disconnecting from a Room (without leaving it)
+
+**Request (ClientMessage):**
+
+```json
+{
+  "message_id": "<unique-message-id>",
+  "type": "DisconnectRoom",
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<base64-encoded-public-key>"
+  }
+}
+```
+
+- `room_id`: ID of the room to disconnect from (if not provided, the server will use the room ID associated with the connection)
+- `public_key`: Base64-encoded Ed25519 public key
+
+**Response (Success - ServerMessage):**
+
+```json
+{
+  "message_id": "<same-message-id-from-request>",
+  "type": "RoomDisconnected",
+  "payload": {
+    "room_id": "abc123"
+  }
+}
+```
+
+**Additional Messages (to all users in the room - ServerMessage):**
+
+```json
+{
+  "type": "PeerDisconnected",
+  "payload": {
+    "room_id": "abc123",
+    "public_key": "<disconnected-user-public-key>"
+  }
+}
+```
 
 ## User Management
 

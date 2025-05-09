@@ -14,26 +14,34 @@ type MessageType string
 // Message type constants
 const (
 	// Client to server message types
-	TypeCreateRoom MessageType = "CreateRoom"
-	TypeJoinRoom   MessageType = "JoinRoom"
-	TypeLeaveRoom  MessageType = "LeaveRoom"
-	TypeKick       MessageType = "Kick"
-	TypeRename     MessageType = "Rename"
-	TypePing       MessageType = "Ping" // Added for connection testing
+	TypeCreateRoom     MessageType = "CreateRoom"
+	TypeJoinRoom       MessageType = "JoinRoom"
+	TypeConnectRoom    MessageType = "ConnectRoom"    // New: Conectar a uma sala previamente associada
+	TypeDisconnectRoom MessageType = "DisconnectRoom" // New: Desconectar de uma sala sem sair dela
+	TypeLeaveRoom      MessageType = "LeaveRoom"
+	TypeKick           MessageType = "Kick"
+	TypeRename         MessageType = "Rename"
+	TypePing           MessageType = "Ping"         // Added for connection testing
+	TypeGetUserRooms   MessageType = "GetUserRooms" // New: Get all rooms a user has joined
 
 	// Server to client message types
-	TypeError          MessageType = "Error"
-	TypeRoomCreated    MessageType = "RoomCreated"
-	TypeRoomJoined     MessageType = "RoomJoined"
-	TypeRoomDeleted    MessageType = "RoomDeleted"
-	TypeRoomRenamed    MessageType = "RoomRenamed"
-	TypePeerJoined     MessageType = "PeerJoined"
-	TypePeerLeft       MessageType = "PeerLeft"
-	TypeKicked         MessageType = "Kicked"
-	TypeKickSuccess    MessageType = "KickSuccess"
-	TypeRenameSuccess  MessageType = "RenameSuccess"
-	TypeDeleteSuccess  MessageType = "DeleteSuccess"
-	TypeServerShutdown MessageType = "ServerShutdown"
+	TypeError            MessageType = "Error"
+	TypeRoomCreated      MessageType = "RoomCreated"
+	TypeRoomJoined       MessageType = "RoomJoined"
+	TypeRoomConnected    MessageType = "RoomConnected"    // New: Confirmação de conexão à sala
+	TypeRoomDisconnected MessageType = "RoomDisconnected" // New: Confirmação de desconexão da sala
+	TypeRoomDeleted      MessageType = "RoomDeleted"
+	TypeRoomRenamed      MessageType = "RoomRenamed"
+	TypePeerJoined       MessageType = "PeerJoined"
+	TypePeerLeft         MessageType = "PeerLeft"
+	TypePeerConnected    MessageType = "PeerConnected"    // New: Notificação de peer conectado
+	TypePeerDisconnected MessageType = "PeerDisconnected" // New: Notificação de peer desconectado
+	TypeKicked           MessageType = "Kicked"
+	TypeKickSuccess      MessageType = "KickSuccess"
+	TypeRenameSuccess    MessageType = "RenameSuccess"
+	TypeDeleteSuccess    MessageType = "DeleteSuccess"
+	TypeServerShutdown   MessageType = "ServerShutdown"
+	TypeUserRooms        MessageType = "UserRooms" // New: Response with all rooms a user has joined
 )
 
 // Password validation constants
@@ -98,6 +106,30 @@ type JoinRoomResponse struct {
 	RoomName string `json:"room_name"`
 }
 
+// ConnectRoomRequest represents a request to connect to a previously joined room
+type ConnectRoomRequest struct {
+	BaseRequest
+	RoomID   string `json:"room_id"`
+	Username string `json:"username,omitempty"`
+}
+
+// ConnectRoomResponse represents a response to a room connection request
+type ConnectRoomResponse struct {
+	RoomID   string `json:"room_id"`
+	RoomName string `json:"room_name"`
+}
+
+// DisconnectRoomRequest represents a request to disconnect from a room (but stay joined)
+type DisconnectRoomRequest struct {
+	BaseRequest
+	RoomID string `json:"room_id"`
+}
+
+// DisconnectRoomResponse represents a response to a room disconnect request
+type DisconnectRoomResponse struct {
+	RoomID string `json:"room_id"`
+}
+
 // LeaveRoomRequest represents a request to leave a room
 type LeaveRoomRequest struct {
 	BaseRequest
@@ -152,6 +184,19 @@ type PeerLeftNotification struct {
 	PublicKey string `json:"public_key"`
 }
 
+// PeerConnectedNotification notifies that a peer has connected to the room
+type PeerConnectedNotification struct {
+	RoomID    string `json:"room_id"`
+	PublicKey string `json:"public_key"`
+	Username  string `json:"username,omitempty"`
+}
+
+// PeerDisconnectedNotification notifies that a peer has disconnected from the room (but not left)
+type PeerDisconnectedNotification struct {
+	RoomID    string `json:"room_id"`
+	PublicKey string `json:"public_key"`
+}
+
 // RoomDeletedNotification notifies that a room has been deleted
 type RoomDeletedNotification struct {
 	RoomID string `json:"room_id"`
@@ -168,6 +213,25 @@ type ServerShutdownNotification struct {
 	Message     string `json:"message"`
 	ShutdownIn  int    `json:"shutdown_in_seconds"` // Seconds until server shutdown
 	RestartInfo string `json:"restart_info,omitempty"`
+}
+
+// GetUserRoomsRequest represents a request to get all rooms a user has joined
+type GetUserRoomsRequest struct {
+	BaseRequest
+}
+
+// UserRoomInfo represents information about a room a user has joined
+type UserRoomInfo struct {
+	RoomID        string    `json:"room_id"`
+	RoomName      string    `json:"room_name"`
+	IsConnected   bool      `json:"is_connected"`
+	JoinedAt      time.Time `json:"joined_at"`
+	LastConnected time.Time `json:"last_connected"`
+}
+
+// UserRoomsResponse represents a response containing all rooms a user has joined
+type UserRoomsResponse struct {
+	Rooms []UserRoomInfo `json:"rooms"`
 }
 
 // Helper functions

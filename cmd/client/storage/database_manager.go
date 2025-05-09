@@ -22,6 +22,16 @@ type Room struct {
 	LastConnected time.Time
 }
 
+// JoinedRoom represents a room the user has joined
+type JoinedRoom struct {
+	ID            int64
+	RoomID        string
+	RoomName      string
+	JoinedAt      time.Time
+	LastConnected time.Time
+	IsConnected   bool
+}
+
 // NewDatabaseManager creates and initializes a new database manager
 func NewDatabaseManager() (*DatabaseManager, error) {
 	// Create the user data directory if it doesn't exist
@@ -61,6 +71,17 @@ func NewDatabaseManager() (*DatabaseManager, error) {
 			private_key TEXT NOT NULL,
 			public_key TEXT NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			);
+		
+		CREATE TABLE IF NOT EXISTS joined_rooms (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			room_id TEXT NOT NULL,
+			room_name TEXT NOT NULL,
+			joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			last_connected TIMESTAMP,
+			is_connected INTEGER DEFAULT 0,
+			UNIQUE(room_id),
+			FOREIGN KEY (room_id) REFERENCES rooms(id)
 		);
 	`)
 	if err != nil {
@@ -165,4 +186,95 @@ func (dm *DatabaseManager) UpdateRoomConnection(roomID string) error {
 func (dm *DatabaseManager) DeleteRoom(roomID string) error {
 	_, err := dm.DB.Exec("DELETE FROM rooms WHERE id = ?", roomID)
 	return err
+}
+
+// SaveJoinedRoom adds or updates a joined room record
+func (dm *DatabaseManager) SaveJoinedRoom(roomID, roomName string) error {
+	_, err := dm.DB.Exec(`INSERT OR REPLACE INTO joined_rooms (room_id, room_name, joined_at, last_connected, is_connected) 
+		VALUES (?, ?, datetime('now'), datetime('now'), 0)`, roomID, roomName)
+	return err
+}
+
+// UpdateJoinedRoomConnection updates the connection status and timestamp for a joined room
+func (dm *DatabaseManager) UpdateJoinedRoomConnection(roomID string, isConnected bool) error {
+	connected := 0
+	if isConnected {
+		connected = 1
+	}
+	_, err := dm.DB.Exec("UPDATE joined_rooms SET last_connected = datetime('now'), is_connected = ? WHERE room_id = ?",
+		connected, roomID)
+	return err
+}
+
+// RemoveJoinedRoom removes a room from the joined_rooms table
+func (dm *DatabaseManager) RemoveJoinedRoom(roomID string) error {
+	_, err := dm.DB.Exec("DELETE FROM joined_rooms WHERE room_id = ?", roomID)
+	return err
+}
+
+// GetJoinedRooms retrieves all rooms the user has joined
+func (dm *DatabaseManager) GetJoinedRooms() ([]JoinedRoom, error) {
+	rows, err := dm.DB.Query(`SELECT id, room_id, room_name, joined_at, last_connected, is_connected 
+		FROM joined_rooms ORDER BY last_connected DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rooms []JoinedRoom
+	for rows.Next() {
+		var room JoinedRoom
+		var isConnected int
+		if err := rows.Scan(&room.ID, &room.RoomID, &room.RoomName, &room.JoinedAt, &room.LastConnected, &isConnected); err != nil {
+			return nil, err
+		}
+		room.IsConnected = isConnected != 0
+		rooms = append(rooms, room)
+	}
+
+	return rooms, rows.Err()
+}
+
+// GetConnectedRooms retrieves all rooms the user is currently connected to
+func (dm *DatabaseManager) GetConnectedRooms() ([]JoinedRoom, error) {
+	rows, err := dm.DB.Query(`SELECT id, room_id, room_name, joined_at, last_connected, is_connected 
+		FROM joined_rooms WHERE is_connected = 1 ORDER BY last_connected DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rooms []JoinedRoom
+	for rows.Next() {
+		var room JoinedRoom
+		var isConnected int
+		if err := rows.Scan(&room.ID, &room.RoomID, &room.RoomName, &room.JoinedAt, &room.LastConnected, &isConnected); err != nil {
+			return nil, err
+		}
+		room.IsConnected = isConnected != 0
+		rooms = append(rooms, room)
+	}
+
+	return rooms, rows.Err()
+}
+
+// IsJoinedRoom checks if a user has joined a specific room
+func (dm *DatabaseManager) IsJoinedRoom(roomID string) (bool, error) {
+	var count int
+	err := dm.DB.QueryRow("SELECT COUNT(*) FROM joined_rooms WHERE room_id = ?", roomID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// GetJoinedRoom gets a specific joined room by roomID
+func (dm *DatabaseManager) GetJoinedRoom(roomID string) (JoinedRoom, error) {
+	var room JoinedRoom
+	var isConnected int
+	err := dm.DB.QueryRow(`SELECT id, room_id, room_name, joined_at, last_connected, is_connected 
+		FROM joined_rooms WHERE room_id = ?`, roomID).
+		Scan(&room.ID, &room.RoomID, &room.RoomName, &room.JoinedAt, &room.LastConnected, &isConnected)
+	room.IsConnected = isConnected != 0
+	return room, err
 }

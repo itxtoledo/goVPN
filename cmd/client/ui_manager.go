@@ -163,24 +163,7 @@ func (ui *UIManager) refreshUI() {
 
 // refreshNetworkList refreshes the network tree
 func (ui *UIManager) refreshNetworkList() {
-	// Refresh rooms
-	dbRooms, err := ui.VPN.DBManager.GetRooms()
-	if err != nil {
-		log.Printf("Error refreshing room list: %v", err)
-		return
-	}
-
-	// Convert DB room structs to Room objects
-	refreshedRooms := make([]*storage.Room, len(dbRooms))
-	for i, dbRoom := range dbRooms {
-		refreshedRooms[i] = &storage.Room{
-			ID:            dbRoom.ID,
-			Name:          dbRoom.Name,
-			Password:      dbRoom.Password,
-			LastConnected: dbRoom.LastConnected,
-		}
-	}
-	ui.Rooms = refreshedRooms
+	// No need to load from database anymore, UI.Rooms is maintained in memory
 
 	// Update network tree component
 	if ui.NetworkTreeComp != nil {
@@ -195,18 +178,9 @@ func (ui *UIManager) refreshNetworkList() {
 func (ui *UIManager) Run() {
 	log.Println("Iniciando GoVPN Client")
 
-	// Log saved rooms at startup
-	if ui.VPN != nil && ui.VPN.DBManager != nil {
-		rooms, err := ui.VPN.DBManager.GetRooms()
-		if err != nil {
-			log.Printf("Error loading saved rooms: %v", err)
-		} else {
-			log.Printf("User has %d saved rooms:", len(rooms))
-			for i, room := range rooms {
-				log.Printf("Room %d: ID=%s, Name=%s, Last Connection=%s",
-					i+1, room.ID, room.Name, room.LastConnected.Format("2006-01-02 15:04:05"))
-			}
-		}
+	// Initialize the room list as an empty slice if it's nil
+	if ui.Rooms == nil {
+		ui.Rooms = make([]*storage.Room, 0)
 	}
 
 	// Garantir que as configurações sejam aplicadas antes de exibir a janela
