@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // SettingsTabComponent representa o componente da aba de configurações
@@ -122,7 +121,7 @@ func (stc *SettingsTabComponent) saveSettings() {
 }
 
 // applySettings aplica as configurações
-func (stc *SettingsTabComponent) applySettings(config storage.Config) {
+func (stc *SettingsTabComponent) applySettings(config Config) {
 	// Atualizar o tema
 	switch config.Theme {
 	case "light":

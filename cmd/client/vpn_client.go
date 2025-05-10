@@ -38,7 +38,7 @@ func NewVPNClient(ui *UIManager) *VPNClient {
 	log.Println("Initializing VPN client...")
 
 	// Load existing keys from config
-	publicKeyStr, privateKeyStr := ui.ConfigManager.ConfigManager.GetKeyPair()
+	publicKeyStr, privateKeyStr := ui.ConfigManager.GetKeyPair()
 
 	log.Printf("Loaded public key from config: %s...", publicKeyStr[:10])
 	log.Printf("Loaded private key from config: %s...", privateKeyStr[:10])
