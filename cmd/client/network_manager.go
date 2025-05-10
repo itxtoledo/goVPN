@@ -83,17 +83,14 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 		return fmt.Errorf("failed to connect to signaling server: %v", err)
 	}
 
-	// Initialize virtual network
-	// A inicialização real da rede é feita em outro lugar
-	// Para este exemplo, usamos uma implementação simulada
-
-	// Set state to connected (simulado para este exemplo)
+	// Set state to connected
 	nm.connectionState = ConnectionStateConnected
 	nm.UI.RealtimeData.SetConnectionState(data.StateConnected)
 	nm.UI.RealtimeData.SetStatusMessage("Connected")
-
-	// O backend já envia automaticamente a lista de salas do usuário,
-	// então não precisamos chamar GetUserRooms aqui
+	
+	// O servidor já envia automaticamente a lista de salas do usuário ao conectar,
+	// então não precisamos chamar GetUserRooms explicitamente
+	log.Println("Aguardando lista de salas do servidor...")
 
 	// Get room list
 	nm.UI.refreshNetworkList()

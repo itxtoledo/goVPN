@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"sort"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -18,6 +19,7 @@ type NetworkListComponent struct {
 	UI            *UIManager
 	Container     *fyne.Container
 	RoomAccordion *widget.Accordion
+	updateMutex   sync.Mutex
 }
 
 // NewNetworkListComponent cria uma nova instância do componente de árvore de rede
@@ -46,16 +48,22 @@ func (ntc *NetworkListComponent) init() {
 
 // updateNetworkList atualiza a lista de redes
 func (ntc *NetworkListComponent) updateNetworkList() {
+	// Use mutex to prevent concurrent modifications
+	ntc.updateMutex.Lock()
+	defer ntc.updateMutex.Unlock()
+
+	// Limpar o accordion existente
+	ntc.RoomAccordion.CloseAll()
+
+	// Criar estrutura temporária para os novos itens
+	var newItems []*widget.AccordionItem
+
 	// Ordenar as salas por nome
 	if ntc.UI.Rooms != nil {
 		sort.Slice(ntc.UI.Rooms, func(i, j int) bool {
 			return ntc.UI.Rooms[i].Name < ntc.UI.Rooms[j].Name
 		})
 	}
-
-	// Limpar o accordion
-	ntc.RoomAccordion.CloseAll()
-	ntc.RoomAccordion.Items = []*widget.AccordionItem{}
 
 	// Get the current room ID from the network manager (if connected)
 	currentRoomID := ""
@@ -69,9 +77,13 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 		username = "You"
 	}
 
+	// Imprimir log para debug
+	log.Printf("Atualizando lista de salas. Total: %d", len(ntc.UI.Rooms))
+
 	// Adicionar cada sala como um item de accordion
-	if ntc.UI.Rooms != nil {
+	if ntc.UI.Rooms != nil && len(ntc.UI.Rooms) > 0 {
 		for _, room := range ntc.UI.Rooms {
+			log.Printf("Processando sala: %s (ID=%s)", room.Name, room.ID)
 			// Check if this room is the one we're currently connected to
 			isConnected := room.ID == currentRoomID
 
@@ -149,7 +161,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 								})
 
 								// Show success dialog on the main thread
-								dialog.NewInformation("Success", "Successfully left room: "+currentRoom.Name, ntc.UI.MainWindow).Show()
+								dialog.ShowInformation("Success", "Successfully left room: "+currentRoom.Name, ntc.UI.MainWindow)
 							}
 						}()
 					}
@@ -184,17 +196,27 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 
 			// Criar item de accordion para a sala
 			accordionItem := widget.NewAccordionItem(titleText, content)
-			ntc.RoomAccordion.Append(accordionItem)
+			newItems = append(newItems, accordionItem)
 
-			// Open the accordion for the currently connected room
+			// Track which items should be open
 			if isConnected {
 				accordionItem.Open = true
 			}
 		}
+	} else {
+		log.Printf("Nenhuma sala disponível para exibir")
+		// Adicionar mensagem informativa quando não há salas
+		accordionItem := widget.NewAccordionItem("No Rooms Available", widget.NewLabel("Create or join a room to get started."))
+		newItems = append(newItems, accordionItem)
+		accordionItem.Open = true
 	}
 
-	// Atualizar o accordion
+	// Atualizar o accordion com os novos itens
+	ntc.RoomAccordion.Items = newItems
+
+	// Atualizar a apresentação
 	ntc.RoomAccordion.Refresh()
+	ntc.Container.Refresh()
 }
 
 // GetContainer retorna o container principal
