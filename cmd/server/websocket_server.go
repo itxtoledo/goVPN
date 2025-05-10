@@ -321,6 +321,13 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 		return
 	}
 
+	// Add the room owner to the user_rooms table
+	err = s.supabaseManager.AddUserToRoom(roomID, req.PublicKey, "Owner")
+	if err != nil {
+		logger.Error("Error adding room owner to user_rooms", "error", err)
+		// Continue anyway as this is not a critical error
+	}
+
 	// Armazena a chave pública associada a esta conexão
 	s.clientToPublicKey[conn] = req.PublicKey
 
