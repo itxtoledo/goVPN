@@ -35,7 +35,7 @@ func NewHomeTabComponent(ui *UIManager) *HomeTabComponent {
 // CreateHomeTabContainer cria o container principal da aba inicial
 func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	// Criar o container de salas disponíveis
-	roomsContainer := htc.UI.NetworkTreeComp.GetContainer()
+	roomsContainer := htc.UI.NetworkListComp.GetContainer()
 	htc.NetworksContainer = roomsContainer
 
 	// Criar um botão para criar uma nova sala
@@ -102,5 +102,5 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	htc.AppTabs.SetTabLocation(container.TabLocationTop)
 
 	// Envolva o AppTabs em um container para retornar o tipo correto *fyne.Container
-	return container.NewMax(htc.AppTabs)
+	return container.NewStack(htc.AppTabs)
 }

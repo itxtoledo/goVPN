@@ -24,6 +24,7 @@ require (
 	github.com/go-text/render v0.2.0 // indirect
 	github.com/google/uuid v1.3.1 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
+	github.com/kr/text v0.1.0 // indirect
 	github.com/wlynxg/anet v0.0.3 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
 )

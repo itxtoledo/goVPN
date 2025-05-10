@@ -17,7 +17,7 @@ type UIManager struct {
 	MainWindow        fyne.Window
 	VPN               *VPNClient
 	ConfigManager     *ConfigManager
-	NetworkTreeComp   *NetworkListComponent
+	NetworkListComp   *NetworkListComponent
 	RoomItemComponent *RoomItemComponent
 	HomeTabComponent  *HomeTabComponent
 	HeaderComponent   *HeaderComponent
@@ -114,7 +114,7 @@ func (ui *UIManager) listenForDataEvents() {
 func (ui *UIManager) setupComponents() {
 	// Create components
 	ui.HeaderComponent = NewHeaderComponent(ui)
-	ui.NetworkTreeComp = NewNetworkListComponent(ui)
+	ui.NetworkListComp = NewNetworkListComponent(ui)
 	ui.RoomItemComponent = NewRoomItemComponent(ui)
 	ui.HomeTabComponent = NewHomeTabComponent(ui)
 
@@ -166,8 +166,8 @@ func (ui *UIManager) refreshNetworkList() {
 	// No need to load from database anymore, UI.Rooms is maintained in memory
 
 	// Update network tree component
-	if ui.NetworkTreeComp != nil {
-		ui.NetworkTreeComp.updateNetworkList()
+	if ui.NetworkListComp != nil {
+		ui.NetworkListComp.updateNetworkList()
 	}
 
 	// Update UI
