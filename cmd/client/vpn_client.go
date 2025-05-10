@@ -31,14 +31,35 @@ type VPNClient struct {
 
 // NewVPNClient creates a new VPN client
 func NewVPNClient(ui *UIManager) *VPNClient {
-	// Generate an Ed25519 key pair
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	var privateKey ed25519.PrivateKey
+	var publicKey ed25519.PublicKey
+	var publicKeyStr string
+
+	log.Println("Initializing VPN client...")
+
+	// Load existing keys from config
+	publicKeyStr, privateKeyStr := ui.ConfigManager.ConfigManager.GetKeyPair()
+
+	log.Printf("Loaded public key from config: %s...", publicKeyStr[:10])
+	log.Printf("Loaded private key from config: %s...", privateKeyStr[:10])
+
+	// Decode public key from base64
+	publicKeyBytes, err := base64.StdEncoding.DecodeString(publicKeyStr)
 	if err != nil {
-		log.Printf("Error generating key pair: %v", err)
+		log.Printf("Error decoding public key, generating new one: %v", err)
+	} else {
+		log.Printf("Successfully decoded public key, length: %d bytes", len(publicKeyBytes))
+		publicKey = ed25519.PublicKey(publicKeyBytes)
 	}
 
-	// Convert public key to string for storage
-	publicKeyStr := base64.StdEncoding.EncodeToString(publicKey)
+	// Decode private key from base64
+	privateKeyBytes, err := base64.StdEncoding.DecodeString(privateKeyStr)
+	if err != nil {
+		log.Printf("Error decoding private key, generating new one: %v", err)
+	} else {
+		log.Printf("Successfully decoded private key, length: %d bytes", len(privateKeyBytes))
+		privateKey = ed25519.PrivateKey(privateKeyBytes)
+	}
 
 	// Create VPN client
 	client := &VPNClient{
@@ -48,8 +69,18 @@ func NewVPNClient(ui *UIManager) *VPNClient {
 		PublicKey:     publicKey,
 		PublicKeyStr:  publicKeyStr,
 		Computers:     make([]Computer, 0),
-		ConfigManager: ui.ConfigManager, // Set ConfigManager from UI manager
+		ConfigManager: ui.ConfigManager,
 	}
+
+	// TODO client.PublicKeyStr esta vazio
+	// Check if PublicKeyStr has content
+	if client.PublicKeyStr == "" {
+		log.Println("WARNING: PublicKeyStr is empty!")
+	} else {
+		log.Printf("PublicKeyStr has content with length %d", len(client.PublicKeyStr))
+	}
+
+	log.Printf("VPN client initialized with public key: %s...", client.PublicKeyStr)
 
 	// Initialize rooms as an empty slice (in-memory storage only)
 	ui.Rooms = make([]*storage.Room, 0)

@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"os"
@@ -14,6 +17,8 @@ type Config struct {
 	ServerAddress string `json:"server_address"`
 	Theme         string `json:"theme"`
 	Language      string `json:"language"`
+	PublicKey     string `json:"public_key"`
+	PrivateKey    string `json:"private_key"`
 }
 
 // ConfigManager gerencia as configurações da aplicação
@@ -38,7 +43,7 @@ func NewConfigManager() *ConfigManager {
 		configPath: configPath,
 		config: Config{
 			Username:      "User",
-			ServerAddress: "wss://echo.websocket.org",
+			ServerAddress: "wss://govpn-k6ql.onrender.com/ws",
 			Theme:         "system",
 			Language:      "en",
 		},
@@ -109,13 +114,26 @@ func (cm *ConfigManager) UpdateLanguage(language string) error {
 	return cm.SaveConfig()
 }
 
+// GetKeyPair retorna as chaves pública e privada
+func (cm *ConfigManager) GetKeyPair() (string, string) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	return cm.config.PublicKey, cm.config.PrivateKey
+}
+
 // LoadConfig carrega as configurações do arquivo
 func (cm *ConfigManager) LoadConfig() {
+	log.Printf("Loading config from: %s", cm.configPath)
+
 	file, err := os.Open(cm.configPath)
 	if err != nil {
 		// Se o arquivo não existe, cria com valores padrão
 		if os.IsNotExist(err) {
+			log.Printf("Config file doesn't exist, creating with default values")
 			cm.SaveConfig()
+		} else {
+			log.Printf("Error opening config file: %v", err)
 		}
 		return
 	}
@@ -125,6 +143,39 @@ func (cm *ConfigManager) LoadConfig() {
 	err = decoder.Decode(&cm.config)
 	if err != nil {
 		log.Printf("Error decoding config file: %v", err)
+		return
+	}
+
+	// Log config details
+	log.Printf("Config loaded successfully - Username: %s, Theme: %s, Language: %s",
+		cm.config.Username, cm.config.Theme, cm.config.Language)
+
+	// Check for public/private keys
+	if cm.config.PublicKey != "" && cm.config.PrivateKey != "" {
+		log.Printf("Key pair found in config - Public key prefix: %s...", cm.config.PublicKey[:10])
+	} else {
+		log.Printf("WARNING: No key pair found in config file - Public key empty: %v, Private key empty: %v",
+			cm.config.PublicKey == "", cm.config.PrivateKey == "")
+
+		log.Println("Generating new Ed25519 key pair")
+		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+
+		if err != nil {
+			log.Printf("Error generating key pair: %v", err)
+		}
+
+		// Convert keys to string for storage
+		publicKeyStr := base64.StdEncoding.EncodeToString(publicKey)
+		privateKeyStr := base64.StdEncoding.EncodeToString(privateKey)
+
+		log.Printf("Generated new public key: %s...", publicKeyStr[:10])
+		log.Printf("Generated new private key: %s...", privateKeyStr[:10])
+
+		// Update config with new keys
+		cm.config.PublicKey = publicKeyStr
+		cm.config.PrivateKey = privateKeyStr
+
+		cm.SaveConfig()
 	}
 }
 
