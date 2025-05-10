@@ -87,7 +87,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	nm.connectionState = ConnectionStateConnected
 	nm.UI.RealtimeData.SetConnectionState(data.StateConnected)
 	nm.UI.RealtimeData.SetStatusMessage("Connected")
-	
+
 	// O servidor já envia automaticamente a lista de salas do usuário ao conectar,
 	// então não precisamos chamar GetUserRooms explicitamente
 	log.Println("Aguardando lista de salas do servidor...")
@@ -98,6 +98,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	return nil
 }
 
+// TODO check if we can delete this
 // handleDisconnection handles disconnection from the server
 func (nm *NetworkManager) handleDisconnection() {
 	if nm.connectionState != ConnectionStateDisconnected {

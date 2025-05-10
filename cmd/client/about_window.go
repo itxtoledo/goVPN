@@ -51,6 +51,23 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 		fyne.TextStyle{},
 	)
 
+	// Obter a chave pública
+	publicKey, _ := ui.ConfigManager.GetKeyPair()
+
+	// Criar um label para exibir a chave pública
+	publicKeyLabel := widget.NewLabelWithStyle(
+		"Your Public Key:",
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Bold: true},
+	)
+
+	// Criar um entry read-only para exibir a chave pública e permitir cópia
+	publicKeyEntry := widget.NewEntry()
+	publicKeyEntry.SetText(publicKey)
+	publicKeyEntry.Disable()
+	publicKeyEntry.MultiLine = true
+	publicKeyEntry.Wrapping = fyne.TextWrapBreak
+
 	// Criar um link para o repositório
 	repoURL, _ := url.Parse(AppRepository)
 	repoLink := widget.NewHyperlink("Source Code", repoURL)
@@ -70,6 +87,9 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 		widget.NewSeparator(),
 		descriptionLabel,
 		authorLabel,
+		widget.NewSeparator(),
+		publicKeyLabel,
+		publicKeyEntry,
 		widget.NewSeparator(),
 		repoContainer,
 		layout.NewSpacer(),
