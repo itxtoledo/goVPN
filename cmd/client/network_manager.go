@@ -92,6 +92,9 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	nm.UI.RealtimeData.SetConnectionState(data.StateConnected)
 	nm.UI.RealtimeData.SetStatusMessage("Connected")
 
+	// O backend já envia automaticamente a lista de salas do usuário,
+	// então não precisamos chamar GetUserRooms aqui
+
 	// Get room list
 	nm.UI.refreshNetworkList()
 

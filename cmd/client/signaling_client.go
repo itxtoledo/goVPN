@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
@@ -704,6 +705,9 @@ func (s *SignalingClient) listenForMessages() {
 				log.Printf("========== USER ROOMS RECEIVED ==========")
 				log.Printf("Total rooms found: %d", len(response.Rooms))
 
+				// Create a slice to store the converted rooms
+				updatedRooms := make([]*storage.Room, 0, len(response.Rooms))
+
 				for i, room := range response.Rooms {
 					connectionStatus := "Disconnected"
 					if room.IsConnected {
@@ -715,9 +719,27 @@ func (s *SignalingClient) listenForMessages() {
 					log.Printf("  Joined at: %s", room.JoinedAt.Format(time.RFC1123))
 					log.Printf("  Last connected: %s", room.LastConnected.Format(time.RFC1123))
 					log.Printf("  ---")
+
+					// Convert the room to storage.Room format
+					storageRoom := &storage.Room{
+						ID:            room.RoomID,
+						Name:          room.RoomName,
+						Password:      "", // We don't receive password from the server for security
+						LastConnected: room.LastConnected,
+					}
+
+					updatedRooms = append(updatedRooms, storageRoom)
 				}
 
 				log.Printf("========================================")
+
+				// Update the UI's room list with the received rooms
+				if s.UI != nil {
+					s.UI.Rooms = updatedRooms
+
+					// Refresh the network list to show the updated rooms
+					s.UI.refreshNetworkList()
+				}
 			}
 		}
 
