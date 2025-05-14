@@ -183,7 +183,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			// Create room info container
 			infoBox := container.NewVBox(
 				membersBox,
-				widget.NewLabel("Last connected: "+room.LastConnected.Local().String()),
+				widget.NewLabel("Last connected: "+room.LastConnected.Format("2006-01-02 15:04:05")),
 			)
 
 			content := container.NewVBox(
