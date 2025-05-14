@@ -27,9 +27,11 @@ const (
 	// EventRoomJoined é emitido quando entra em uma sala
 	EventRoomJoined EventType = "room_joined"
 	// EventRoomLeft é emitido quando sai de uma sala
-	EventRoomLeft        EventType = "room_left"
-	EventRoomDeleted               = "room_deleted" // Add this constant for room deletion event
-	EventSettingsChanged EventType = "settings_changed"
+	EventRoomLeft EventType = "room_left"
+	// EventRoomDisconnected é emitido quando desconecta de uma sala sem sair dela
+	EventRoomDisconnected EventType = "room_disconnected"
+	EventRoomDeleted      EventType = "room_deleted" // Add this constant for room deletion event
+	EventSettingsChanged  EventType = "settings_changed"
 	// EventError é emitido quando ocorre um erro
 	EventError EventType = "error"
 )

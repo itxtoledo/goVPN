@@ -124,7 +124,17 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			)
 
 			// Criar botões para as ações da sala
-			connectButton := widget.NewButtonWithIcon("Connect", theme.LoginIcon(), func(currentRoom *storage.Room) func() {
+			// Change button label based on whether the user is already connected to the room
+			connectButtonText := "Connect"
+			connectIcon := theme.LoginIcon()
+			
+			// If already connected to this room, use "Disconnect" text and different icon
+			if isConnected {
+				connectButtonText = "Disconnect"
+				connectIcon = theme.LogoutIcon()
+			}
+
+			connectButton := widget.NewButtonWithIcon(connectButtonText, connectIcon, func(currentRoom *storage.Room) func() {
 				return func() {
 					ntc.UI.SelectedRoom = currentRoom
 
@@ -135,11 +145,6 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 					ntc.UI.ConnectDialog.Show()
 				}
 			}(room))
-
-			// Disable connect button if already connected to this room
-			if isConnected {
-				connectButton.Disable()
-			}
 
 			leaveButton := widget.NewButtonWithIcon("Leave", theme.LogoutIcon(), func(currentRoom *storage.Room) func() {
 				return func() {
@@ -191,7 +196,8 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			if isConnected {
 				titleText = "🟢 " + room.Name // Green circle for connected
 			} else {
-				titleText = "⚪ " + room.Name // White circle for available
+				// Show a different indicator for rooms the user is a member of but not currently connected to
+				titleText = "🔵 " + room.Name // Blue circle for joined but not connected
 			}
 
 			// Criar item de accordion para a sala

@@ -159,9 +159,25 @@ func NewJoinRoomDialog(ui *UIManager) *JoinRoomDialog {
 
 			// Join room in a goroutine
 			go func() {
-				// Join room
-				log.Printf("Joining room: %s", roomID)
-				err := jrd.UI.VPN.NetworkManager.JoinRoom(roomID, pass)
+				// Verificar se o usuário já está associado a esta sala
+				isUserInRoom := false
+				for _, room := range jrd.UI.Rooms {
+					if room.ID == roomID {
+						isUserInRoom = true
+						break
+					}
+				}
+
+				var err error
+				if isUserInRoom {
+					// Se já está associado à sala, conecta sem senha
+					log.Printf("User is already in room %s, connecting without password", roomID)
+					err = jrd.UI.VPN.NetworkManager.ConnectRoom(roomID)
+				} else {
+					// Se não está associado ainda, junta-se à sala com senha
+					log.Printf("Joining room: %s", roomID)
+					err = jrd.UI.VPN.NetworkManager.JoinRoom(roomID, pass)
+				}
 
 				// Update UI using fyne.Do
 				fyne.Do(func() {

@@ -247,6 +247,95 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 	return nil
 }
 
+// ConnectRoom connects to a previously joined room
+func (nm *NetworkManager) ConnectRoom(roomID string) error {
+	if nm.connectionState != ConnectionStateConnected {
+		return fmt.Errorf("not connected to server")
+	}
+
+	// Connect to room
+	res, err := nm.SignalingServer.ConnectRoom(roomID)
+	if err != nil {
+		return fmt.Errorf("failed to connect to room: %v", err)
+	}
+
+	// Use roomName from the response
+	roomName := res.RoomName
+
+	// Find the room in memory to get the stored password
+	var roomPassword string
+	roomExists := false
+	for i, existingRoom := range nm.UI.Rooms {
+		if existingRoom.ID == roomID {
+			roomPassword = existingRoom.Password
+			roomExists = true
+
+			// Update lastConnected time
+			nm.UI.Rooms[i].LastConnected = time.Now()
+			break
+		}
+	}
+
+	if !roomExists {
+		return fmt.Errorf("room not found in local storage")
+	}
+
+	log.Printf("Room connected: ID=%s, Name=%s", roomID, roomName)
+
+	// Store room information for current connection
+	nm.RoomID = roomID
+	nm.RoomPassword = roomPassword
+
+	// Update data layer
+	nm.UI.RealtimeData.SetRoomInfo(roomID, roomPassword)
+	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+
+	// Refresh network list now that we have re-connected to the room
+	nm.UI.refreshNetworkList()
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
+}
+
+// DisconnectRoom disconnects from a room without leaving it
+func (nm *NetworkManager) DisconnectRoom(roomID string) error {
+	if nm.connectionState != ConnectionStateConnected {
+		return fmt.Errorf("not connected to server")
+	}
+
+	log.Printf("Disconnecting from room with ID: %s", roomID)
+
+	// Disconnect from room
+	_, err := nm.SignalingServer.DisconnectRoom(roomID)
+	if err != nil {
+		log.Printf("Error from SignalingClient when disconnecting from room: %v", err)
+		return fmt.Errorf("failed to disconnect from room: %v", err)
+	}
+
+	// If we're disconnecting from the current room, clear our room information
+	if nm.RoomID == roomID {
+		nm.RoomID = ""
+		nm.RoomPassword = ""
+
+		// Update data layer
+		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.UI.RealtimeData.EmitEvent(data.EventRoomDisconnected, roomID, nil)
+	}
+
+	// Clear the computers list
+	nm.Computers = []Computer{}
+
+	// Refresh the network list UI
+	nm.UI.refreshNetworkList()
+
+	// Update UI
+	nm.UI.refreshUI()
+
+	return nil
+}
+
 // LeaveRoom leaves the current room
 func (nm *NetworkManager) LeaveRoom() error {
 	if nm.connectionState != ConnectionStateConnected {

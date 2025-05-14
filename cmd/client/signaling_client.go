@@ -242,6 +242,37 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 			return resp, nil
 		}
 
+	case models.TypeConnectRoom:
+		if response.Type == models.TypeRoomConnected {
+			var resp models.ConnectRoomResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal connect room response: %v", err)
+			}
+			return resp, nil
+		}
+
+	case models.TypeDisconnectRoom:
+		if response.Type == models.TypeDisconnectRoom || response.Type == models.TypeRoomDisconnected {
+			var resp models.DisconnectRoomResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				// If it fails, it might be because the server is using a different format
+				// Try to extract just the roomID
+				var roomData map[string]interface{}
+				if jsonErr := json.Unmarshal(response.Payload, &roomData); jsonErr != nil {
+					return nil, fmt.Errorf("failed to unmarshal disconnect room response: %v", err)
+				}
+				
+				// Extract room ID from the map and return it
+				if roomID, ok := roomData["room_id"].(string); ok {
+					return map[string]interface{}{
+						"room_id": roomID,
+					}, nil
+				}
+				return nil, fmt.Errorf("failed to find room_id in response: %v", err)
+			}
+			return resp, nil
+		}
+
 	case models.TypeLeaveRoom:
 		if response.Type == models.TypeLeaveRoom {
 			var resp models.LeaveRoomResponse
@@ -350,6 +381,76 @@ func (s *SignalingClient) JoinRoom(roomID string, password string) (*models.Join
 		return &resp, nil
 	}
 
+	return nil, errors.New("unexpected response type")
+}
+
+// ConnectRoom conecta a uma sala previamente associada
+func (s *SignalingClient) ConnectRoom(roomID string) (*models.ConnectRoomResponse, error) {
+	if !s.Connected || s.Conn == nil {
+		return nil, errors.New("not connected to server")
+	}
+
+	log.Printf("Connecting to room: %s", roomID)
+
+	// Obter o nome de usuário das configurações
+	username := s.UI.ConfigManager.GetConfig().Username
+
+	// Criar payload para connect room
+	payload := &models.ConnectRoomRequest{
+		BaseRequest: models.BaseRequest{},
+		RoomID:      roomID,
+		Username:    username,
+	}
+
+	// Enviar solicitação para conectar à sala usando a função de empacotamento
+	response, err := s.sendPackagedMessage(models.TypeConnectRoom, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	if resp, ok := response.(models.ConnectRoomResponse); ok {
+		return &resp, nil
+	}
+
+	return nil, errors.New("unexpected response type")
+}
+
+// DisconnectRoom desconecta de uma sala sem sair dela
+func (s *SignalingClient) DisconnectRoom(roomID string) (*models.DisconnectRoomResponse, error) {
+	if !s.Connected || s.Conn == nil {
+		return nil, errors.New("not connected to server")
+	}
+
+	log.Printf("Disconnecting from room: %s", roomID)
+
+	// Criar payload para disconnect room
+	payload := &models.DisconnectRoomRequest{
+		BaseRequest: models.BaseRequest{},
+		RoomID:      roomID,
+	}
+
+	// Enviar solicitação para desconectar da sala usando a função de empacotamento
+	response, err := s.sendPackagedMessage(models.TypeDisconnectRoom, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response to the expected type
+	// Check if we got a map response (like from TypeRoomDisconnected)
+	if respMap, ok := response.(map[string]interface{}); ok {
+		// Extract room ID from the map
+		roomID, _ := respMap["room_id"].(string)
+		resp := models.DisconnectRoomResponse{
+			RoomID: roomID,
+		}
+		return &resp, nil
+	} else if resp, ok := response.(models.DisconnectRoomResponse); ok {
+		return &resp, nil
+	}
+
+	// For debugging the response type
+	log.Printf("Unexpected response type: %T", response)
 	return nil, errors.New("unexpected response type")
 }
 
@@ -520,6 +621,23 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			} else {
 				log.Printf("Failed to decode error payload: %v", err)
+			}
+
+		case models.TypeRoomDisconnected:
+			var response models.DisconnectRoomResponse
+			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+				log.Printf("Failed to unmarshal room disconnected response: %v", err)
+			} else {
+				log.Printf("Successfully disconnected from room: %s", response.RoomID)
+				// Handle client disconnecting from room
+				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+					// Clean up computers list when disconnecting from a room
+					s.VPNClient.NetworkManager.Computers = []Computer{}
+					// Refresh the UI to update room members
+					if s.UI != nil {
+						s.UI.refreshNetworkList()
+					}
+				}
 			}
 
 		case models.TypeRoomJoined:
