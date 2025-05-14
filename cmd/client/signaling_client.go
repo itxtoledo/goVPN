@@ -261,7 +261,7 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 				if jsonErr := json.Unmarshal(response.Payload, &roomData); jsonErr != nil {
 					return nil, fmt.Errorf("failed to unmarshal disconnect room response: %v", err)
 				}
-				
+
 				// Extract room ID from the map and return it
 				if roomID, ok := roomData["room_id"].(string); ok {
 					return map[string]interface{}{

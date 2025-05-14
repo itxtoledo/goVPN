@@ -127,7 +127,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			// Change button label based on whether the user is already connected to the room
 			connectButtonText := "Connect"
 			connectIcon := theme.LoginIcon()
-			
+
 			// If already connected to this room, use "Disconnect" text and different icon
 			if isConnected {
 				connectButtonText = "Disconnect"
