@@ -24,6 +24,7 @@ var (
 	LinkOff = PrepareResource("link_off.svg")
 	Power   = PrepareResource("power.svg")
 	VPN     = PrepareResource("vpn.svg")
+	AppIcon = PrepareResource("app.png")
 )
 
 func init() {

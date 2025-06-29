@@ -30,7 +30,7 @@ type VPNClient struct {
 }
 
 // NewVPNClient creates a new VPN client
-func NewVPNClient(ui *UIManager) *VPNClient {
+func NewVPNClient(ui *UIManager, defaultWebsocketURL string) *VPNClient {
 	var privateKey ed25519.PrivateKey
 	var publicKey ed25519.PublicKey
 	var publicKeyStr string
@@ -122,7 +122,7 @@ func (v *VPNClient) loadSettings() {
 }
 
 // Run inicia o cliente VPN
-func (v *VPNClient) Run() {
+func (v *VPNClient) Run(defaultWebsocketURL string) {
 	log.Println("Starting goVPN client")
 
 	// Attempt to connect to the backend in a background goroutine
@@ -137,8 +137,8 @@ func (v *VPNClient) Run() {
 
 		// Usar endereço padrão se não estiver definido
 		if serverAddress == "" {
-			serverAddress = "ws://localhost:8080"
-			log.Println("No server address configured, using default:", serverAddress)
+			serverAddress = defaultWebsocketURL
+			log.Println("No server address configured, using default from build:", serverAddress)
 		}
 
 		// Inicializar o signaling client no NetworkManager se necessário

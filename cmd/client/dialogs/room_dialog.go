@@ -100,8 +100,6 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 
 				if err != nil {
 					dialog.ShowError(fmt.Errorf("Failed to create network: %v", err), rd.MainWindow)
-					// Clear the reference and return early to avoid showing success dialog
-					*rd.RoomDialogRef = nil
 					return
 				}
 
@@ -144,7 +142,7 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 		}()
 	}, rd.MainWindow)
 
-	// Define a minimum width for the dialog
-	formDialog.Resize(fyne.NewSize(300, 200))
+	// Resize the dialog to occupy the full width of the parent window
+	formDialog.Resize(rd.MainWindow.Canvas().Size())
 	formDialog.Show()
 }

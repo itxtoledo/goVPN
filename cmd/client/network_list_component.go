@@ -19,6 +19,7 @@ type NetworkListComponent struct {
 	UI            *UIManager
 	Container     *fyne.Container
 	RoomAccordion *widget.Accordion
+	contentContainer  *fyne.Container // New field to hold dynamic content
 	updateMutex   sync.Mutex
 }
 
@@ -35,6 +36,8 @@ func NewNetworkListComponent(ui *UIManager) *NetworkListComponent {
 func (ntc *NetworkListComponent) init() {
 	// Criar um accordion vazio
 	ntc.RoomAccordion = widget.NewAccordion()
+	// Initialize the dynamic content container
+	ntc.contentContainer = container.NewStack()
 
 	// Criar o container principal
 	ntc.Container = container.NewBorder(
@@ -42,7 +45,7 @@ func (ntc *NetworkListComponent) init() {
 		nil,
 		nil,
 		nil,
-		ntc.RoomAccordion,
+		ntc.contentContainer, // Use the new contentContainer here
 	)
 }
 
@@ -52,38 +55,37 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 	ntc.updateMutex.Lock()
 	defer ntc.updateMutex.Unlock()
 
-	// Limpar o accordion existente
-	ntc.RoomAccordion.CloseAll()
+	// Clear the content container before adding new content
+	ntc.contentContainer.RemoveAll()
 
-	// Criar estrutura temporária para os novos itens
-	var newItems []*widget.AccordionItem
-
-	// Ordenar as salas por nome
+	// Sort the rooms by name
 	if ntc.UI.Rooms != nil {
 		sort.Slice(ntc.UI.Rooms, func(i, j int) bool {
 			return ntc.UI.Rooms[i].Name < ntc.UI.Rooms[j].Name
 		})
 	}
 
-	// Get the current room ID from the network manager (if connected)
-	currentRoomID := ""
-	if ntc.UI.VPN.NetworkManager != nil {
-		currentRoomID = ntc.UI.VPN.NetworkManager.RoomID
-	}
+	log.Printf("Updating room list. Total: %d", len(ntc.UI.Rooms))
 
-	// Get username from config for display
-	username := ntc.UI.ConfigManager.GetConfig().Username
-	if username == "" {
-		username = "You"
-	}
-
-	// Imprimir log para debug
-	log.Printf("Atualizando lista de salas. Total: %d", len(ntc.UI.Rooms))
-
-	// Adicionar cada sala como um item de accordion
 	if ntc.UI.Rooms != nil && len(ntc.UI.Rooms) > 0 {
+		// Criar estrutura temporária para os novos itens
+		var newItems []*widget.AccordionItem
+
+		// Get the current room ID from the network manager (if connected)
+		currentRoomID := ""
+		if ntc.UI.VPN.NetworkManager != nil {
+			currentRoomID = ntc.UI.VPN.NetworkManager.RoomID
+		}
+
+		// Get username from config for display
+		username := ntc.UI.ConfigManager.GetConfig().Username
+		if username == "" {
+			username = "You"
+		}
+
+		// Add each room as an accordion item
 		for _, room := range ntc.UI.Rooms {
-			log.Printf("Processando sala: %s (ID=%s)", room.Name, room.ID)
+			log.Printf("Processing room: %s (ID=%s)", room.Name, room.ID)
 			// Check if this room is the one we're currently connected to
 			isConnected := room.ID == currentRoomID
 
@@ -123,7 +125,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				membersContainer,
 			)
 
-			// Criar botões para as ações da sala
+			// Create buttons for room actions
 			// Change button label based on whether the user is already connected to the room
 			connectButtonText := "Connect"
 			connectIcon := theme.LoginIcon()
@@ -138,7 +140,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				return func() {
 					ntc.UI.SelectedRoom = currentRoom
 
-					// Mostrar diálogo de conexão
+					// Show connection dialog
 					if ntc.UI.ConnectDialog == nil {
 						ntc.UI.ConnectDialog = NewConnectDialog(ntc.UI)
 					}
@@ -173,7 +175,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				}
 			}(room))
 
-			// Criar layout para os botões
+			// Create layout for buttons
 			buttonBox := container.NewHBox(
 				layout.NewSpacer(),
 				connectButton,
@@ -200,7 +202,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				titleText = "🔵 " + room.Name // Blue circle for joined but not connected
 			}
 
-			// Criar item de accordion para a sala
+			// Create accordion item for the room
 			accordionItem := widget.NewAccordionItem(titleText, content)
 			newItems = append(newItems, accordionItem)
 
@@ -209,19 +211,37 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				accordionItem.Open = true
 			}
 		}
-	} else {
-		log.Printf("Nenhuma sala disponível para exibir")
-		// Adicionar mensagem informativa quando não há salas
-		accordionItem := widget.NewAccordionItem("No Rooms Available", widget.NewLabel("Create or join a room to get started."))
-		newItems = append(newItems, accordionItem)
-		accordionItem.Open = true
-	}
+		// Update the accordion with the new items
+        ntc.RoomAccordion.Items = newItems
 
-	// Atualizar o accordion com os novos itens
-	ntc.RoomAccordion.Items = newItems
+        if len(newItems) > 0 {
+            // Add the accordion to the content container
+            ntc.contentContainer.Add(ntc.RoomAccordion)
+            // Refresh the accordion presentation
+            ntc.RoomAccordion.Refresh()
+        } else {
+            log.Printf("No rooms available to display after filtering/processing")
+            // Add informative message when no rooms are available
+            noRoomsLabel := widget.NewLabelWithStyle(
+                "No rooms available.\nCreate or join a room to get started.",
+                fyne.TextAlignCenter,
+                fyne.TextStyle{},
+            )
+            ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
+        }
+    } else {
+        log.Printf("No rooms available to display")
+        // Add informative message when no rooms are available
+        noRoomsLabel := widget.NewLabelWithStyle(
+            "No rooms available.\nCreate or join a room to get started.",
+            fyne.TextAlignCenter,
+            fyne.TextStyle{},
+        )
+        ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
+    }
 
-	// Atualizar a apresentação
-	ntc.RoomAccordion.Refresh()
+	// Refresh the content container and main container
+	ntc.contentContainer.Refresh()
 	ntc.Container.Refresh()
 }
 

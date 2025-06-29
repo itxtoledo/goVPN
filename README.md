@@ -1,311 +1,311 @@
 # GoVPN
 
-Uma solução de Rede Local Virtual (VLAN) para jogos que permite que jogadores se conectem como se estivessem na mesma rede local.
+A Virtual Local Area Network (VLAN) solution for games that allows players to connect as if they were on the same local network.
 
-## Funcionalidades
+## Features
 
-- Criação e participação em salas de jogo virtuais
-- Atravessamento de NAT usando STUN/TURN para conexões P2P
-- Criptografia ponta a ponta
-- Suporte multiplataforma (Windows, macOS, Linux)
-- Armazenamento local de dados usando SQLite
+- Create and join virtual game rooms
+- NAT traversal using STUN/TURN for P2P connections
+- End-to-end encryption
+- Cross-platform support (Windows, macOS, Linux)
+- Local data storage using SQLite
 
-## Arquitetura do Sistema
+## System Architecture
 
-O GoVPN é organizado em uma arquitetura cliente-servidor modular, com comunicação P2P entre os clientes para minimizar a latência. A arquitetura está estruturada da seguinte forma:
+GoVPN is organized in a modular client-server architecture, with P2P communication between clients to minimize latency. The architecture is structured as follows:
 
-### Bibliotecas Compartilhadas
+### Shared Libraries
 
-- **libs/crypto_utils**: Implementa funções criptográficas para garantir a segurança da comunicação, incluindo:
-  - Geração de chaves Ed25519
-  - Assinatura e verificação de mensagens
-  - Criptografia para os dados transmitidos
-  - Geração de identificadores seguros
+- **libs/crypto_utils**: Implements cryptographic functions to ensure communication security, including:
+  - Ed25519 key generation
+  - Message signing and verification
+  - Encryption for transmitted data
+  - Secure identifier generation
 
-- **libs/models**: Define as estruturas de dados compartilhadas entre cliente e servidor:
-  - Room: Representa uma sala de jogo virtual
-  - Message: Define o formato das mensagens trocadas via WebSocket
-  - NetworkPacket: Estrutura para pacotes de rede tunelados pela VPN
-  - ClientInfo: Informações sobre os clientes conectados
+- **libs/models**: Defines data structures shared between client and server:
+  - Room: Represents a virtual game room
+  - Message: Defines the format of messages exchanged via WebSocket
+  - NetworkPacket: Structure for network packets tunneled through the VPN
+  - ClientInfo: Information about connected clients
 
-- **libs/network**: Gerencia a rede virtual entre os clientes:
-  - VirtualNetwork: Classe principal que coordena a comunicação entre peers
-  - Mapeamento de endereços IP virtuais
-  - Encapsulamento e roteamento de pacotes entre clientes
+- **libs/network**: Manages the virtual network between clients:
+  - VirtualNetwork: Main class that coordinates peer communication
+  - Virtual IP address mapping
+  - Encapsulation and routing of packets between clients
 
-### Componentes do Sistema
+### System Components
 
-- **cmd/server**: Servidor de sinalização que facilita:
-  - Criação e gerenciamento de salas
-  - Autenticação das operações via chaves Ed25519
-  - Estabelecimento de conexões entre clientes
-  - Persistência de dados em Supabase
-  - WebSocketServer: Gerencia conexões WebSocket com clientes
-  - SupabaseManager: Interface com banco de dados Supabase
+- **cmd/server**: Signaling server that facilitates:
+  - Room creation and management
+  - Operation authentication via Ed25519 keys
+  - Establishment of connections between clients
+  - Data persistence in Supabase
+  - WebSocketServer: Manages WebSocket connections with clients
+  - SupabaseManager: Interface with Supabase database
 
-- **cmd/client**: Aplicação cliente com interface gráfica que permite:
-  - Criação e entrada em salas de jogo
-  - Gerenciamento de conexões P2P
-  - Armazenamento local de configurações em SQLite
-  - Interface gráfica construída com Fyne (v2.0+)
-  - Componentes modulares como NetworkManager, SignalingClient, etc.
+- **cmd/client**: Client application with a graphical interface that allows:
+  - Creating and joining game rooms
+  - Managing P2P connections
+  - Local configuration storage in SQLite
+  - Graphical interface built with Fyne (v2.0+)
+  - Modular components such as NetworkManager, SignalingClient, etc.
 
-### Fluxo de Comunicação
+### Communication Flow
 
-1. **Fase de Sinalização**:
-   - O servidor atua como intermediário para estabelecer conexões iniciais
-   - Clientes se autenticam e trocam informações sobre salas disponíveis
+1. **Signaling Phase**:
+   - The server acts as an intermediary to establish initial connections
+   - Clients authenticate and exchange information about available rooms
    
-2. **Estabelecimento de Conexão P2P**:
-   - Troca de ofertas, respostas e candidatos via servidor
-   - Uso de servidores STUN para descoberta de endereços públicos
-   - Fallback para servidores TURN quando a conexão direta falha
+2. **P2P Connection Establishment**:
+   - Exchange of offers, answers, and candidates via server
+   - Use of STUN servers for public address discovery
+   - Fallback to TURN servers when direct connection fails
 
-3. **Comunicação Direta**:
-   - Após estabelecida, a comunicação ocorre diretamente entre os clientes
-   - Dados são criptografados ponta a ponta (chave derivada da senha da sala)
+3. **Direct Communication**:
+   - Once established, communication occurs directly between clients
+   - Data is end-to-end encrypted (key derived from room password)
 
-4. **Rede Virtual**:
-   - Cada cliente recebe um endereço IP virtual (formato 10.0.0.x)
-   - Pacotes de rede são encapsulados, criptografados e enviados pelo canal de dados
+4. **Virtual Network**:
+   - Each client receives a virtual IP address (format 10.0.0.x)
+   - Network packets are encapsulated, encrypted, and sent through the data channel
 
-## Estrutura do Projeto Atual
+## Current Project Structure
 
-A estrutura atual do projeto está organizada da seguinte forma:
+The current project structure is organized as follows:
 
 ```
-README.md                        # Documentação principal
-cmd/                             # Componentes principais
-    client/                      # Cliente GoVPN
-        data/                    # Camada de dados em tempo real
-        dialogs/                 # Caixas de diálogo da UI
-        icon/                    # Ícones e recursos gráficos
-            assets/              # Arquivos de imagem 
-        storage/                 # Gerenciamento de banco de dados e config
-        *.go                     # Componentes da UI e lógica do cliente
-    server/                      # Servidor de sinalização
-        docs/                    # Documentação da API
-        *.go                     # Implementação do servidor
-libs/                            # Bibliotecas compartilhadas
-    crypto_utils/                # Utilitários criptográficos
-    models/                      # Definições de estruturas de dados
-    network/                     # Gerenciamento de rede virtual
-migrations/                      # Scripts SQL para o banco de dados
+README.md                        # Main documentation
+cmd/                             # Main components
+    client/                      # GoVPN client
+        data/                    # Real-time data layer
+        dialogs/                 # UI dialogs
+        icon/                    # Icons and graphic resources
+            assets/              # Image files
+        storage/                 # Database and config management
+        *.go                     # UI components and client logic
+    server/                      # Signaling server
+        docs/                    # API documentation
+        *.go                     # Server implementation
+libs/                            # Shared libraries
+    crypto_utils/                # Cryptographic utilities
+    models/                      # Data structure definitions
+    network/                     # Virtual network management
+migrations/                      # SQL scripts for the database
 ```
 
-### Componentes Principais do Cliente
+### Main Client Components
 
-- **UIManager**: Gerencia toda a interface gráfica do usuário
-- **VPNClient**: Controla toda a lógica de conexão VPN
-- **NetworkManager**: Gerencia as conexões de rede e salas
-- **SignalingClient**: Comunica-se com o servidor de sinalização
-- **DatabaseManager**: Gerencia o armazenamento local usando SQLite
-- **ConfigManager**: Gerencia configurações do aplicativo
-- **RealtimeDataLayer**: Fornece binding de dados para atualizar a UI
+- **UIManager**: Manages the entire user interface
+- **VPNClient**: Controls all VPN connection logic
+- **NetworkManager**: Manages network connections and rooms
+- **SignalingClient**: Communicates with the signaling server
+- **DatabaseManager**: Manages local storage using SQLite
+- **ConfigManager**: Manages application settings
+- **RealtimeDataLayer**: Provides data binding to update the UI
 
-### Componentes Principais do Servidor
+### Main Server Components
 
-- **WebSocketServer**: Gerencia conexões WebSocket, salas e clientes
-- **SupabaseManager**: Interface com o banco de dados Supabase
-- **Room Management**: Gerencia criação, exclusão e modificação de salas
-- **Authentication**: Autenticação baseada em chaves Ed25519
-- **Connection Management**: Gerencia o ciclo de vida das conexões
+- **WebSocketServer**: Manages WebSocket connections, rooms, and clients
+- **SupabaseManager**: Interface with Supabase database
+- **Room Management**: Manages room creation, deletion, and modification
+- **Authentication**: Authentication based on Ed25519 keys
+- **Connection Management**: Manages the connection lifecycle
 
-## API WebSocket do Servidor
+## Server WebSocket API
 
-O servidor implementa uma API WebSocket robusta para comunicação com os clientes. A documentação completa está disponível em `cmd/server/docs/websocket_api.md`.
+The server implements a robust WebSocket API for communication with clients. Full documentation is available at `cmd/server/docs/websocket_api.md`.
 
-### Principais Tipos de Mensagens
+### Main Message Types
 
-- **Cliente para Servidor**:
-  - `CreateRoom`: Cria uma nova sala
-  - `JoinRoom`: Entra em uma sala existente
-  - `LeaveRoom`: Sai de uma sala
-  - `Kick`: Expulsa um usuário de uma sala
-  - `Rename`: Renomeia uma sala
+- **Client to Server**:
+  - `CreateRoom`: Creates a new room
+  - `JoinRoom`: Joins an existing room
+  - `LeaveRoom`: Leaves a room
+  - `Kick`: Kicks a user from a room
+  - `Rename`: Renames a room
 
-- **Servidor para Cliente**:
-  - `RoomCreated`: Confirmação de sala criada
-  - `RoomJoined`: Confirmação de entrada em sala
-  - `PeerJoined`: Notificação de novo par na sala
-  - `PeerLeft`: Notificação de saída de par da sala
-  - `RoomDeleted`: Notificação de sala excluída
+- **Server to Client**:
+  - `RoomCreated`: Room creation confirmation
+  - `RoomJoined`: Room join confirmation
+  - `PeerJoined`: Notification of a new peer in the room
+  - `PeerLeft`: Notification of a peer leaving the room
+  - `RoomDeleted`: Notification of room deletion
 
-## Variáveis de Ambiente do Servidor
+## Server Environment Variables
 
-| Variável | Descrição | Padrão |
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Porta para o servidor escutar | `8080` |
-| `ALLOW_ALL_ORIGINS` | Permitir conexões WebSocket de qualquer origem | `true` |
-| `PASSWORD_PATTERN` | Expressão regular para validar senhas de sala | `^\d{4}$` |
-| `MAX_ROOMS` | Número máximo de salas permitidas | `100` |
-| `MAX_CLIENTS_PER_ROOM` | Número máximo de clientes em uma sala | `10` |
-| `LOG_LEVEL` | Nível de log (info, debug) | `info` |
-| `IDLE_TIMEOUT_SECONDS` | Tempo limite para conexões inativas em segundos | `60` |
-| `PING_INTERVAL_SECONDS` | Intervalo de ping WebSocket em segundos | `30` |
-| `READ_BUFFER_SIZE` | Tamanho do buffer de leitura WebSocket | `1024` |
-| `WRITE_BUFFER_SIZE` | Tamanho do buffer de escrita WebSocket | `1024` |
-| `SUPABASE_URL` | URL do Supabase para persistência de salas (obrigatório) | `""` |
-| `SUPABASE_KEY` | Chave API do Supabase para autenticação (obrigatório) | `""` |
-| `ROOM_EXPIRY_DAYS` | Dias após os quais salas inativas são excluídas | `7` |
-| `CLEANUP_INTERVAL_HOURS` | Intervalo para limpeza de salas expiradas em horas | `24` |
+| `PORT` | Port for the server to listen on | `8080` |
+| `ALLOW_ALL_ORIGINS` | Allow WebSocket connections from any origin | `true` |
+| `PASSWORD_PATTERN` | Regex to validate room passwords | `^\d{4}$` |
+| `MAX_ROOMS` | Maximum number of allowed rooms | `100` |
+| `MAX_CLIENTS_PER_ROOM` | Maximum number of clients in a room | `10` |
+| `LOG_LEVEL` | Log level (info, debug) | `info` |
+| `IDLE_TIMEOUT_SECONDS` | Timeout for inactive connections in seconds | `60` |
+| `PING_INTERVAL_SECONDS` | WebSocket ping interval in seconds | `30` |
+| `READ_BUFFER_SIZE` | WebSocket read buffer size | `1024` |
+| `WRITE_BUFFER_SIZE` | WebSocket write buffer size | `1024` |
+| `SUPABASE_URL` | Supabase URL for room persistence (required) | `""` |
+| `SUPABASE_KEY` | Supabase API key for authentication (required) | `""` |
+| `ROOM_EXPIRY_DAYS` | Days after which inactive rooms are deleted | `7` |
+| `CLEANUP_INTERVAL_HOURS` | Interval for cleaning up expired rooms in hours | `24` |
 
-**Nota:** `SUPABASE_URL` e `SUPABASE_KEY` são necessários para o funcionamento adequado do servidor.
+**Note:** `SUPABASE_URL` and `SUPABASE_KEY` are required for proper server operation.
 
-## Interface do Cliente
+## Client Interface
 
-O cliente GoVPN apresenta uma interface gráfica construída com Fyne 2.0+ com tamanho fixo de 300x600 pixels. Principais características:
+The GoVPN client features a graphical interface built with Fyne 2.0+ with a fixed size of 300x600 pixels. Main features:
 
-- **Home Tab**: Exibe salas salvas e opções de conexão
-- **Settings Tab**: Configurações do aplicativo
-- **Network List**: Lista de salas salvas com opções de conexão
-- **Dialogs**: Para criar/entrar em salas e gerenciar conexões
+- **Home Tab**: Displays saved rooms and connection options
+- **Settings Tab**: Application settings
+- **Network List**: List of saved rooms with connection options
+- **Dialogs**: For creating/joining rooms and managing connections
 
-### Armazenamento Local
+### Local Storage
 
-O cliente armazena dados localmente usando SQLite, incluindo:
+The client stores data locally using SQLite, including:
 
-- Configurações do usuário
-- Salas salvas e senhas
-- Histórico de conexões
-- Chaves criptográficas
+- User settings
+- Saved rooms and passwords
+- Connection history
+- Cryptographic keys
 
-## Processo de Lançamento
+## Release Process
 
-Este projeto usa GitHub Actions para construir e lançar automaticamente os componentes servidor e cliente.
+This project uses GitHub Actions to automatically build and release the server and client components.
 
-### Criando uma Versão do Servidor
+### Creating a Server Release
 
-Para criar uma nova versão do servidor:
+To create a new server release:
 
 ```bash
-# Marcar o commit com uma versão do servidor
+# Tag the commit with a server version
 git tag server-v1.0.0
 git push origin server-v1.0.0
 ```
 
-Isso acionará o workflow de lançamento do servidor que constrói binários para:
+This will trigger the server release workflow that builds binaries for:
 - Linux (amd64)
 - Windows (amd64)
 - macOS (Intel/amd64)
 - macOS (Apple Silicon/arm64)
 
-### Criando uma Versão do Cliente
+### Creating a Client Release
 
-Para criar uma nova versão do cliente:
+To create a new client release:
 
 ```bash
-# Marcar o commit com uma versão do cliente
+# Tag the commit with a client version
 git tag client-v1.0.0
 git push origin client-v1.0.0
 ```
 
-Isso acionará o workflow de lançamento do cliente que constrói:
-- Binários independentes para Linux, Windows e macOS
-- Aplicativos empacotados quando possível
+This will trigger the client release workflow that builds:
+- Standalone binaries for Linux, Windows, and macOS
+- Packaged applications when possible
 
-## Compilando Manualmente
+## Manual Compilation
 
-### Servidor
+### Server
 
 ```bash
-# Compilar o executável do servidor
+# Build the server executable
 go build -o govpn-server ./cmd/server/main.go
 ```
 
-### Cliente
+### Client
 
 ```bash
-# Compilar o executável do cliente
+# Build the client executable
 go build -o govpn-client ./cmd/client/main.go
 ```
 
-Para aplicativos empacotados usando Fyne:
+For packaged applications using Fyne:
 
 ```bash
 go install fyne.io/fyne/v2/cmd/fyne@latest
-# Certifique-se de estar no diretório raiz do projeto
+# Make sure you are in the project root directory
 cd cmd/client
 fyne package -os windows -icon icon/assets/app.png -name GoVPN
-# Ou para outras plataformas: linux, darwin
+# Or for other platforms: linux, darwin
 ```
 
-## Executando a Aplicação
+## Running the Application
 
-### Servidor
+### Server
 
 ```bash
-# Definir variáveis de ambiente necessárias
-export SUPABASE_URL="seu-url-supabase"
-export SUPABASE_KEY="sua-chave-supabase"
+# Set required environment variables
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-key"
 
-# Executar o servidor (binário compilado)
+# Run the server (compiled binary)
 ./govpn-server
 ```
 
-### Cliente
+### Client
 
 ```bash
-# Executar o cliente (binário compilado)
+# Run the client (compiled binary)
 ./govpn-client
 ```
 
-### Executando a partir do Código-Fonte (Desenvolvimento)
+### Running from Source (Development)
 
-Para executar a aplicação diretamente do código-fonte sem compilar:
+To run the application directly from source code without compiling:
 
-#### Servidor
+#### Server
 ```bash
-# Definir variáveis de ambiente necessárias
-export SUPABASE_URL="seu-url-supabase"
-export SUPABASE_KEY="sua-chave-supabase"
+# Set required environment variables
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-key"
 
-# Executar usando go run (comando de linha única)
+# Run using go run (single line command)
 cd cmd/server && go run main.go
 ```
 
-#### Cliente
+#### Client
 ```bash
-# Executar usando go run (comando de linha única)
+# Run using go run (single line command)
 cd cmd/client && go run .
 ```
 
-### Tarefas do VS Code
+### VS Code Tasks
 
-- Pressione `Ctrl+Shift+P` (ou `Cmd+Shift+P` no macOS)
-- Digite "Tasks: Run Task"
-- Selecione "Run GoVPN Server" ou "Run GoVPN Client"
+- Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
+- Type "Tasks: Run Task"
+- Select "Run GoVPN Server" or "Run GoVPN Client"
 
-## Características de Segurança
+## Security Features
 
-- Autenticação baseada em chaves Ed25519
-- Senhas de sala validadas (padrão: 4 dígitos numéricos)
-- Comunicação criptografada entre cliente e servidor
-- Persistência segura de credenciais locais
+- Authentication based on Ed25519 keys
+- Validated room passwords (default: 4 numeric digits)
+- Encrypted communication between client and server
+- Secure local credential persistence
 
-## Contribuições e Desenvolvimento
+## Contributions and Development
 
-Para contribuir com o projeto:
+To contribute to the project:
 
-1. Fork o repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
-3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
-4. Push para a branch (`git push origin feature/nova-feature`)
-5. Crie um Pull Request
+1. Fork the repository
+2. Create a branch for your feature (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -am 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
+5. Create a Pull Request
 
-## Notas de Implementação
+## Implementation Notes
 
-- O cliente é construído com Fyne 2.0+ e tem tamanho fixo de 300x600
-- O servidor usa Gorilla WebSocket para comunicação em tempo real
-- O sistema utiliza Supabase para persistência de dados do servidor
-- Comunicação P2P usa WebRTC para estabelecer conexões diretas entre clientes
+- The client is built with Fyne 2.0+ and has a fixed size of 300x600
+- The server uses Gorilla WebSocket for real-time communication
+- The system uses Supabase for server data persistence
+- P2P communication uses WebRTC to establish direct connections between clients
 
-## Resolução de Problemas
+## Troubleshooting
 
-- **Erro de conexão**: Verifique se o servidor está rodando e as variáveis de ambiente estão configuradas
-- **Problemas de compilação Fyne**: Certifique-se de que os requisitos do Fyne estão instalados (gcc, dependências gráficas)
-- **Erros SQLite**: Verifique as permissões do diretório ~/.govpn
+- **Connection error**: Check if the server is running and environment variables are set
+- **Fyne compilation issues**: Make sure Fyne requirements are installed (gcc, graphic dependencies)
+- **SQLite errors**: Check permissions for the ~/.govpn directory
 
-## Licença
+## License
 
 [MIT License](LICENSE)

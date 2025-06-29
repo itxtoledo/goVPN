@@ -15,18 +15,19 @@ import (
 
 // HeaderComponent representa o componente de cabeçalho da aplicação
 type HeaderComponent struct {
-	UI                 *UIManager
-	PowerButton        *widget.Button
-	UsernameLabel      *widget.Label
-	RoomLabel          *widget.Label
-	IPLabel            *widget.Label
-	BackendStatusLabel *widget.Label
-	BackendActivity    *widget.Activity
-	MenuButton         *widget.Button
+	UI                  *UIManager
+	PowerButton         *widget.Button
+	UsernameLabel       *widget.Label
+	RoomLabel           *widget.Label
+	IPLabel             *widget.Label
+	BackendStatusLabel  *widget.Label
+	BackendActivity     *widget.Activity
+	MenuButton          *widget.Button
+	defaultWebsocketURL string
 }
 
 // NewHeaderComponent cria uma nova instância do componente de cabeçalho
-func NewHeaderComponent(ui *UIManager) *HeaderComponent {
+func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderComponent {
 	hc := &HeaderComponent{
 		UI: ui,
 	}
@@ -131,7 +132,7 @@ func (hc *HeaderComponent) toggleConnection() {
 		// Conectar
 		go func() {
 			log.Println("Connecting to VPN network...")
-			hc.UI.VPN.Run()
+			hc.UI.VPN.Run(hc.defaultWebsocketURL)
 		}()
 	} else {
 		// Desconectar

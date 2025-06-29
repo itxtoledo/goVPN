@@ -1,0 +1,1 @@
+/Users/gustavotoledodesouza/Projects/fun/goVPN/.github/copilot-instructions.md

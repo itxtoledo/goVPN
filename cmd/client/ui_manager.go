@@ -2,7 +2,7 @@ package main
 
 import (
 	"log"
-	"time"
+	
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -26,14 +26,17 @@ type UIManager struct {
 	Rooms             []*storage.Room
 	ComputerList      []Computer
 	SelectedRoom      *storage.Room
+	defaultWebsocketURL string
 
 	// Nova camada de dados em tempo real
 	RealtimeData *data.RealtimeDataLayer
 }
 
 // NewUIManager creates a new instance of UIManager
-func NewUIManager() *UIManager {
-	ui := &UIManager{}
+func NewUIManager(websocketURL string) *UIManager {
+	ui := &UIManager{
+		defaultWebsocketURL: websocketURL,
+	}
 
 	// Criar a camada de dados em tempo real - ensure this is properly initialized
 	ui.RealtimeData = data.NewRealtimeDataLayer()
@@ -50,7 +53,7 @@ func NewUIManager() *UIManager {
 	ui.MainWindow.SetMaster()
 
 	// Create VPN client - note the order change to avoid circular reference
-	ui.VPN = NewVPNClient(ui)
+	ui.VPN = NewVPNClient(ui, websocketURL)
 
 	// Initialize default values AFTER all components are created
 	ui.RealtimeData.InitDefaults()
@@ -113,7 +116,7 @@ func (ui *UIManager) listenForDataEvents() {
 // setupComponents initializes all UI components
 func (ui *UIManager) setupComponents() {
 	// Create components
-	ui.HeaderComponent = NewHeaderComponent(ui)
+	ui.HeaderComponent = NewHeaderComponent(ui, ui.defaultWebsocketURL)
 	ui.NetworkListComp = NewNetworkListComponent(ui)
 	ui.RoomItemComponent = NewRoomItemComponent(ui)
 	ui.HomeTabComponent = NewHomeTabComponent(ui)
@@ -150,7 +153,6 @@ func (ui *UIManager) refreshUI() {
 
 	// Update header components
 	ui.HeaderComponent.updatePowerButtonState()
-	ui.HeaderComponent.updateIPInfo()
 	ui.HeaderComponent.updateUsername()
 	ui.HeaderComponent.updateRoomName()
 	ui.HeaderComponent.updateBackendStatus()
@@ -175,7 +177,7 @@ func (ui *UIManager) refreshNetworkList() {
 }
 
 // Run runs the application
-func (ui *UIManager) Run() {
+func (ui *UIManager) Run(defaultWebsocketURL string) {
 	log.Println("Iniciando GoVPN Client")
 
 	// Initialize the room list as an empty slice if it's nil
@@ -204,10 +206,9 @@ func (ui *UIManager) Run() {
 	if ui.VPN != nil {
 		go func() {
 			fyne.Do(func() {
-				// Pequeno atraso para garantir que a UI esteja pronta
-				time.Sleep(500 * time.Millisecond)
+				
 				log.Println("Iniciando conexão automática com o servidor de sinalização")
-				ui.VPN.Run()
+				ui.VPN.Run(defaultWebsocketURL)
 			})
 		}()
 	}
