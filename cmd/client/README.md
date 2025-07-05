@@ -1,62 +1,62 @@
 # GoVPN Client
 
-Cliente da aplicação GoVPN construído em Go com interface gráfica utilizando a biblioteca Fyne v2.
+GoVPN application client built in Go with a graphical interface using the Fyne v2 library.
 
-## Arquitetura
+## Architecture
 
-O cliente GoVPN segue uma arquitetura modular com os seguintes componentes principais:
+The GoVPN client follows a modular architecture with the following main components:
 
-### Componentes Core
+### Core Components
 
-1. **VPNClient**: Componente central que coordena todos os outros componentes do cliente.
-   - Gerencia o ciclo de vida da aplicação
-   - Integra todos os outros componentes
+1. **VPNClient**: Central component that coordinates all other client components.
+   - Manages the application lifecycle
+   - Integrates all other components
 
-2. **NetworkManager**: Responsável pela gestão das conexões de rede.
-   - Estabelece conexões com o servidor de sinalização
-   - Gerencia a criação e entrada em salas
-   - Coordena a conexão P2P com outros clientes
+2. **NetworkManager**: Responsible for managing network connections.
+   - Establishes connections with the signaling server
+   - Manages room creation and joining
+   - Coordinates P2P connection with other clients
 
-3. **SignalingClient**: Gerencia a comunicação WebSocket com o servidor.
-   - Envia e recebe mensagens de sinalização
-   - Processa notificações de eventos (novos peers, saída de peers)
-   - Implementa o protocolo de comunicação definido em `models`
+3. **SignalingClient**: Manages WebSocket communication with the server.
+   - Sends and receives signaling messages
+   - Processes event notifications (new peers, peer departures)
+   - Implements the communication protocol defined in `models`
 
-### Armazenamento de Dados
+### Data Storage
 
-1. **DatabaseManager**: Gerencia o banco de dados SQLite local.
-   - Armazena informações sobre salas salvas
-   - Mantém registro de conexões anteriores
-   - Armazena chaves criptográficas
+1. **DatabaseManager**: Manages the local SQLite database.
+   - Stores information about saved rooms
+   - Keeps a record of previous connections
+   - Stores cryptographic keys
 
-2. **ConfigManager**: Gerencia as configurações do usuário.
-   - Armazena preferências como idioma e tema
-   - Lida com endereço do servidor e outras configurações
+2. **ConfigManager**: Manages user settings.
+   - Stores preferences like language and theme
+   - Handles server address and other configurations
 
-3. **RealtimeDataLayer**: Camada de dados em tempo real para a interface.
-   - Fornece bindings de dados para widgets Fyne
-   - Implementa o padrão Observer para notificação de mudanças
-   - Centraliza o estado da aplicação
+3. **RealtimeDataLayer**: Real-time data layer for the interface.
+   - Provides data bindings for Fyne widgets
+   - Implements the Observer pattern for change notification
+   - Centralizes application state
 
-### Interface do Usuário
+### User Interface
 
-1. **UIManager**: Gerencia a interface gráfica do usuário.
-   - Coordena a navegação entre telas
-   - Integra os componentes de UI
-   - Gerencia o ciclo de vida da UI
+1. **UIManager**: Manages the graphical user interface.
+   - Coordinates navigation between screens
+   - Integrates UI components
+   - Manages the UI lifecycle
 
-2. **Componentes de UI**:
-   - **HeaderComponent**: Exibe o cabeçalho com status de conexão
-   - **HomeTabComponent**: Tela principal com lista de salas e opções
-   - **SettingsTabComponent**: Configurações do aplicativo
-   - **NetworkListComponent**: Lista de salas disponíveis
-   - **RoomItemComponent**: Representação visual de uma sala
+2. **UI Components**:
+   - **HeaderComponent**: Displays the header with connection status
+   - **HomeTabComponent**: Main screen with room list and options
+   - **SettingsTabComponent**: Application settings
+   - **NetworkListComponent**: List of available rooms
+   - **RoomItemComponent**: Visual representation of a room
 
-3. **Diálogos**:
-   - **ConnectDialog**: Diálogo para conectar a uma sala
-   - **RoomDialog**: Diálogo para criar/entrar em salas
+3. **Dialogs**:
+   - **ConnectDialog**: Dialog to connect to a room
+   - **RoomDialog**: Dialog to create/join rooms
 
-## Fluxo de Dados
+## Data Flow
 
 ```
 UI Events → UIManager → NetworkManager → SignalingClient → WebSocket → Server
@@ -66,53 +66,72 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
             Data Storage ← DatabaseManager ←→ ConfigManager
 ```
 
-## Tecnologias Utilizadas
+## Technologies Used
 
-- **Go**: Linguagem de programação principal (Go 1.18+)
-- **Fyne v2**: Framework de UI multiplataforma
-  - Widgets nativos para diversas plataformas
-  - Sistema de layout responsivo
-  - Suporte a temas claro/escuro
+- **Go**: Main programming language (Go 1.18+)
+- **Fyne v2**: Cross-platform UI framework
+  - Native widgets for various platforms
+  - Responsive layout system
+  - Light/dark theme support
 
-- **SQLite**: Banco de dados local
-  - Armazenamento de configurações e dados persistentes
-  - Através do pacote `database/sql` e driver SQLite
+- **SQLite**: Local database
+  - Storage of configurations and persistent data
+  - Via `database/sql` package and SQLite driver
 
-- **WebSocket**: Comunicação em tempo real
-  - Conexão persistente com o servidor de sinalização
-  - Implementado através da biblioteca Gorilla WebSocket
+- **WebSocket**: Real-time communication
+  - Persistent connection with the signaling server
+  - Implemented via the Gorilla WebSocket library
 
-- **Ed25519**: Criptografia de chave pública
-  - Autenticação segura de mensagens
-  - Geração e armazenamento de chaves
+- **Ed25519**: Public key cryptography
+  - Secure message authentication
+  - Key generation and storage
 
-## Estrutura de Arquivos
+## File Structure
 
-- **main.go**: Ponto de entrada da aplicação
-- **ui_manager.go**: Gerenciamento da interface do usuário
-- **vpn_client.go**: Coordenação da lógica VPN
-- **network_manager.go**: Gerenciamento de rede
-- **signaling_client.go**: Cliente de sinalização WebSocket
-- **data/**: Componentes da camada de dados em tempo real
-- **storage/**: Gerenciamento de armazenamento persistente
-- **dialogs/**: Componentes de diálogo da interface
-- **icon/**: Recursos visuais e ícones
+- **main.go**: Application entry point
+- **about_window.go**: About window implementation
+- **base_window.go**: Base window structure
+- **config_manager.go**: Configuration management
+- **header_component.go**: Header UI component
+- **home_tab_component.go**: Home tab UI component
+- **network_list_component.go**: Network list UI component
+- **network_manager.go**: Network connection management
+- **password_validator.go**: Password validation logic
+- **room_item_component.go**: Room item UI component
+- **settings_tab_component.go**: Settings tab UI component
+- **signaling_client.go**: WebSocket signaling client
+- **ui_manager.go**: User interface management
+- **vpn_client.go**: VPN logic coordination
+- **data/**: Real-time data layer components
+  - **realtime_data.go**: Real-time data implementation
+- **dialogs/**: UI dialog components
+  - **connect_dialog.go**: Connect dialog
+  - **dialogs_factory.go**: Dialogs factory
+  - **dialogs.go**: Dialogs main file
+  - **join_dialog.go**: Join dialog
+  - **room_dialog.go**: Room dialog
+- **icon/**: Visual resources and icons
+  - **icon.go**: Icon definitions
+  - **assets/**: Icon assets (e.g., `app.png`, `link_off.svg`)
+- **storage/**: Persistent storage management
+  - **config.go**: Configuration storage
+  - **database_manager.go**: Database management
 
-## Características Importantes
+## Important Features
 
-- **Tamanho fixo**: 300x600 pixels para compatibilidade entre plataformas
-- **Design responsivo**: Layout adaptável dentro das dimensões fixas
-- **Armazenamento local**: Todos os dados persistidos apenas localmente em SQLite
-- **Comunicação segura**: Autenticação baseada em chaves públicas
-- **Atualização em tempo real**: Interface reativa usando bindings do Fyne
+- **Fixed size**: 300x600 pixels for cross-platform compatibility
+- **Responsive design**: Adaptive layout within fixed dimensions
+- **Local storage**: All data persisted only locally in SQLite
+- **Secure communication**: Public key-based authentication
+- **Real-time updates**: Reactive interface using Fyne bindings
 
-## Executando o Cliente
+## Running the Client
 
 ```bash
 cd cmd/client && go run .
 ```
 
-## Dependências Principais
+## Main Dependencies
 
 - fyne.io/fyne/v2
 - github.com/mattn/go-sqlite3

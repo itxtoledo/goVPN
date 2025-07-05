@@ -1,154 +1,154 @@
 # GoVPN Server
 
-Servidor de sinalização para a aplicação GoVPN, construído em Go. Este servidor gerencia a comunicação entre clientes, permitindo que estabeleçam conexões P2P seguras e eficientes.
+Signaling server for the GoVPN application, built in Go. This server manages communication between clients, allowing them to establish secure and efficient P2P connections.
 
-## Arquitetura
+## Architecture
 
-O servidor GoVPN segue uma arquitetura simples, focada em sinalização, onde o principal objetivo é facilitar a comunicação inicial entre clientes e gerenciar salas. Não há implementação de TLS.
+The GoVPN server follows a simple architecture, focused on signaling, where the main objective is to facilitate initial communication between clients and manage rooms. There is no TLS implementation.
 
-### Componentes Principais
+### Main Components
 
-1. **WebSocketServer**: Componente central responsável por:
-   - Gerenciar conexões WebSocket com clientes
-   - Rotear mensagens entre clientes
-   - Administrar salas e seus participantes
-   - Implementar lógica de autenticação básica
-   - Lidar com situações de desconexão
-   - Monitorar estatísticas de uso
-   - Gerenciar o ciclo de vida das salas
+1. **WebSocketServer**: Central component responsible for:
+   - Managing WebSocket connections with clients
+   - Routing messages between clients
+   - Administering rooms and their participants
+   - Implementing basic authentication logic
+   - Handling disconnection situations
+   - Monitoring usage statistics
+   - Managing the lifecycle of rooms
 
-2. **SupabaseManager**: Interface para o banco de dados Supabase:
-   - Armazenamento persistente de informações das salas
-   - Consulta e modificação de dados das salas
-   - Gerenciamento do ciclo de vida das salas (expiração, limpeza)
-   - Verificação de propriedade por chave pública
+2. **SupabaseManager**: Interface for the Supabase database:
+   - Persistent storage of room information
+   - Querying and modifying room data
+   - Managing room lifecycle (expiration, cleanup)
+   - Public key ownership verification
 
-3. **StatsManager**: Componente de monitoramento:
-   - Acompanhamento de conexões ativas
-   - Estatísticas de salas e mensagens
-   - Métricas de performance
-   - Endpoint para monitoramento
+3. **StatsManager**: Monitoring component:
+   - Tracking active connections
+   - Room and message statistics
+   - Performance metrics
+   - Endpoint for monitoring
 
-### Estruturas de Dados Principais
+### Main Data Structures
 
-1. **Mapeamentos em Memória**:
-   - `clients`: Mapeia conexões WebSocket para IDs de salas
-   - `networks`: Mapeia IDs de salas para listas de conexões
-   - `clientToPublicKey`: Associa cada conexão à sua chave pública
+1. **In-Memory Mappings**:
+   - `clients`: Maps WebSocket connections to room IDs
+   - `networks`: Maps room IDs to lists of connections
+   - `clientToPublicKey`: Associates each connection with its public key
 
-2. **ServerRoom**: Extensão da estrutura de sala básica:
-   - Dados fundamentais da sala (ID, nome, senha)
-   - Chave pública do proprietário
-   - Metadados (criação, última atividade)
+2. **ServerRoom**: Extension of the basic room structure:
+   - Fundamental room data (ID, name, password)
+   - Owner's public key
+   - Metadata (creation, last activity)
 
-## Fluxo de Operação
+## Operation Flow
 
 ```
-Cliente WebSocket → WebSocketServer → [Processamento de Mensagem]
+WebSocket Client → WebSocketServer → [Message Processing]
                                        ↓
-                                   [Validação]
+                                   [Validation]
                                        ↓
-                            [Ação Específica por Tipo]
+                            [Specific Action by Type]
                            /       |        \        \
-                     Criar Sala  Entrar    Sair    Outras Ações
+                     Create Room  Join    Leave    Other Actions
                          |         |         |          |
                          v         v         v          v
-                     [Supabase] [Notificar] [Limpar] [Processar]
-                                  Outros    Recursos
+                     [Supabase] [Notify] [Cleanup] [Process]
+                                  Others    Resources
 ```
 
-## Gestão de Salas
+## Room Management
 
-1. **Criação de Sala**:
-   - Validação de dados (senha, nome)
-   - Geração de ID único
-   - Persistência em Supabase
-   - Associação do proprietário
-   - Verificação de unicidade de chave pública
+1. **Room Creation**:
+   - Data validation (password, name)
+   - Unique ID generation
+   - Persistence in Supabase
+   - Owner association
+   - Public key uniqueness verification
 
-2. **Entrada em Sala**:
-   - Validação de credenciais
-   - Verificação de limites
-   - Notificação a peers existentes
-   - Rastreamento de conexão
-   - Atualização da atividade da sala
+2. **Room Joining**:
+   - Credential validation
+   - Limit verification
+   - Notification to existing peers
+   - Connection tracking
+   - Room activity update
 
-3. **Saída de Sala**:
-   - Remoção do cliente da sala
-   - Limpeza condicional baseada em propriedade
-   - Notificação a outros participantes
-   - Preservação opcional da sala
+3. **Room Leaving**:
+   - Client removal from the room
+   - Conditional cleanup based on ownership
+   - Notification to other participants
+   - Optional room preservation
 
-4. **Propriedade de Sala**:
-   - Chave pública como identificador do proprietário
-   - Permissões especiais (renomear, expulsar)
-   - Exclusão automática quando proprietário sai (se não configurado para preservar)
+4. **Room Ownership**:
+   - Public key as owner identifier
+   - Special permissions (rename, kick)
+   - Automatic deletion when owner leaves (if not configured to preserve)
 
-## Sistema de Mensagens
+## Messaging System
 
-O servidor implementa um protocolo de mensagens baseado em JSON sobre WebSocket:
+The server implements a JSON-over-WebSocket messaging protocol:
 
-- **SignalingMessage**: Estrutura envelope para todas as mensagens
-- **Tipos de Mensagens**: CreateRoom, JoinRoom, LeaveRoom, Ping, Rename, Kick, etc.
-- **Identificação**: Cada mensagem possui um ID único para tracking e correlação de respostas
+- **SignalingMessage**: Envelope structure for all messages
+- **Message Types**: CreateRoom, JoinRoom, LeaveRoom, Ping, Rename, Kick, etc.
+- **Identification**: Each message has a unique ID for tracking and response correlation
 
-Detalhes completos da API podem ser encontrados em `docs/websocket_api.md`.
+Full API details can be found in `docs/websocket_api.md`.
 
-## Características de Segurança
+## Security Features
 
-- **Verificação de Chave Pública**: Validação de identidade através de chaves Ed25519
-- **Autenticação de Sala**: Proteção por senha para acesso às salas
-- **Isolamento de Salas**: Mensagens são roteadas apenas dentro das salas corretas
-- **Validação de Dados**: Verificação rigorosa de entradas de usuário
-- **Controle de Acesso**: Apenas proprietários podem executar ações administrativas
-- **Timeouts**: Desconexão automática de clientes inativos
+- **Public Key Verification**: Identity validation via Ed25519 keys
+- **Room Authentication**: Password protection for room access
+- **Room Isolation**: Messages are routed only within the correct rooms
+- **Data Validation**: Strict verification of user inputs
+- **Access Control**: Only owners can perform administrative actions
+- **Timeouts**: Automatic disconnection of inactive clients
 
-## Monitoramento e Métricas
+## Monitoring and Metrics
 
-O servidor fornece um endpoint `/stats` que retorna métricas em tempo real:
+The server provides a `/stats` endpoint that returns real-time metrics:
 
-- Número total de conexões
-- Conexões ativas
-- Mensagens processadas
-- Salas ativas
-- Estatísticas de limpeza
-- Tempo de atividade
+- Total number of connections
+- Active connections
+- Processed messages
+- Active rooms
+- Cleanup statistics
+- Uptime
 
-## Tecnologias Utilizadas
+## Technologies Used
 
-- **Go**: Linguagem de programação principal (Go 1.18+)
-- **Gorilla WebSocket**: Biblioteca para gerenciamento de conexões WebSocket
-- **Supabase-Go**: Cliente Supabase para Go
-- **Ed25519**: Para verificação de assinaturas e autenticação
+- **Go**: Main programming language (Go 1.18+)
+- **Gorilla WebSocket**: Library for WebSocket connection management
+- **Supabase-Go**: Supabase client for Go
+- **Ed25519**: For signature verification and authentication
 
-## Persistência de Dados
+## Data Persistence
 
-Os dados das salas são armazenados no Supabase com os seguintes campos:
-- ID da sala
-- Nome da sala
-- Senha (hash)
-- Chave pública do proprietário
-- Timestamp de criação
-- Timestamp de última atividade
+Room data is stored in Supabase with the following fields:
+- Room ID
+- Room Name
+- Password (hash)
+- Owner's public key
+- Creation timestamp
+- Last activity timestamp
 
-## Características de Performance
+## Performance Characteristics
 
-- **Uso Eficiente de Memória**: Estruturas de dados otimizadas
-- **Concorrência**: Aproveitamento de goroutines para operações paralelas
-- **Limpeza Automática**: Remoção programada de salas inativas para liberar recursos
-- **Desligamento Gracioso**: Notificação aos clientes e persistência de estado durante reinicializações
-- **Timeouts**: Prevenção de vazamentos de recursos por conexões pendentes
+- **Efficient Memory Usage**: Optimized data structures
+- **Concurrency**: Leveraging goroutines for parallel operations
+- **Automatic Cleanup**: Scheduled removal of inactive rooms to free up resources
+- **Graceful Shutdown**: Notification to clients and state persistence during restarts
+- **Timeouts**: Prevention of resource leaks from pending connections
 
-## Configuração
+## Configuration
 
-O servidor é configurado através de variáveis de ambiente:
+The server is configured via environment variables:
 
 ```bash
-# Obrigatórias
-export SUPABASE_URL="seu-url-supabase"
-export SUPABASE_KEY="sua-chave-supabase"
+# Required
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-key"
 
-# Opcionais
+# Optional
 export PORT="8080"
 export MAX_CLIENTS_PER_ROOM="50"
 export ROOM_EXPIRY_DAYS="7"
@@ -162,33 +162,33 @@ export ALLOW_ALL_ORIGINS="true"
 
 ## Endpoints
 
-- `/ws`: Endpoint principal para conexões WebSocket
-- `/health`: Verificação de saúde do servidor (retorna status 200 se operacional)
-- `/stats`: Retorna estatísticas em tempo real do servidor em formato JSON
+- `/ws`: Main endpoint for WebSocket connections
+- `/health`: Server health check (returns status 200 if operational)
+- `/stats`: Returns real-time server statistics in JSON format
 
-## Executando o Servidor
+## Running the Server
 
 ```bash
 cd cmd/server && go run .
 ```
 
-## Desligamento Gracioso
+## Graceful Shutdown
 
-O servidor suporta desligamento gracioso, onde:
+The server supports graceful shutdown, where:
 
-1. Todos os clientes conectados são notificados sobre a iminente paralisação
-2. O estado atual das salas é preservado no Supabase
-3. As conexões são fechadas ordenadamente
-4. Os recursos são liberados antes do encerramento
+1. All connected clients are notified of the imminent shutdown
+2. The current state of the rooms is preserved in Supabase
+3. Connections are closed orderly
+4. Resources are released before termination
 
-## Limitações
+## Limitations
 
-- Não implementa TLS diretamente (recomendado uso atrás de proxy como Nginx ou Traefik)
-- Escala verticalmente, não horizontalmente
-- Sem banco de dados em cluster (usa apenas Supabase)
-- Sem balanceamento de carga integrado
+- Does not directly implement TLS (recommended to use behind a proxy like Nginx or Traefik)
+- Scales vertically, not horizontally
+- No clustered database (uses only Supabase)
+- No integrated load balancing
 
-## Dependências Principais
+## Main Dependencies
 
 - github.com/gorilla/websocket
 - github.com/supabase-community/supabase-go
