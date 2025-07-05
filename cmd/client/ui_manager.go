@@ -172,7 +172,7 @@ func (ui *UIManager) GetSelectedRoom() *storage.Room {
 }
 
 // ConnectToRoom implementa a interface ConnectDialogManager
-func (ui *UIManager) ConnectToRoom(roomID, password, username string) error {
+func (ui *UIManager) ConnectToRoom(roomID, username string) error {
 	// Ensure NetworkManager is initialized
 	if ui.VPN == nil || ui.VPN.NetworkManager == nil {
 		return fmt.Errorf("network manager not initialized")
@@ -197,7 +197,7 @@ func (ui *UIManager) ConnectToRoom(roomID, password, username string) error {
 
 	// Connect to the selected room
 	log.Printf("Attempting to connect to room %s", roomID)
-	return ui.VPN.NetworkManager.JoinRoom(roomID, password, username)
+	return ui.VPN.NetworkManager.ConnectRoom(roomID)
 }
 
 // refreshNetworkList refreshes the network tree

@@ -147,13 +147,13 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 						// If already connected, disconnect
 						log.Println("Disconnecting from room:", currentRoom.Name)
 						go func() {
-							err := ntc.UI.VPN.NetworkManager.Disconnect()
+							err := ntc.UI.VPN.NetworkManager.DisconnectRoom(currentRoom.ID)
 							if err != nil {
-								log.Printf("Error disconnecting: %v", err)
-								dialog.ShowError(fmt.Errorf("failed to disconnect: %v", err), ntc.UI.MainWindow)
+								log.Printf("Error disconnecting from room: %v", err)
+								dialog.ShowError(fmt.Errorf("failed to disconnect from room: %v", err), ntc.UI.MainWindow)
 							} else {
-								log.Println("Successfully disconnected.")
-								dialog.ShowInformation("Success", "Successfully disconnected.", ntc.UI.MainWindow)
+								log.Println("Successfully disconnected from room.")
+								dialog.ShowInformation("Success", "Successfully disconnected from room.", ntc.UI.MainWindow)
 							}
 						}()
 					} else {
