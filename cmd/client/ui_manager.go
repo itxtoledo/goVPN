@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"fyne.io/fyne/v2"
@@ -172,19 +173,31 @@ func (ui *UIManager) GetSelectedRoom() *storage.Room {
 
 // ConnectToRoom implementa a interface ConnectDialogManager
 func (ui *UIManager) ConnectToRoom(roomID, password, username string) error {
-	// Determine if we are connecting or disconnecting
-	currentRoomID := ""
-	if ui.VPN != nil && ui.VPN.NetworkManager != nil {
-		currentRoomID = ui.VPN.NetworkManager.RoomID
+	// Ensure NetworkManager is initialized
+	if ui.VPN == nil || ui.VPN.NetworkManager == nil {
+		return fmt.Errorf("network manager not initialized")
 	}
 
+	currentRoomID := ui.VPN.NetworkManager.RoomID
+
+	// If already connected to the selected room, disconnect
 	if currentRoomID == roomID {
-		// Disconnect from the room
+		log.Printf("Attempting to disconnect from room %s", roomID)
 		return ui.VPN.NetworkManager.DisconnectRoom(roomID)
-	} else {
-		// Connect to the room
-		return ui.VPN.NetworkManager.JoinRoom(roomID, password, username)
 	}
+
+	// If connected to a different room, disconnect first
+	if currentRoomID != "" {
+		log.Printf("Already connected to room %s, disconnecting before connecting to %s", currentRoomID, roomID)
+		err := ui.VPN.NetworkManager.DisconnectRoom(currentRoomID)
+		if err != nil {
+			return fmt.Errorf("failed to disconnect from current room: %v", err)
+		}
+	}
+
+	// Connect to the selected room
+	log.Printf("Attempting to connect to room %s", roomID)
+	return ui.VPN.NetworkManager.JoinRoom(roomID, password, username)
 }
 
 // refreshNetworkList refreshes the network tree

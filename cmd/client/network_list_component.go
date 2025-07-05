@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -138,17 +139,32 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				connectIcon = theme.LogoutIcon()
 			}
 
-			connectButton := widget.NewButtonWithIcon(connectButtonText, connectIcon, func(currentRoom *storage.Room) func() {
+			connectButton := widget.NewButtonWithIcon(connectButtonText, connectIcon, func(currentRoom *storage.Room, isConnected bool) func() {
 				return func() {
 					ntc.UI.SelectedRoom = currentRoom
 
-					// Show connection dialog
-					if ntc.UI.ConnectDialog == nil {
-						ntc.UI.ConnectDialog = dialogs.NewConnectDialog(ntc.UI, ntc.UI.VPN.Username)
+					if isConnected {
+						// If already connected, disconnect
+						log.Println("Disconnecting from room:", currentRoom.Name)
+						go func() {
+							err := ntc.UI.VPN.NetworkManager.Disconnect()
+							if err != nil {
+								log.Printf("Error disconnecting: %v", err)
+								dialog.ShowError(fmt.Errorf("failed to disconnect: %v", err), ntc.UI.MainWindow)
+							} else {
+								log.Println("Successfully disconnected.")
+								dialog.ShowInformation("Success", "Successfully disconnected.", ntc.UI.MainWindow)
+							}
+						}()
+					} else {
+						// Show connection dialog
+						if ntc.UI.ConnectDialog == nil {
+							ntc.UI.ConnectDialog = dialogs.NewConnectDialog(ntc.UI, ntc.UI.VPN.Username)
+						}
+						ntc.UI.ConnectDialog.Show()
 					}
-					ntc.UI.ConnectDialog.Show()
 				}
-			}(room))
+			}(room, isConnected))
 
 			leaveButton := widget.NewButtonWithIcon("Leave", theme.LogoutIcon(), func(currentRoom *storage.Room) func() {
 				return func() {
