@@ -19,7 +19,6 @@ type HeaderComponent struct {
 	PowerButton         *widget.Button
 	UsernameLabel       *widget.Label
 	RoomLabel           *widget.Label
-	IPLabel             *widget.Label
 	BackendStatusLabel  *widget.Label
 	BackendActivity     *widget.Activity
 	MenuButton          *widget.Button
@@ -41,7 +40,6 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 	// Criar labels com dados em tempo real vinculados
 	hc.UsernameLabel = widget.NewLabelWithData(hc.UI.RealtimeData.Username)
 	hc.RoomLabel = widget.NewLabelWithData(hc.UI.RealtimeData.RoomName)
-	hc.IPLabel = widget.NewLabelWithData(hc.UI.RealtimeData.LocalIP)
 
 	// Status do Backend
 	hc.BackendStatusLabel = widget.NewLabel("Backend: Disconnected")
@@ -67,11 +65,6 @@ func (hc *HeaderComponent) configureListeners() {
 	hc.UI.RealtimeData.ConnectionState.AddListener(binding.NewDataListener(func() {
 		hc.updateBackendStatus()
 		hc.updatePowerButtonState()
-	}))
-
-	// Listener para o IP local
-	hc.UI.RealtimeData.LocalIP.AddListener(binding.NewDataListener(func() {
-		hc.updateIPInfo()
 	}))
 
 	// Listener para o nome da sala
@@ -101,16 +94,10 @@ func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 		backendStatusContainer,
 	)
 
-	// Container inferior com informações de sala e IP (compacto)
-	bottomContainer := container.NewGridWithColumns(2,
-		container.NewHBox(
-			widget.NewIcon(theme.HomeIcon()),
-			hc.RoomLabel,
-		),
-		container.NewHBox(
-			widget.NewIcon(theme.ComputerIcon()),
-			hc.IPLabel,
-		),
+	// Container inferior com informações de sala (compacto)
+	bottomContainer := container.NewHBox(
+		widget.NewIcon(theme.HomeIcon()),
+		hc.RoomLabel,
 	)
 
 	// Container principal mais compacto
@@ -163,12 +150,6 @@ func (hc *HeaderComponent) updatePowerButtonState() {
 
 	// Atualizar o botão
 	hc.PowerButton.Refresh()
-}
-
-// updateIPInfo atualiza as informações de IP
-func (hc *HeaderComponent) updateIPInfo() {
-	// O IP já está vinculado diretamente via binding
-	// Esta função é mantida para compatibilidade e possíveis futuras extensões
 }
 
 // updateUsername atualiza o nome de usuário

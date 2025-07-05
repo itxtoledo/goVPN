@@ -660,7 +660,6 @@ func (s *SignalingClient) listenForMessages() {
 						{
 							ID:       s.VPNClient.PublicKeyStr,
 							Name:     s.UI.ConfigManager.GetConfig().Username,
-							IP:       "10.0.0.1", // Default IP
 							OwnerID:  s.VPNClient.PublicKeyStr,
 							IsOnline: true,
 						},
@@ -688,7 +687,6 @@ func (s *SignalingClient) listenForMessages() {
 						{
 							ID:       s.VPNClient.PublicKeyStr,
 							Name:     s.UI.ConfigManager.GetConfig().Username,
-							IP:       "10.0.0.1", // Default IP
 							OwnerID:  s.VPNClient.PublicKeyStr,
 							IsOnline: true,
 						},
@@ -749,14 +747,10 @@ func (s *SignalingClient) listenForMessages() {
 				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
 					// Skip if this is our own public key
 					if notification.PublicKey != s.VPNClient.PublicKeyStr {
-						// Generate a simple IP based on the computer count (for display purposes)
-						ip := fmt.Sprintf("10.0.0.%d", len(s.VPNClient.NetworkManager.Computers)+1)
-
 						// Add the new peer to the computers list
 						newComputer := Computer{
 							ID:       notification.PublicKey,
 							Name:     username,
-							IP:       ip,
 							OwnerID:  notification.PublicKey,
 							IsOnline: true,
 						}

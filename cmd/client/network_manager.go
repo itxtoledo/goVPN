@@ -19,7 +19,6 @@ type NetworkInterface interface {
 type Computer struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
-	IP       string `json:"ip"`
 	OwnerID  string `json:"owner_id"`
 	IsOnline bool   `json:"is_online"`
 }

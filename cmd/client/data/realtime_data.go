@@ -58,7 +58,6 @@ type RealtimeDataLayer struct {
 	Language      binding.String
 
 	// Dados de rede
-	LocalIP          binding.String
 	PeerCount        binding.Int
 	NetworkLatency   binding.Float
 	TransferredBytes binding.Float
@@ -85,7 +84,6 @@ func NewRealtimeDataLayer() *RealtimeDataLayer {
 		Username:         binding.NewString(),
 		ServerAddress:    binding.NewString(),
 		Language:         binding.NewString(),
-		LocalIP:          binding.NewString(),
 		PeerCount:        binding.NewInt(),
 		NetworkLatency:   binding.NewFloat(),
 		TransferredBytes: binding.NewFloat(),
@@ -113,7 +111,6 @@ func (rdl *RealtimeDataLayer) InitDefaults() {
 	rdl.SetUsername("User")
 	rdl.SetServerAddress("ws://localhost:8080")
 	rdl.SetLanguage("en")
-	rdl.SetLocalIP("YOUR IPV4")
 	rdl.SetRoomInfo("Not connected", "")
 	rdl.UpdateNetworkStats(0, 0.0, 0.0, 0.0)
 }
@@ -145,11 +142,6 @@ func (rdl *RealtimeDataLayer) SetServerAddress(address string) {
 // SetLanguage define o idioma da interface
 func (rdl *RealtimeDataLayer) SetLanguage(lang string) {
 	rdl.Language.Set(lang)
-}
-
-// SetLocalIP define o IP local
-func (rdl *RealtimeDataLayer) SetLocalIP(ip string) {
-	rdl.LocalIP.Set(ip)
 }
 
 // UpdateNetworkStats atualiza as estatísticas de rede
