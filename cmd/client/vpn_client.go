@@ -2,18 +2,14 @@ package main
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // VPNClient é a estrutura principal do cliente VPN
@@ -21,16 +17,16 @@ type VPNClient struct {
 	PrivateKey     interface{}
 	PublicKey      interface{}
 	PublicKeyStr   string // Identificador principal do cliente
+	Username       string
 	Computers      []Computer
 	CurrentRoom    string
 	IsConnected    bool
 	NetworkManager *NetworkManager
-	UI             *UIManager
 	ConfigManager  *ConfigManager
 }
 
 // NewVPNClient creates a new VPN client
-func NewVPNClient(ui *UIManager, defaultWebsocketURL string) *VPNClient {
+func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, username string) *VPNClient {
 	var privateKey ed25519.PrivateKey
 	var publicKey ed25519.PublicKey
 	var publicKeyStr string
@@ -38,7 +34,7 @@ func NewVPNClient(ui *UIManager, defaultWebsocketURL string) *VPNClient {
 	log.Println("Initializing VPN client...")
 
 	// Load existing keys from config
-	publicKeyStr, privateKeyStr := ui.ConfigManager.GetKeyPair()
+	publicKeyStr, privateKeyStr := configManager.GetKeyPair()
 
 	log.Printf("Loaded public key from config: %s...", publicKeyStr[:10])
 	log.Printf("Loaded private key from config: %s...", privateKeyStr[:10])
@@ -63,13 +59,13 @@ func NewVPNClient(ui *UIManager, defaultWebsocketURL string) *VPNClient {
 
 	// Create VPN client
 	client := &VPNClient{
-		UI:            ui,
 		IsConnected:   false,
 		PrivateKey:    privateKey,
 		PublicKey:     publicKey,
 		PublicKeyStr:  publicKeyStr,
+		Username:      username,
 		Computers:     make([]Computer, 0),
-		ConfigManager: ui.ConfigManager,
+		ConfigManager: configManager,
 	}
 
 	// TODO client.PublicKeyStr esta vazio
@@ -82,39 +78,38 @@ func NewVPNClient(ui *UIManager, defaultWebsocketURL string) *VPNClient {
 
 	log.Printf("VPN client initialized with public key: %s...", client.PublicKeyStr)
 
-	// Initialize rooms as an empty slice (in-memory storage only)
-	ui.Rooms = make([]*storage.Room, 0)
-
-	// Create network manager
-	client.NetworkManager = NewNetworkManager(ui)
-
 	return client
 }
 
+// SetupNetworkManager creates and configures the NetworkManager for the VPN client
+func (v *VPNClient) SetupNetworkManager(realtimeData *data.RealtimeDataLayer, refreshNetworkList func(), refreshUI func()) {
+	v.NetworkManager = NewNetworkManager(realtimeData, v.ConfigManager, refreshNetworkList, refreshUI)
+}
+
 // loadSettings carrega as configurações salvas do banco de dados
-func (v *VPNClient) loadSettings() {
+func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer, app fyne.App) {
 	// Carrega as configurações de usuário do config manager
 	config := v.ConfigManager.GetConfig()
 
 	// Atualiza o nome de usuário na camada de dados em tempo real
-	v.UI.RealtimeData.SetUsername(config.Username)
+	realtimeData.SetUsername(config.Username)
 
 	// Atualiza o endereço do servidor na camada de dados em tempo real
-	v.UI.RealtimeData.SetServerAddress(config.ServerAddress)
+	realtimeData.SetServerAddress(config.ServerAddress)
 
 	// Aplicar o tema
 	switch config.Theme {
 	case "light":
-		v.UI.App.Settings().SetTheme(fyne.Theme(theme.LightTheme()))
+		app.Settings().SetTheme(fyne.Theme(theme.LightTheme()))
 	case "dark":
-		v.UI.App.Settings().SetTheme(fyne.Theme(theme.DarkTheme()))
+		app.Settings().SetTheme(fyne.Theme(theme.DarkTheme()))
 	default:
 		// Tema do sistema é o padrão, não é necessário configurá-lo explicitamente
 	}
 
 	// Configura o idioma (se implementado)
 	if config.Language != "" {
-		v.UI.RealtimeData.SetLanguage(config.Language)
+		realtimeData.SetLanguage(config.Language)
 	}
 
 	log.Printf("Settings loaded: Username=%s, Theme=%s, Language=%s, Server=%s",
@@ -122,14 +117,19 @@ func (v *VPNClient) loadSettings() {
 }
 
 // Run inicia o cliente VPN
-func (v *VPNClient) Run(defaultWebsocketURL string) {
+func (v *VPNClient) Run(defaultWebsocketURL string, realtimeData *data.RealtimeDataLayer, refreshNetworkList func(), refreshUI func()) {
 	log.Println("Starting goVPN client")
+
+	// Setup the network manager first
+	if v.NetworkManager == nil {
+		v.SetupNetworkManager(realtimeData, refreshNetworkList, refreshUI)
+	}
 
 	// Attempt to connect to the backend in a background goroutine
 	go func() {
 		// Defina o estado inicial na camada de dados
-		v.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
-		v.UI.RealtimeData.SetStatusMessage("Starting...")
+		realtimeData.SetConnectionState(data.StateDisconnected)
+		realtimeData.SetStatusMessage("Starting...")
 
 		// Obter o endereço do servidor das configurações
 		config := v.ConfigManager.GetConfig()
@@ -141,47 +141,26 @@ func (v *VPNClient) Run(defaultWebsocketURL string) {
 			log.Println("No server address configured, using default from build:", serverAddress)
 		}
 
-		// Inicializar o signaling client no NetworkManager se necessário
-		if v.NetworkManager.SignalingServer == nil {
-			v.NetworkManager.SignalingServer = NewSignalingClient(v.UI, v.PublicKeyStr)
-		}
-
-		// Set the reference to this VPNClient in the SignalingClient
-		v.NetworkManager.SignalingServer.SetVPNClient(v)
-
 		// Tentativa de conexão ao servidor de backend
 		log.Printf("Iniciando conexão automática com o servidor de sinalização")
 		log.Printf("Attempting to connect to backend server: %s", serverAddress)
-		v.UI.RealtimeData.SetStatusMessage("Connecting to backend...")
+		realtimeData.SetStatusMessage("Connecting to backend...")
 
 		// Conectar ao servidor
 		err := v.NetworkManager.Connect(serverAddress)
 
 		if err != nil {
 			log.Printf("Background connection attempt failed: %v", err)
-			v.UI.RealtimeData.SetStatusMessage("Connection failed")
-			v.UI.RealtimeData.EmitEvent(data.EventError, fmt.Sprintf("Connection failed: %v", err), nil)
+			realtimeData.SetStatusMessage("Connection failed")
+			realtimeData.EmitEvent(data.EventError, fmt.Sprintf("Connection failed: %v", err), nil)
 		} else {
 			log.Println("Successfully connected to backend server in background")
-			v.UI.RealtimeData.SetStatusMessage("Connected")
+			realtimeData.SetStatusMessage("Connected")
 
 			// Atualizar a lista de salas
-			v.UI.refreshNetworkList()
+			refreshNetworkList()
 		}
 	}()
-}
-
-// generateClientID gera um ID de cliente único
-func generateClientID() string {
-	// Geramos um identificador simples baseado em timestamp + random
-	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
-
-	// Adicionar 8 bytes aleatórios
-	b := make([]byte, 8)
-	rand.Read(b)
-	randomHex := hex.EncodeToString(b)
-
-	return fmt.Sprintf("%s-%s", timestamp, randomHex)
 }
 
 // GetIdentifier retorna o identificador do cliente

@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 var websocketURL = "wss://govpn-k6ql.onrender.com/ws"
@@ -25,7 +26,9 @@ func main() {
 	setupDataPath()
 
 	// Inicializar UIManager que contém a camada de dados em tempo real
-	ui := NewUIManager(websocketURL)
+	configManager := storage.NewConfigManager()
+	username := configManager.GetConfig().Username
+	ui := NewUIManager(websocketURL, username)
 
 	// Set up system tray
 	if desk, ok := ui.App.(desktop.App); ok {
@@ -42,7 +45,7 @@ func main() {
 		connectItem := fyne.NewMenuItem("Connect", func() {
 			if ui.VPN != nil {
 				// The Run method handles the connection logic
-				go ui.VPN.Run(websocketURL)
+				go ui.VPN.Run(websocketURL, ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI)
 			}
 		})
 

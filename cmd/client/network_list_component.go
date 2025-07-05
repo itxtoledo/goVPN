@@ -11,16 +11,17 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // NetworkListComponent representa o componente da árvore de rede
 type NetworkListComponent struct {
-	UI            *UIManager
-	Container     *fyne.Container
-	RoomAccordion *widget.Accordion
-	contentContainer  *fyne.Container // New field to hold dynamic content
-	updateMutex   sync.Mutex
+	UI               *UIManager
+	Container        *fyne.Container
+	RoomAccordion    *widget.Accordion
+	contentContainer *fyne.Container // New field to hold dynamic content
+	updateMutex      sync.Mutex
 }
 
 // NewNetworkListComponent cria uma nova instância do componente de árvore de rede
@@ -59,15 +60,16 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 	ntc.contentContainer.RemoveAll()
 
 	// Sort the rooms by name
-	if ntc.UI.Rooms != nil {
-		sort.Slice(ntc.UI.Rooms, func(i, j int) bool {
-			return ntc.UI.Rooms[i].Name < ntc.UI.Rooms[j].Name
+	rooms := ntc.UI.RealtimeData.GetRooms()
+	if rooms != nil {
+		sort.Slice(rooms, func(i, j int) bool {
+			return rooms[i].Name < rooms[j].Name
 		})
 	}
 
-	log.Printf("Updating room list. Total: %d", len(ntc.UI.Rooms))
+	log.Printf("Updating room list. Total: %d", len(rooms))
 
-	if ntc.UI.Rooms != nil && len(ntc.UI.Rooms) > 0 {
+	if rooms != nil && len(rooms) > 0 {
 		// Criar estrutura temporária para os novos itens
 		var newItems []*widget.AccordionItem
 
@@ -78,13 +80,13 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 		}
 
 		// Get username from config for display
-		username := ntc.UI.ConfigManager.GetConfig().Username
+		username, _ := ntc.UI.RealtimeData.Username.Get()
 		if username == "" {
 			username = "You"
 		}
 
 		// Add each room as an accordion item
-		for _, room := range ntc.UI.Rooms {
+		for _, room := range rooms {
 			log.Printf("Processing room: %s (ID=%s)", room.Name, room.ID)
 			// Check if this room is the one we're currently connected to
 			isConnected := room.ID == currentRoomID
@@ -142,7 +144,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 
 					// Show connection dialog
 					if ntc.UI.ConnectDialog == nil {
-						ntc.UI.ConnectDialog = NewConnectDialog(ntc.UI)
+						ntc.UI.ConnectDialog = dialogs.NewConnectDialog(ntc.UI, ntc.UI.VPN.Username)
 					}
 					ntc.UI.ConnectDialog.Show()
 				}
@@ -212,33 +214,33 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			}
 		}
 		// Update the accordion with the new items
-        ntc.RoomAccordion.Items = newItems
+		ntc.RoomAccordion.Items = newItems
 
-        if len(newItems) > 0 {
-            // Add the accordion to the content container
-            ntc.contentContainer.Add(ntc.RoomAccordion)
-            // Refresh the accordion presentation
-            ntc.RoomAccordion.Refresh()
-        } else {
-            log.Printf("No rooms available to display after filtering/processing")
-            // Add informative message when no rooms are available
-            noRoomsLabel := widget.NewLabelWithStyle(
-                "No rooms available.\nCreate or join a room to get started.",
-                fyne.TextAlignCenter,
-                fyne.TextStyle{},
-            )
-            ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
-        }
-    } else {
-        log.Printf("No rooms available to display")
-        // Add informative message when no rooms are available
-        noRoomsLabel := widget.NewLabelWithStyle(
-            "No rooms available.\nCreate or join a room to get started.",
-            fyne.TextAlignCenter,
-            fyne.TextStyle{},
-        )
-        ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
-    }
+		if len(newItems) > 0 {
+			// Add the accordion to the content container
+			ntc.contentContainer.Add(ntc.RoomAccordion)
+			// Refresh the accordion presentation
+			ntc.RoomAccordion.Refresh()
+		} else {
+			log.Printf("No rooms available to display after filtering/processing")
+			// Add informative message when no rooms are available
+			noRoomsLabel := widget.NewLabelWithStyle(
+				"No rooms available.\nCreate or join a room to get started.",
+				fyne.TextAlignCenter,
+				fyne.TextStyle{},
+			)
+			ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
+		}
+	} else {
+		log.Printf("No rooms available to display")
+		// Add informative message when no rooms are available
+		noRoomsLabel := widget.NewLabelWithStyle(
+			"No rooms available.\nCreate or join a room to get started.",
+			fyne.TextAlignCenter,
+			fyne.TextStyle{},
+		)
+		ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
+	}
 
 	// Refresh the content container and main container
 	ntc.contentContainer.Refresh()

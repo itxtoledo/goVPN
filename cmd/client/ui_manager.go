@@ -2,30 +2,29 @@ package main
 
 import (
 	"log"
-	
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"github.com/itxtoledo/govpn/cmd/client/data"
+	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // UIManager represents the UI manager for the VPN client app
 type UIManager struct {
-	App               fyne.App
-	MainWindow        fyne.Window
-	VPN               *VPNClient
-	ConfigManager     *ConfigManager
-	NetworkListComp   *NetworkListComponent
-	RoomItemComponent *RoomItemComponent
-	HomeTabComponent  *HomeTabComponent
-	HeaderComponent   *HeaderComponent
-	AboutWindow       *AboutWindow
-	ConnectDialog     *ConnectDialog
-	Rooms             []*storage.Room
-	ComputerList      []Computer
-	SelectedRoom      *storage.Room
+	App                 fyne.App
+	MainWindow          fyne.Window
+	VPN                 *VPNClient
+	ConfigManager       *ConfigManager
+	NetworkListComp     *NetworkListComponent
+	RoomItemComponent   *RoomItemComponent
+	HomeTabComponent    *HomeTabComponent
+	HeaderComponent     *HeaderComponent
+	AboutWindow         *AboutWindow
+	ConnectDialog       *dialogs.ConnectDialog
+	ComputerList        []Computer
+	SelectedRoom        *storage.Room
 	defaultWebsocketURL string
 
 	// Nova camada de dados em tempo real
@@ -33,7 +32,7 @@ type UIManager struct {
 }
 
 // NewUIManager creates a new instance of UIManager
-func NewUIManager(websocketURL string) *UIManager {
+func NewUIManager(websocketURL string, username string) *UIManager {
 	ui := &UIManager{
 		defaultWebsocketURL: websocketURL,
 	}
@@ -53,13 +52,16 @@ func NewUIManager(websocketURL string) *UIManager {
 	ui.MainWindow.SetMaster()
 
 	// Create VPN client - note the order change to avoid circular reference
-	ui.VPN = NewVPNClient(ui, websocketURL)
+	ui.VPN = NewVPNClient(ui.ConfigManager, websocketURL, username)
 
 	// Initialize default values AFTER all components are created
 	ui.RealtimeData.InitDefaults()
 
 	// Setup components
 	ui.setupComponents()
+
+	// Setup NetworkManager for VPN client now that dependencies are available
+	ui.VPN.SetupNetworkManager(ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI)
 
 	// Configure quit handler
 	ui.MainWindow.SetOnClosed(func() {
@@ -119,7 +121,7 @@ func (ui *UIManager) setupComponents() {
 	ui.HeaderComponent = NewHeaderComponent(ui, ui.defaultWebsocketURL)
 	ui.NetworkListComp = NewNetworkListComponent(ui)
 	ui.RoomItemComponent = NewRoomItemComponent(ui)
-	ui.HomeTabComponent = NewHomeTabComponent(ui)
+	ui.HomeTabComponent = NewHomeTabComponent(ui.ConfigManager, ui.RealtimeData, ui.App, ui.refreshUI, ui.NetworkListComp, ui)
 
 	// Create main container
 	headerContainer := ui.HeaderComponent.CreateHeaderContainer()
@@ -163,6 +165,28 @@ func (ui *UIManager) refreshUI() {
 	}
 }
 
+// GetSelectedRoom implementa a interface ConnectDialogManager
+func (ui *UIManager) GetSelectedRoom() *storage.Room {
+	return ui.SelectedRoom
+}
+
+// ConnectToRoom implementa a interface ConnectDialogManager
+func (ui *UIManager) ConnectToRoom(roomID, password, username string) error {
+	// Determine if we are connecting or disconnecting
+	currentRoomID := ""
+	if ui.VPN != nil && ui.VPN.NetworkManager != nil {
+		currentRoomID = ui.VPN.NetworkManager.RoomID
+	}
+
+	if currentRoomID == roomID {
+		// Disconnect from the room
+		return ui.VPN.NetworkManager.DisconnectRoom(roomID)
+	} else {
+		// Connect to the room
+		return ui.VPN.NetworkManager.JoinRoom(roomID, password, username)
+	}
+}
+
 // refreshNetworkList refreshes the network tree
 func (ui *UIManager) refreshNetworkList() {
 	// No need to load from database anymore, UI.Rooms is maintained in memory
@@ -180,15 +204,12 @@ func (ui *UIManager) refreshNetworkList() {
 func (ui *UIManager) Run(defaultWebsocketURL string) {
 	log.Println("Iniciando GoVPN Client")
 
-	// Initialize the room list as an empty slice if it's nil
-	if ui.Rooms == nil {
-		ui.Rooms = make([]*storage.Room, 0)
-	}
+	// Rooms are now managed by RealtimeDataLayer
 
 	// Garantir que as configurações sejam aplicadas antes de exibir a janela
 	if ui.VPN != nil {
 		// Carrega as configurações do ConfigManager para a camada de dados
-		ui.VPN.loadSettings()
+		ui.VPN.loadSettings(ui.RealtimeData, ui.App)
 	}
 
 	// Verificar o tamanho da janela principal - fixar em 300x600 conforme requisitos
@@ -206,9 +227,9 @@ func (ui *UIManager) Run(defaultWebsocketURL string) {
 	if ui.VPN != nil {
 		go func() {
 			fyne.Do(func() {
-				
+
 				log.Println("Iniciando conexão automática com o servidor de sinalização")
-				ui.VPN.Run(defaultWebsocketURL)
+				ui.VPN.Run(defaultWebsocketURL, ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI)
 			})
 		}()
 	}

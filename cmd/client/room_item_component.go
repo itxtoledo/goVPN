@@ -11,14 +11,11 @@ import (
 
 // RoomItemComponent representa o componente de item de sala na lista de salas
 type RoomItemComponent struct {
-	UI *UIManager
 }
 
 // NewRoomItemComponent cria uma nova instância do componente de item de sala
 func NewRoomItemComponent(ui *UIManager) *RoomItemComponent {
-	return &RoomItemComponent{
-		UI: ui,
-	}
+	return &RoomItemComponent{}
 }
 
 // CreateRoomItem cria um novo item de sala para a lista

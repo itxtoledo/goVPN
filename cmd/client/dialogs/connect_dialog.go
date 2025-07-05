@@ -5,12 +5,13 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // ConnectDialogManager é a interface que define as operações necessárias para o diálogo de conexão
 type ConnectDialogManager interface {
-	GetSelectedRoom() interface{}
-	ConnectToRoom(roomName, password string) error
+	GetSelectedRoom() *storage.Room
+	ConnectToRoom(roomID, password, username string) error
 }
 
 // ConnectDialog representa um diálogo para conexão a uma sala
@@ -18,12 +19,14 @@ type ConnectDialog struct {
 	UI            ConnectDialogManager
 	Dialog        dialog.Dialog
 	PasswordEntry *widget.Entry
+	Username      string
 }
 
 // NewConnectDialog cria uma nova instância do diálogo de conexão
-func NewConnectDialog(ui ConnectDialogManager) *ConnectDialog {
+func NewConnectDialog(ui ConnectDialogManager, username string) *ConnectDialog {
 	cd := &ConnectDialog{
-		UI: ui,
+		UI:       ui,
+		Username: username,
 	}
 	return cd
 }
@@ -36,15 +39,8 @@ func (cd *ConnectDialog) Show() {
 		return
 	}
 
-	// O sistema de tipos Go não nos permite acessar diretamente os campos da sala
-	// através da interface, então assumimos que o tipo de retorno é um mapa
-	roomData, ok := room.(map[string]interface{})
-	if !ok {
-		return
-	}
-
-	roomName, _ := roomData["Name"].(string)
-	passwordRequired := roomData["Password"] != nil && roomData["Password"].(string) != ""
+	roomID := room.ID
+	passwordRequired := room.Password != ""
 
 	var content fyne.CanvasObject
 
@@ -76,7 +72,7 @@ func (cd *ConnectDialog) Show() {
 				}
 
 				// Tentar conectar à sala
-				err := cd.UI.ConnectToRoom(roomName, password)
+				err := cd.UI.ConnectToRoom(roomID, password, cd.Username)
 				if err != nil {
 					// Exibir erro em caso de falha
 					errorDialog := dialog.NewError(err, fyne.CurrentApp().Driver().AllWindows()[0])

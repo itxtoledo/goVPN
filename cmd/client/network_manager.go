@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
+	"github.com/itxtoledo/govpn/libs/models"
 )
 
 // NetworkInterface define a interface mínima para a rede virtual
@@ -34,7 +36,6 @@ const (
 
 // NetworkManager handles the VPN network
 type NetworkManager struct {
-	UI                *UIManager
 	VirtualNetwork    NetworkInterface
 	SignalingServer   *SignalingClient
 	RoomID            string
@@ -43,15 +44,24 @@ type NetworkManager struct {
 	connectionState   ConnectionState
 	ReconnectAttempts int
 	MaxReconnects     int
+
+	// Dependencies
+	RealtimeData       *data.RealtimeDataLayer
+	ConfigManager      *ConfigManager
+	refreshNetworkList func()
+	refreshUI          func()
 }
 
 // NewNetworkManager creates a new instance of NetworkManager
-func NewNetworkManager(ui *UIManager) *NetworkManager {
+func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
 	nm := &NetworkManager{
-		UI:                ui,
-		connectionState:   ConnectionStateDisconnected,
-		ReconnectAttempts: 0,
-		MaxReconnects:     5,
+		connectionState:    ConnectionStateDisconnected,
+		ReconnectAttempts:  0,
+		MaxReconnects:      5,
+		RealtimeData:       realtimeData,
+		ConfigManager:      configManager,
+		refreshNetworkList: refreshNetworkList,
+		refreshUI:          refreshUI,
 	}
 
 	return nm
@@ -62,42 +72,91 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	// Set state to connecting
 	nm.connectionState = ConnectionStateConnecting
 	// Update data layer
-	nm.UI.RealtimeData.SetConnectionState(data.StateConnecting)
-	nm.UI.RealtimeData.SetStatusMessage("Connecting...")
+	nm.RealtimeData.SetConnectionState(data.StateConnecting)
+	nm.RealtimeData.SetStatusMessage("Connecting...")
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	// Initialize signaling server
-	// Get public key from UI's realtime data layer
-	publicKey := nm.UI.VPN.PublicKeyStr
-	nm.SignalingServer = NewSignalingClient(nm.UI, publicKey)
+	// Get public key from ConfigManager
+	publicKey, _ := nm.ConfigManager.GetKeyPair()
+
+	// Create a handler function for signaling client messages
+	signalingHandler := func(messageType models.MessageType, payload []byte) {
+		switch messageType {
+		case models.TypeError:
+			var errorPayload map[string]string
+			if err := json.Unmarshal(payload, &errorPayload); err == nil {
+				if errorMsg, ok := errorPayload["error"]; ok {
+					log.Printf("Server error: %s", errorMsg)
+					nm.RealtimeData.EmitEvent(data.EventError, errorMsg, nil)
+				}
+			}
+		case models.TypeRoomDisconnected:
+			nm.refreshNetworkList()
+		case models.TypeRoomJoined:
+			nm.refreshNetworkList()
+		case models.TypeRoomCreated:
+			nm.refreshNetworkList()
+		case models.TypeLeaveRoom:
+			nm.refreshNetworkList()
+		case models.TypeKicked:
+			nm.refreshNetworkList()
+		case models.TypePeerJoined:
+			nm.refreshNetworkList()
+		case models.TypePeerLeft:
+			nm.refreshNetworkList()
+		case models.TypeUserRooms:
+			// For TypeUserRooms, we need to unmarshal the payload to update the rooms list
+			var userRoomsResponse models.UserRoomsResponse
+			if err := json.Unmarshal(payload, &userRoomsResponse); err != nil {
+				log.Printf("Failed to unmarshal user rooms response in handler: %v", err)
+				return
+			}
+
+			// Convert models.Room to storage.Room
+			updatedRooms := make([]*storage.Room, 0, len(userRoomsResponse.Rooms))
+			for _, room := range userRoomsResponse.Rooms {
+				storageRoom := &storage.Room{
+					ID:            room.RoomID,
+					Name:          room.RoomName,
+					Password:      "", // Password is not received from server
+					LastConnected: room.LastConnected,
+				}
+				updatedRooms = append(updatedRooms, storageRoom)
+			}
+			// Update the RealtimeDataLayer with the new rooms list
+			nm.RealtimeData.SetRooms(updatedRooms)
+			nm.refreshNetworkList()
+		}
+	}
+	nm.SignalingServer = NewSignalingClient(publicKey, signalingHandler)
 
 	// Connect to signaling server
 	err := nm.SignalingServer.Connect(serverAddress)
 	if err != nil {
 		nm.connectionState = ConnectionStateDisconnected
-		nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
-		nm.UI.RealtimeData.SetStatusMessage("Connection failed")
+		nm.RealtimeData.SetConnectionState(data.StateDisconnected)
+		nm.RealtimeData.SetStatusMessage("Connection failed")
 		return fmt.Errorf("failed to connect to signaling server: %v", err)
 	}
 
 	// Set state to connected
 	nm.connectionState = ConnectionStateConnected
-	nm.UI.RealtimeData.SetConnectionState(data.StateConnected)
-	nm.UI.RealtimeData.SetStatusMessage("Connected")
+	nm.RealtimeData.SetConnectionState(data.StateConnected)
+	nm.RealtimeData.SetStatusMessage("Connected")
 
 	// O servidor já envia automaticamente a lista de salas do usuário ao conectar,
 	// então não precisamos chamar GetUserRooms explicitamente
 	log.Println("Aguardando lista de salas do servidor...")
 
 	// Get room list
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	return nil
 }
 
-// TODO check if we can delete this
 // handleDisconnection handles disconnection from the server
 func (nm *NetworkManager) handleDisconnection() {
 	if nm.connectionState != ConnectionStateDisconnected {
@@ -107,9 +166,9 @@ func (nm *NetworkManager) handleDisconnection() {
 
 			// Set state to connecting
 			nm.connectionState = ConnectionStateConnecting
-			nm.UI.RealtimeData.SetConnectionState(data.StateConnecting)
-			nm.UI.RealtimeData.SetStatusMessage(fmt.Sprintf("Reconnecting (%d/%d)...", nm.ReconnectAttempts, nm.MaxReconnects))
-			nm.UI.refreshUI()
+			nm.RealtimeData.SetConnectionState(data.StateConnecting)
+			nm.RealtimeData.SetStatusMessage(fmt.Sprintf("Reconnecting (%d/%d)...", nm.ReconnectAttempts, nm.MaxReconnects))
+			nm.refreshUI()
 
 			// Try to reconnect
 			err := nm.Connect(nm.SignalingServer.ServerAddress)
@@ -117,9 +176,9 @@ func (nm *NetworkManager) handleDisconnection() {
 				log.Printf("Failed to reconnect: %v", err)
 				// Set state to disconnected
 				nm.connectionState = ConnectionStateDisconnected
-				nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
-				nm.UI.RealtimeData.SetStatusMessage("Disconnected")
-				nm.UI.refreshUI()
+				nm.RealtimeData.SetConnectionState(data.StateDisconnected)
+				nm.RealtimeData.SetStatusMessage("Disconnected")
+				nm.refreshUI()
 			} else {
 				// Successfully reconnected
 				nm.ReconnectAttempts = 0
@@ -128,9 +187,9 @@ func (nm *NetworkManager) handleDisconnection() {
 			log.Printf("Max reconnect attempts reached, giving up")
 			// Set state to disconnected
 			nm.connectionState = ConnectionStateDisconnected
-			nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
-			nm.UI.RealtimeData.SetStatusMessage("Connection lost")
-			nm.UI.refreshUI()
+			nm.RealtimeData.SetConnectionState(data.StateDisconnected)
+			nm.RealtimeData.SetStatusMessage("Connection lost")
+			nm.refreshUI()
 		}
 	}
 }
@@ -167,35 +226,34 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 		LastConnected: time.Now(),
 	}
 
-	// Add the room to the UI's in-memory room list
-	// Use append to add the new room to the existing slice
-	nm.UI.Rooms = append(nm.UI.Rooms, room)
+	// Add the room to the RealtimeDataLayer's in-memory room list
+	nm.RealtimeData.AddRoom(room)
 
 	// Store room information for current connection
 	nm.RoomID = res.RoomID
 	nm.RoomPassword = password
 
 	// Update data layer
-	nm.UI.RealtimeData.SetRoomInfo(res.RoomID, password)
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
+	nm.RealtimeData.SetRoomInfo(res.RoomID, password)
+	nm.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
 
 	// Refresh network list now that we have added the room to memory
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
 
 // JoinRoom joins a room
-func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
+func (nm *NetworkManager) JoinRoom(roomID string, password string, username string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
 	// Join room
-	res, err := nm.SignalingServer.JoinRoom(roomID, password)
+	res, err := nm.SignalingServer.JoinRoom(roomID, password, username)
 	if err != nil {
 		return fmt.Errorf("failed to join room: %v", err)
 	}
@@ -213,10 +271,10 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 
 	// Check if the room already exists in memory
 	roomExists := false
-	for i, existingRoom := range nm.UI.Rooms {
+	for i, existingRoom := range nm.RealtimeData.GetRooms() {
 		if existingRoom.ID == roomID {
 			// Update existing room
-			nm.UI.Rooms[i] = room
+			nm.RealtimeData.UpdateRoom(i, room)
 			roomExists = true
 			break
 		}
@@ -224,7 +282,7 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 
 	// If room doesn't exist, add it
 	if !roomExists {
-		nm.UI.Rooms = append(nm.UI.Rooms, room)
+		nm.RealtimeData.AddRoom(room)
 	}
 
 	log.Printf("Room joined: ID=%s, Name=%s", roomID, roomName)
@@ -234,14 +292,14 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string) error {
 	nm.RoomPassword = password
 
 	// Update data layer
-	nm.UI.RealtimeData.SetRoomInfo(roomID, password)
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+	nm.RealtimeData.SetRoomInfo(roomID, password)
+	nm.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
 
 	// Refresh network list now that we have added the room to memory
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
@@ -253,7 +311,7 @@ func (nm *NetworkManager) ConnectRoom(roomID string) error {
 	}
 
 	// Connect to room
-	res, err := nm.SignalingServer.ConnectRoom(roomID)
+	res, err := nm.SignalingServer.ConnectRoom(roomID, "User")
 	if err != nil {
 		return fmt.Errorf("failed to connect to room: %v", err)
 	}
@@ -264,13 +322,14 @@ func (nm *NetworkManager) ConnectRoom(roomID string) error {
 	// Find the room in memory to get the stored password
 	var roomPassword string
 	roomExists := false
-	for i, existingRoom := range nm.UI.Rooms {
+	for i, existingRoom := range nm.RealtimeData.GetRooms() {
 		if existingRoom.ID == roomID {
 			roomPassword = existingRoom.Password
 			roomExists = true
 
 			// Update lastConnected time
-			nm.UI.Rooms[i].LastConnected = time.Now()
+			existingRoom.LastConnected = time.Now()
+			nm.RealtimeData.UpdateRoom(i, existingRoom)
 			break
 		}
 	}
@@ -286,14 +345,14 @@ func (nm *NetworkManager) ConnectRoom(roomID string) error {
 	nm.RoomPassword = roomPassword
 
 	// Update data layer
-	nm.UI.RealtimeData.SetRoomInfo(roomID, roomPassword)
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+	nm.RealtimeData.SetRoomInfo(roomID, roomPassword)
+	nm.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
 
 	// Refresh network list now that we have re-connected to the room
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
@@ -319,18 +378,18 @@ func (nm *NetworkManager) DisconnectRoom(roomID string) error {
 		nm.RoomPassword = ""
 
 		// Update data layer
-		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
-		nm.UI.RealtimeData.EmitEvent(data.EventRoomDisconnected, roomID, nil)
+		nm.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.RealtimeData.EmitEvent(data.EventRoomDisconnected, roomID, nil)
 	}
 
 	// Clear the computers list
 	nm.Computers = []Computer{}
 
 	// Refresh the network list UI
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
@@ -354,27 +413,21 @@ func (nm *NetworkManager) LeaveRoom() error {
 	}
 
 	// Remove the room from memory
-	for i, room := range nm.UI.Rooms {
-		if room.ID == roomID {
-			// Remove this room from the slice
-			nm.UI.Rooms = append(nm.UI.Rooms[:i], nm.UI.Rooms[i+1:]...)
-			break
-		}
-	}
+	nm.RealtimeData.RemoveRoom(roomID)
 
 	// Clear room information
 	nm.RoomID = ""
 	nm.RoomPassword = ""
 
 	// Update data layer
-	nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+	nm.RealtimeData.SetRoomInfo("Not connected", "")
+	nm.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
 
 	// Refresh the network list UI
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
@@ -395,13 +448,7 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 	}
 
 	// Remove room from memory
-	for i, room := range nm.UI.Rooms {
-		if room.ID == roomID {
-			// Remove this room from the slice
-			nm.UI.Rooms = append(nm.UI.Rooms[:i], nm.UI.Rooms[i+1:]...)
-			break
-		}
-	}
+	nm.RealtimeData.RemoveRoom(roomID)
 
 	// If we're leaving the current room, clear our room information
 	if nm.RoomID == roomID {
@@ -409,17 +456,17 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 		nm.RoomPassword = ""
 
 		// Update data layer
-		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.RealtimeData.SetRoomInfo("Not connected", "")
 	}
 
 	// Emit the room left event regardless
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+	nm.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
 
 	// Refresh the network list UI
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
@@ -434,26 +481,20 @@ func (nm *NetworkManager) HandleRoomDeleted(roomID string) error {
 		nm.RoomPassword = ""
 
 		// Update data layer
-		nm.UI.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.RealtimeData.SetRoomInfo("Not connected", "")
 	}
 
 	// Remove room from memory
-	for i, room := range nm.UI.Rooms {
-		if room.ID == roomID {
-			// Remove this room from the slice
-			nm.UI.Rooms = append(nm.UI.Rooms[:i], nm.UI.Rooms[i+1:]...)
-			break
-		}
-	}
+	nm.RealtimeData.RemoveRoom(roomID)
 
 	// Emit the event
-	nm.UI.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
+	nm.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
 
 	// Refresh the network list UI
-	nm.UI.refreshNetworkList()
+	nm.refreshNetworkList()
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }
@@ -479,12 +520,12 @@ func (nm *NetworkManager) Disconnect() error {
 
 	// Set state to disconnected
 	nm.connectionState = ConnectionStateDisconnected
-	nm.UI.RealtimeData.SetConnectionState(data.StateDisconnected)
-	nm.UI.RealtimeData.SetStatusMessage("Disconnected")
+	nm.RealtimeData.SetConnectionState(data.StateDisconnected)
+	nm.RealtimeData.SetStatusMessage("Disconnected")
 	nm.ReconnectAttempts = 0
 
 	// Update UI
-	nm.UI.refreshUI()
+	nm.refreshUI()
 
 	return nil
 }

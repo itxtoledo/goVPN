@@ -119,7 +119,7 @@ func (hc *HeaderComponent) toggleConnection() {
 		// Conectar
 		go func() {
 			log.Println("Connecting to VPN network...")
-			hc.UI.VPN.Run(hc.defaultWebsocketURL)
+			hc.UI.VPN.Run(hc.defaultWebsocketURL, hc.UI.RealtimeData, hc.UI.refreshNetworkList, hc.UI.refreshUI)
 		}()
 	} else {
 		// Desconectar

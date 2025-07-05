@@ -11,20 +11,21 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
+// SignalingMessageHandler define o tipo de função para lidar com mensagens de sinalização recebidas.
+type SignalingMessageHandler func(messageType models.MessageType, payload []byte)
+
 // SignalingClient representa uma conexão com o servidor de sinalização
 type SignalingClient struct {
-	UI             *UIManager
 	VPNClient      *VPNClient
 	Conn           *websocket.Conn
 	ServerAddress  string
 	Connected      bool
 	LastHeartbeat  time.Time
-	MessageHandler func(messageType int, message []byte) error
-	PublicKeyStr   string // Public key string to identify this client
+	MessageHandler SignalingMessageHandler // Usar o novo tipo de função
+	PublicKeyStr   string                  // Public key string to identify this client
 
 	// System to track pending requests by message ID
 	pendingRequests     map[string]chan models.SignalingMessage
@@ -32,12 +33,12 @@ type SignalingClient struct {
 }
 
 // NewSignalingClient cria uma nova instância do servidor de sinalização
-func NewSignalingClient(ui *UIManager, publicKey string) *SignalingClient {
+func NewSignalingClient(publicKey string, handler SignalingMessageHandler) *SignalingClient {
 	return &SignalingClient{
-		UI:              ui,
 		Connected:       false,
 		LastHeartbeat:   time.Now(),
 		PublicKeyStr:    publicKey,
+		MessageHandler:  handler, // Atribuir o handler passado
 		pendingRequests: make(map[string]chan models.SignalingMessage),
 	}
 }
@@ -352,15 +353,12 @@ func (s *SignalingClient) CreateRoom(name string, password string) (*models.Crea
 }
 
 // JoinRoom entra em uma sala
-func (s *SignalingClient) JoinRoom(roomID string, password string) (*models.JoinRoomResponse, error) {
+func (s *SignalingClient) JoinRoom(roomID string, password string, username string) (*models.JoinRoomResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Joining room: %s", roomID)
-
-	// Obter o nome de usuário das configurações
-	username := s.UI.ConfigManager.GetConfig().Username
 
 	// Criar payload para join room
 	payload := &models.JoinRoomRequest{
@@ -385,15 +383,12 @@ func (s *SignalingClient) JoinRoom(roomID string, password string) (*models.Join
 }
 
 // ConnectRoom conecta a uma sala previamente associada
-func (s *SignalingClient) ConnectRoom(roomID string) (*models.ConnectRoomResponse, error) {
+func (s *SignalingClient) ConnectRoom(roomID string, username string) (*models.ConnectRoomResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
 	log.Printf("Connecting to room: %s", roomID)
-
-	// Obter o nome de usuário das configurações
-	username := s.UI.ConfigManager.GetConfig().Username
 
 	// Criar payload para connect room
 	payload := &models.ConnectRoomRequest{
@@ -556,11 +551,6 @@ func (s *SignalingClient) SendMessage(messageType string, payload map[string]int
 	return s.sendPackagedMessage(msgType, payload)
 }
 
-// SetMessageHandler define o handler de mensagens
-func (s *SignalingClient) SetMessageHandler(handler func(messageType int, message []byte) error) {
-	s.MessageHandler = handler
-}
-
 // IsConnected retorna se está conectado ao servidor
 func (s *SignalingClient) IsConnected() bool {
 	return s.Connected
@@ -579,7 +569,7 @@ func (s *SignalingClient) listenForMessages() {
 			return
 		}
 
-		msgType, message, err := s.Conn.ReadMessage()
+		_, message, err := s.Conn.ReadMessage()
 		if err != nil {
 			log.Printf("Error reading message: %v", err)
 			s.Connected = false
@@ -608,161 +598,160 @@ func (s *SignalingClient) listenForMessages() {
 		// Handle specific message types (for notifications and unsolicited messages)
 		switch sigMsg.Type {
 		case models.TypeError:
-			// Decode error message from base64
-			var errorPayload map[string]string
-			if err := json.Unmarshal(sigMsg.Payload, &errorPayload); err == nil {
-				if errorMsg, ok := errorPayload["error"]; ok {
-					log.Printf("Server error: %s", errorMsg)
-					// You could notify the UI here
-					if s.UI != nil {
-						// Example: display error in UI
-						//s.UI.ShowErrorNotification(errorMsg)
+			{
+				// Decode error message from base64
+				var errorPayload map[string]string
+				if err := json.Unmarshal(sigMsg.Payload, &errorPayload); err == nil {
+					if errorMsg, ok := errorPayload["error"]; ok {
+						log.Printf("Server error: %s", errorMsg)
+						// Notify the handler about the error
+						if s.MessageHandler != nil {
+							s.MessageHandler(models.TypeError, sigMsg.Payload)
+						}
 					}
+				} else {
+					log.Printf("Failed to decode error payload: %v", err)
 				}
-			} else {
-				log.Printf("Failed to decode error payload: %v", err)
 			}
 
 		case models.TypeRoomDisconnected:
-			var response models.DisconnectRoomResponse
-			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-				log.Printf("Failed to unmarshal room disconnected response: %v", err)
-			} else {
-				log.Printf("Successfully disconnected from room: %s", response.RoomID)
-				// Handle client disconnecting from room
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Clean up computers list when disconnecting from a room
-					s.VPNClient.NetworkManager.Computers = []Computer{}
-					// Refresh the UI to update room members
-					if s.UI != nil {
-						s.UI.refreshNetworkList()
+			{
+				var response models.DisconnectRoomResponse
+				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+					log.Printf("Failed to unmarshal room disconnected response: %v", err)
+				} else {
+					log.Printf("Successfully disconnected from room: %s", response.RoomID)
+					// Handle client disconnecting from room
+					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+						// Clean up computers list when disconnecting from a room
+						s.VPNClient.NetworkManager.Computers = []Computer{}
+						// Notify the handler about the room disconnection
+						if s.MessageHandler != nil {
+							s.MessageHandler(models.TypeRoomDisconnected, sigMsg.Payload)
+						}
 					}
 				}
 			}
 
 		case models.TypeRoomJoined:
-			var response models.JoinRoomResponse
-			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-				log.Printf("Failed to unmarshal room joined response: %v", err)
-			} else {
-				log.Printf("Successfully joined room: %s (%s)", response.RoomName, response.RoomID)
-				// Update UI if needed
-				if s.UI != nil {
-					// Handle room joined in UI
-					// Refresh the UI to show user in room
-					s.UI.refreshNetworkList()
-				}
+			{
+				var response models.JoinRoomResponse
+				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+					log.Printf("Failed to unmarshal room joined response: %v", err)
+				} else {
+					log.Printf("Successfully joined room: %s (%s)", response.RoomName, response.RoomID)
+					// Notify the handler about the room joined event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeRoomJoined, sigMsg.Payload)
+					}
 
-				// Initialize computers list for the room
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Initialize with just this user for now
-					s.VPNClient.NetworkManager.Computers = []Computer{
-						{
-							ID:       s.VPNClient.PublicKeyStr,
-							Name:     s.UI.ConfigManager.GetConfig().Username,
-							OwnerID:  s.VPNClient.PublicKeyStr,
-							IsOnline: true,
-						},
+					// Initialize computers list for the room
+					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+						// Initialize with just this user for now
+						s.VPNClient.NetworkManager.Computers = []Computer{
+							{
+								ID:       s.VPNClient.PublicKeyStr,
+								Name:     s.VPNClient.Username,
+								OwnerID:  s.VPNClient.PublicKeyStr,
+								IsOnline: true,
+							},
+						}
 					}
 				}
 			}
 
 		case models.TypeRoomCreated:
-			var response models.CreateRoomResponse
-			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-				log.Printf("Failed to unmarshal room created response: %v", err)
-			} else {
-				log.Printf("Successfully created room: %s (%s)", response.RoomName, response.RoomID)
-				// Update UI if needed
-				if s.UI != nil {
-					// Handle room created in UI
-					// Refresh the UI to show user in room
-					s.UI.refreshNetworkList()
-				}
+			{
+				var response models.CreateRoomResponse
+				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+					log.Printf("Failed to unmarshal room created response: %v", err)
+				} else {
+					log.Printf("Successfully created room: %s (%s)", response.RoomName, response.RoomID)
+					// Notify the handler about the room created event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeRoomCreated, sigMsg.Payload)
+					}
 
-				// Initialize computers list for the room
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// When creating a room, just add this user as the only member
-					s.VPNClient.NetworkManager.Computers = []Computer{
-						{
-							ID:       s.VPNClient.PublicKeyStr,
-							Name:     s.UI.ConfigManager.GetConfig().Username,
-							OwnerID:  s.VPNClient.PublicKeyStr,
-							IsOnline: true,
-						},
+					// Initialize computers list for the room
+					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+						// When creating a room, just add this user as the only member
+						s.VPNClient.NetworkManager.Computers = []Computer{
+							{
+								ID:       s.VPNClient.PublicKeyStr,
+								Name:     s.VPNClient.Username,
+								OwnerID:  s.VPNClient.PublicKeyStr,
+								IsOnline: true,
+							},
+						}
 					}
 				}
 			}
 
 		case models.TypeLeaveRoom:
-			var response models.LeaveRoomResponse
-			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-				log.Printf("Failed to unmarshal leave room response: %v", err)
-			} else {
-				log.Printf("Successfully left room: %s", response.RoomID)
-				// Handle client leaving room
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Clean up computers list when leaving a room
-					s.VPNClient.NetworkManager.Computers = []Computer{}
-					// Refresh the UI to update room members
-					if s.UI != nil {
-						s.UI.refreshNetworkList()
+			{
+				var response models.LeaveRoomResponse
+				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+					log.Printf("Failed to unmarshal leave room response: %v", err)
+				} else {
+					log.Printf("Successfully left room: %s", response.RoomID)
+					// Notify the handler about the room left event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeLeaveRoom, sigMsg.Payload)
 					}
 				}
 			}
 
 		case models.TypeKicked:
-			var notification models.KickedNotification
-			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-				log.Printf("Failed to unmarshal kicked notification: %v", err)
-			} else {
-				reason := notification.Reason
-				if reason == "" {
-					reason = "No reason provided"
-				}
-				log.Printf("Kicked from room %s: %s", notification.RoomID, reason)
-				// Handle being kicked
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Clean up computers list when kicked from a room
-					s.VPNClient.NetworkManager.Computers = []Computer{}
-					// Refresh the UI to update room members
-					if s.UI != nil {
-						s.UI.refreshNetworkList()
+			{
+				var notification models.KickedNotification
+				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+					log.Printf("Failed to unmarshal kicked notification: %v", err)
+				} else {
+					reason := notification.Reason
+					if reason == "" {
+						reason = "No reason provided"
+					}
+					log.Printf("Kicked from room %s: %s", notification.RoomID, reason)
+					// Notify the handler about the kicked event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeKicked, sigMsg.Payload)
 					}
 				}
 			}
 
 		case models.TypePeerJoined:
-			var notification models.PeerJoinedNotification
-			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-				log.Printf("Failed to unmarshal peer joined notification: %v", err)
-			} else {
-				username := notification.Username
-				if username == "" {
-					username = "Unknown user"
-				}
-				log.Printf("New peer joined room %s: %s (Key: %s)", notification.RoomID, username, notification.PublicKey)
+			{
+				var notification models.PeerJoinedNotification
+				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+					log.Printf("Failed to unmarshal peer joined notification: %v", err)
+				} else {
+					username := notification.Username
+					if username == "" {
+						username = "Unknown user"
+					}
+					log.Printf("New peer joined room %s: %s (Key: %s)", notification.RoomID, username, notification.PublicKey)
 
-				// Add the new peer to the computers list
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					// Skip if this is our own public key
-					if notification.PublicKey != s.VPNClient.PublicKeyStr {
-						// Add the new peer to the computers list
-						newComputer := Computer{
-							ID:       notification.PublicKey,
-							Name:     username,
-							OwnerID:  notification.PublicKey,
-							IsOnline: true,
-						}
+					// Add the new peer to the computers list
+					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+						// Skip if this is our own public key
+						if notification.PublicKey != s.VPNClient.PublicKeyStr {
+							// Add the new peer to the computers list
+							newComputer := Computer{
+								ID:       notification.PublicKey,
+								Name:     username,
+								OwnerID:  notification.PublicKey,
+								IsOnline: true,
+							}
 
-						s.VPNClient.NetworkManager.Computers = append(
-							s.VPNClient.NetworkManager.Computers,
-							newComputer,
-						)
+							s.VPNClient.NetworkManager.Computers = append(
+								s.VPNClient.NetworkManager.Computers,
+								newComputer,
+							)
 
-						// Refresh the UI to show the new peer
-						if s.UI != nil {
-							s.UI.refreshNetworkList()
+							// Notify the handler about the peer joined event
+							if s.MessageHandler != nil {
+								s.MessageHandler(models.TypePeerJoined, sigMsg.Payload)
+							}
 						}
 					}
 				}
@@ -788,79 +777,65 @@ func (s *SignalingClient) listenForMessages() {
 						}
 						s.VPNClient.NetworkManager.Computers = updatedComputers
 
-						// Refresh the UI to update the peer list
-						if s.UI != nil {
-							s.UI.refreshNetworkList()
+						// Notify the handler about the peer left event
+						if s.MessageHandler != nil {
+							s.MessageHandler(models.TypePeerLeft, sigMsg.Payload)
 						}
 					}
 				}
 			}
 
 		case models.TypeRoomDeleted:
-			var notification models.RoomDeletedNotification
-			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-				log.Printf("Failed to unmarshal room deleted notification: %v", err)
-			} else {
-				log.Printf("Room deleted: %s", notification.RoomID)
-				// Clear computers list when a room is deleted
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-					s.VPNClient.NetworkManager.Computers = []Computer{}
+			{
+				var notification models.RoomDeletedNotification
+				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+					log.Printf("Failed to unmarshal room deleted notification: %v", err)
+				} else {
+					log.Printf("Room deleted: %s", notification.RoomID)
+					// Clear computers list when a room is deleted
+					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+						s.VPNClient.NetworkManager.Computers = []Computer{}
+					}
+					s.VPNClient.NetworkManager.HandleRoomDeleted(notification.RoomID)
 				}
-				s.VPNClient.NetworkManager.HandleRoomDeleted(notification.RoomID)
 			}
 
 		case models.TypeUserRooms:
-			var response models.UserRoomsResponse
-			if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-				log.Printf("Failed to unmarshal user rooms response: %v", err)
-			} else {
-				log.Printf("========== USER ROOMS RECEIVED ==========")
-				log.Printf("Total rooms found: %d", len(response.Rooms))
+			{
+				var response models.UserRoomsResponse
+				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+					log.Printf("Failed to unmarshal user rooms response: %v", err)
+				} else {
+					log.Printf("========== USER ROOMS RECEIVED ==========")
+					log.Printf("Total rooms found: %d", len(response.Rooms))
 
-				// Create a slice to store the converted rooms
-				updatedRooms := make([]*storage.Room, 0, len(response.Rooms))
+					// Create a slice to store the converted rooms
 
-				for i, room := range response.Rooms {
-					connectionStatus := "Disconnected"
-					if room.IsConnected {
-						connectionStatus = "Connected"
+					for i, room := range response.Rooms {
+						connectionStatus := "Disconnected"
+						if room.IsConnected {
+							connectionStatus = "Connected"
+						}
+
+						log.Printf("Room %d: %s (ID: %s)", i+1, room.RoomName, room.RoomID)
+						log.Printf("  Status: %s", connectionStatus)
+						log.Printf("  Joined at: %s", room.JoinedAt.Format(time.RFC1123))
+						log.Printf("  Last connected: %s", room.LastConnected.Format(time.RFC1123))
+						log.Printf("  ---")
 					}
 
-					log.Printf("Room %d: %s (ID: %s)", i+1, room.RoomName, room.RoomID)
-					log.Printf("  Status: %s", connectionStatus)
-					log.Printf("  Joined at: %s", room.JoinedAt.Format(time.RFC1123))
-					log.Printf("  Last connected: %s", room.LastConnected.Format(time.RFC1123))
-					log.Printf("  ---")
+					log.Printf("========================================")
 
-					// Convert the room to storage.Room format
-					storageRoom := &storage.Room{
-						ID:            room.RoomID,
-						Name:          room.RoomName,
-						Password:      "", // We don't receive password from the server for security
-						LastConnected: room.LastConnected,
+					// Notify the handler about the updated room list
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeUserRooms, sigMsg.Payload)
 					}
-
-					updatedRooms = append(updatedRooms, storageRoom)
-				}
-
-				log.Printf("========================================")
-
-				// Update the UI's room list with the received rooms
-				if s.UI != nil {
-					s.UI.Rooms = updatedRooms
-
-					// Refresh the network list to show the updated rooms
-					s.UI.refreshNetworkList()
 				}
 			}
 		}
 
 		// Also pass to custom handler if configured
-		if s.MessageHandler != nil {
-			if err := s.MessageHandler(msgType, message); err != nil {
-				log.Printf("Error in custom message handler: %v", err)
-			}
-		}
+		// Note: The MessageHandler is already called for specific message types above
 	}
 }
 

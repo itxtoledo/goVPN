@@ -19,7 +19,7 @@ type AboutWindow struct {
 // NewAboutWindow cria uma nova janela de informações sobre o aplicativo
 func NewAboutWindow(ui *UIManager) *AboutWindow {
 	aw := &AboutWindow{
-		BaseWindow: NewBaseWindow(ui, "About "+AppTitleName, 400, 400),
+		BaseWindow: NewBaseWindow(ui.createWindow, "About "+AppTitleName, 400, 400),
 	}
 
 	// Configurar o conteúdo da janela

@@ -19,8 +19,7 @@ func ConfigurePasswordEntry(passwordEntry *widget.Entry) {
 		return nil
 	}
 
-	
-// Configura o manipulador OnChanged para filtrar entrada e limitar a 4 dígitos
+	// Configura o manipulador OnChanged para filtrar entrada e limitar a 4 dígitos
 	passwordEntry.OnChanged = func(s string) {
 		// Filtra caracteres não-numéricos
 		re := regexp.MustCompile("[^0-9]")

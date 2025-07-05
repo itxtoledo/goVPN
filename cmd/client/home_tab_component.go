@@ -10,24 +10,85 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/cmd/client/data"
+	"github.com/itxtoledo/govpn/cmd/client/dialogs"
+	"github.com/itxtoledo/govpn/libs/models"
 )
+
+// NetworkManagerAdapter adapts NetworkManager to implement dialogs.NetworkManagerInterface
+type NetworkManagerAdapter struct {
+	*NetworkManager
+}
+
+// CreateRoom adapts the NetworkManager CreateRoom method to match the interface
+func (nma *NetworkManagerAdapter) CreateRoom(name, password string) (*models.CreateRoomResponse, error) {
+	// Call the original CreateRoom method
+	err := nma.NetworkManager.CreateRoom(name, password)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return a response with the current room info
+	return &models.CreateRoomResponse{
+		RoomID:   nma.NetworkManager.RoomID,
+		RoomName: name,
+		Password: password,
+	}, nil
+}
+
+// JoinRoom adapts the NetworkManager JoinRoom method to match the interface
+func (nma *NetworkManagerAdapter) JoinRoom(roomID, password, username string) (*models.JoinRoomResponse, error) {
+	// Call the original JoinRoom method
+	err := nma.NetworkManager.JoinRoom(roomID, password, username)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return a response with the current room info
+	return &models.JoinRoomResponse{
+		RoomID:   roomID,
+		RoomName: roomID, // We don't have room name in the NetworkManager
+	}, nil
+}
+
+// GetRoomID returns the current room ID
+func (nma *NetworkManagerAdapter) GetRoomID() string {
+	return nma.NetworkManager.RoomID
+}
+
+// GetRealtimeData returns the RealtimeDataLayer
+func (nma *NetworkManagerAdapter) GetRealtimeData() *data.RealtimeDataLayer {
+	return nma.NetworkManager.RealtimeData
+}
 
 // HomeTabComponent representa o componente da aba principal
 type HomeTabComponent struct {
-	UI                *UIManager
 	SettingsTab       *SettingsTabComponent
 	AppTabs           *container.AppTabs
 	NetworksContainer *fyne.Container
+
+	// Dependencies
+	ConfigManager   *ConfigManager
+	RealtimeData    *data.RealtimeDataLayer
+	App             fyne.App
+	refreshUI       func()
+	NetworkListComp *NetworkListComponent // Add NetworkListComp here
+	UI              *UIManager
 }
 
 // NewHomeTabComponent cria uma nova instância do componente da aba principal
-func NewHomeTabComponent(ui *UIManager) *HomeTabComponent {
+func NewHomeTabComponent(configManager *ConfigManager, realtimeData *data.RealtimeDataLayer, app fyne.App, refreshUI func(), networkListComp *NetworkListComponent, ui *UIManager) *HomeTabComponent {
 	htc := &HomeTabComponent{
-		UI: ui,
+		ConfigManager:   configManager,
+		RealtimeData:    realtimeData,
+		App:             app,
+		refreshUI:       refreshUI,
+		NetworkListComp: networkListComp,
+		UI:              ui,
 	}
 
 	// Inicializar a aba de configurações
-	htc.SettingsTab = NewSettingsTabComponent(ui)
+	htc.SettingsTab = NewSettingsTabComponent(configManager, realtimeData, app, refreshUI)
 
 	return htc
 }
@@ -35,7 +96,7 @@ func NewHomeTabComponent(ui *UIManager) *HomeTabComponent {
 // CreateHomeTabContainer cria o container principal da aba inicial
 func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	// Criar o container de salas disponíveis
-	roomsContainer := htc.UI.NetworkListComp.GetContainer()
+	roomsContainer := htc.NetworkListComp.GetContainer()
 	htc.NetworksContainer = roomsContainer
 
 	// Criar um botão para criar uma nova sala
@@ -43,20 +104,22 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 		log.Println("Create room button clicked")
 
 		// Check network connection status
-		if htc.UI.VPN != nil && htc.UI.VPN.NetworkManager != nil {
-			isConnected := htc.UI.VPN.NetworkManager.GetConnectionState() == ConnectionStateConnected
-			if !isConnected {
-				dialog.ShowError(fmt.Errorf("not connected to server"), htc.UI.MainWindow)
-				return
-			}
-		} else {
-			dialog.ShowError(fmt.Errorf("network manager not initialized"), htc.UI.MainWindow)
+		isConnected, _ := htc.RealtimeData.IsConnected.Get()
+		if !isConnected {
+			dialog.ShowError(fmt.Errorf("not connected to server"), htc.UI.MainWindow)
 			return
 		}
 
+		// Get username, handling the multiple return values
+		username, err := htc.UI.RealtimeData.Username.Get()
+		if err != nil {
+			log.Printf("Error getting username: %v", err)
+			username = "User" // Default fallback
+		}
+
 		// Create and show the room creation window
-		createRoomWindow := NewCreateRoomDialog(htc.UI)
-		createRoomWindow.Show()
+		createRoomWindow := dialogs.NewCreateRoomDialog(&NetworkManagerAdapter{htc.UI.VPN.NetworkManager}, htc.UI.MainWindow, username)
+		createRoomWindow.Show(dialogs.ValidatePassword, dialogs.ConfigurePasswordEntry)
 	})
 
 	// Criar um botão para entrar em uma sala
@@ -64,20 +127,22 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 		log.Println("Join room button clicked")
 
 		// Check network connection status
-		if htc.UI.VPN != nil && htc.UI.VPN.NetworkManager != nil {
-			isConnected := htc.UI.VPN.NetworkManager.GetConnectionState() == ConnectionStateConnected
-			if !isConnected {
-				dialog.ShowError(fmt.Errorf("not connected to server"), htc.UI.MainWindow)
-				return
-			}
-		} else {
-			dialog.ShowError(fmt.Errorf("network manager not initialized"), htc.UI.MainWindow)
+		isConnected, _ := htc.RealtimeData.IsConnected.Get()
+		if !isConnected {
+			dialog.ShowError(fmt.Errorf("not connected to server"), htc.UI.MainWindow)
 			return
 		}
 
+		// Get username, handling the multiple return values
+		username, err := htc.UI.RealtimeData.Username.Get()
+		if err != nil {
+			log.Printf("Error getting username: %v", err)
+			username = "User" // Default fallback
+		}
+
 		// Create and show the room joining window
-		joinRoomWindow := NewJoinRoomDialog(htc.UI)
-		joinRoomWindow.Show()
+		joinRoomWindow := dialogs.NewJoinRoomDialog(&NetworkManagerAdapter{htc.UI.VPN.NetworkManager}, htc.UI.MainWindow, username)
+		joinRoomWindow.Show(dialogs.ValidatePassword, dialogs.ConfigurePasswordEntry)
 	})
 
 	// Criar o container da aba de salas

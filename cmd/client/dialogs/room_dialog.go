@@ -9,37 +9,35 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/libs/models"
 )
 
 // RoomDialog manages the room (network) creation interface as a dialog
 type RoomDialog struct {
-	UI            interface{} // Will be UIManager, but we use interface{} to avoid import cycle
-	MainWindow    fyne.Window
-	CreateRoom    func(string, string) error
-	SaveRoom      func(string, string, string) error
-	GetRoomID     func() string
-	RoomDialogRef *interface{} // Will be used to clean up reference in UIManager
+	MainWindow fyne.Window
+	CreateRoom func(string, string) (*models.CreateRoomResponse, error)
+	SaveRoom   func(string, string, string) error
+	GetRoomID  func() string
+	Username   string
 }
 
 // NewRoomDialog creates a new room creation dialog
 func NewRoomDialog(
-	ui interface{},
 	mainWindow fyne.Window,
-	createRoom func(string, string) error,
+	createRoom func(string, string) (*models.CreateRoomResponse, error),
 	saveRoom func(string, string, string) error,
 	getRoomID func() string,
-	roomDialogRef *interface{},
+	username string,
 	validatePassword func(string) bool,
 	configurePasswordEntry func(*widget.Entry),
 ) *RoomDialog {
 
 	return &RoomDialog{
-		UI:            ui,
-		MainWindow:    mainWindow,
-		CreateRoom:    createRoom,
-		SaveRoom:      saveRoom,
-		GetRoomID:     getRoomID,
-		RoomDialogRef: roomDialogRef,
+		MainWindow: mainWindow,
+		CreateRoom: createRoom,
+		SaveRoom:   saveRoom,
+		GetRoomID:  getRoomID,
+		Username:   username,
 	}
 }
 
@@ -63,8 +61,6 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 	// Show the form dialog
 	formDialog := dialog.NewForm("Create Network", "Create", "Cancel", items, func(submitted bool) {
 		if !submitted {
-			// Dialog was cancelled
-			*rd.RoomDialogRef = nil
 			return
 		}
 
@@ -91,7 +87,7 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 		// Create network in a goroutine
 		go func() {
 			// Send create room command to backend
-			err := rd.CreateRoom(name, password)
+			res, err := rd.CreateRoom(name, password)
 
 			// Update UI on the main thread
 			fyne.Do(func() {
@@ -104,7 +100,7 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 				}
 
 				// Get room ID created by the server
-				roomID := rd.GetRoomID()
+				roomID := res.RoomID
 
 				if roomID != "" {
 					// Save room to database
@@ -135,9 +131,6 @@ func (rd *RoomDialog) Show(validatePassword func(string) bool, configurePassword
 					// If roomID is empty, it's likely an error occurred but wasn't caught
 					dialog.ShowError(errors.New("Failed to create network: No network ID returned"), rd.MainWindow)
 				}
-
-				// Clear the reference
-				// *rd.RoomDialogRef = nil
 			})
 		}()
 	}, rd.MainWindow)

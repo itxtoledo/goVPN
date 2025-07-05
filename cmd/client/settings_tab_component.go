@@ -13,17 +13,25 @@ import (
 
 // SettingsTabComponent representa o componente da aba de configurações
 type SettingsTabComponent struct {
-	UI                 *UIManager
 	UsernameEntry      *widget.Entry
 	ServerAddressEntry *widget.Entry
 	ThemeSelect        *widget.Select
 	SaveButton         *widget.Button
+
+	// Dependencies
+	ConfigManager *ConfigManager
+	RealtimeData  *data.RealtimeDataLayer
+	App           fyne.App
+	refreshUI     func()
 }
 
 // NewSettingsTabComponent cria uma nova instância do componente de configurações
-func NewSettingsTabComponent(ui *UIManager) *SettingsTabComponent {
+func NewSettingsTabComponent(configManager *ConfigManager, realtimeData *data.RealtimeDataLayer, app fyne.App, refreshUI func()) *SettingsTabComponent {
 	stc := &SettingsTabComponent{
-		UI: ui,
+		ConfigManager: configManager,
+		RealtimeData:  realtimeData,
+		App:           app,
+		refreshUI:     refreshUI,
 	}
 	return stc
 }
@@ -31,7 +39,7 @@ func NewSettingsTabComponent(ui *UIManager) *SettingsTabComponent {
 // CreateSettingsContainer cria o container com os controles de configuração
 func (stc *SettingsTabComponent) CreateSettingsContainer() *fyne.Container {
 	// Obter as configurações atuais
-	config := stc.UI.ConfigManager.GetConfig()
+	config := stc.ConfigManager.GetConfig()
 
 	// Campo de entrada para o nome de usuário
 	stc.UsernameEntry = widget.NewEntry()
@@ -94,7 +102,7 @@ func (stc *SettingsTabComponent) CreateSettingsContainer() *fyne.Container {
 // saveSettings salva as configurações
 func (stc *SettingsTabComponent) saveSettings() {
 	// Obter as configurações atuais
-	config := stc.UI.ConfigManager.GetConfig()
+	config := stc.ConfigManager.GetConfig()
 
 	// Atualizar com os novos valores
 	config.Username = stc.UsernameEntry.Text
@@ -111,7 +119,7 @@ func (stc *SettingsTabComponent) saveSettings() {
 	}
 
 	// Salvar as novas configurações
-	err := stc.UI.ConfigManager.UpdateConfig(config)
+	err := stc.ConfigManager.UpdateConfig(config)
 	if err != nil {
 		log.Printf("Error saving settings: %v", err)
 	}
@@ -125,22 +133,22 @@ func (stc *SettingsTabComponent) applySettings(config Config) {
 	// Atualizar o tema
 	switch config.Theme {
 	case "light":
-		stc.UI.App.Settings().SetTheme(theme.LightTheme())
+		stc.App.Settings().SetTheme(theme.LightTheme())
 	case "dark":
-		stc.UI.App.Settings().SetTheme(theme.DarkTheme())
+		stc.App.Settings().SetTheme(theme.DarkTheme())
 	default:
 		// System é o padrão
 	}
 
 	// Atualizar o nome de usuário na camada de dados em tempo real
-	stc.UI.RealtimeData.SetUsername(config.Username)
+	stc.RealtimeData.SetUsername(config.Username)
 
 	// Atualizar o endereço do servidor
-	stc.UI.RealtimeData.SetServerAddress(config.ServerAddress)
+	stc.RealtimeData.SetServerAddress(config.ServerAddress)
 
 	// Emitir evento de configurações alteradas
-	stc.UI.RealtimeData.EmitEvent(data.EventSettingsChanged, "Settings updated", nil)
+	stc.RealtimeData.EmitEvent(data.EventSettingsChanged, "Settings updated", nil)
 
 	// Atualizar a UI
-	stc.UI.refreshUI()
+	stc.refreshUI()
 }

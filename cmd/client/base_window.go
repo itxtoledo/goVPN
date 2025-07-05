@@ -2,25 +2,24 @@ package main
 
 import (
 	"fyne.io/fyne/v2"
+	"log"
 )
 
 // BaseWindow representa uma janela base para outras janelas do aplicativo
 type BaseWindow struct {
-	UI      *UIManager
 	Window  fyne.Window
 	Content *fyne.Container
 	Title   string
 }
 
 // NewBaseWindow cria uma nova janela base
-func NewBaseWindow(ui *UIManager, title string, width, height float32) *BaseWindow {
+func NewBaseWindow(createWindow func(title string, width, height float32) fyne.Window, title string, width, height float32) *BaseWindow {
 	bw := &BaseWindow{
-		UI:    ui,
 		Title: title,
 	}
 
 	// Criar a janela
-	bw.Window = ui.createWindow(title, width, height)
+	bw.Window = createWindow(title, width, height)
 
 	// Configurar callback de fechamento
 	bw.Window.SetOnClosed(func() {
@@ -34,19 +33,11 @@ func NewBaseWindow(ui *UIManager, title string, width, height float32) *BaseWind
 // Show exibe a janela
 func (bw *BaseWindow) Show() {
 	if bw.Window == nil {
-		// Recriar a janela se foi fechada
-		bw.Window = bw.UI.createWindow(bw.Title, 400, 300)
-
-		// Configurar callback de fechamento
-		bw.Window.SetOnClosed(func() {
-			// Limpar referências
-			bw.Window = nil
-		})
-
-		// Reconfigurar conteúdo
-		if bw.Content != nil {
-			bw.Window.SetContent(bw.Content)
-		}
+		// This case should ideally not be reached if windows are managed correctly
+		// However, if it is, we can't recreate it without the createWindow function.
+		// For now, we'll just log an error.
+		log.Println("Error: Attempted to show a closed window without a recreate function.")
+		return
 	}
 
 	bw.Window.Show()

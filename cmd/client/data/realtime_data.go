@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"fyne.io/fyne/v2/data/binding"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // ConnectionState representa o estado da conexão
@@ -67,6 +68,7 @@ type RealtimeDataLayer struct {
 	// Dados de sala
 	RoomName     binding.String
 	RoomPassword binding.String
+	Rooms        binding.UntypedList // Lista de salas do usuário
 
 	// Canal de eventos
 	eventChan   chan Event
@@ -91,6 +93,7 @@ func NewRealtimeDataLayer() *RealtimeDataLayer {
 		PublicKey:        binding.NewString(),
 		RoomName:         binding.NewString(),
 		RoomPassword:     binding.NewString(),
+		Rooms:            binding.NewUntypedList(),
 
 		// Canal de eventos
 		eventChan:   make(chan Event, 100),
@@ -156,6 +159,70 @@ func (rdl *RealtimeDataLayer) UpdateNetworkStats(peerCount int, latency, sent, r
 func (rdl *RealtimeDataLayer) SetRoomInfo(name, password string) {
 	rdl.RoomName.Set(name)
 	rdl.RoomPassword.Set(password)
+}
+
+// SetRooms define a lista completa de salas
+func (rdl *RealtimeDataLayer) SetRooms(rooms []*storage.Room) {
+	rdl.mu.Lock()
+	defer rdl.mu.Unlock()
+
+	// Convert []*storage.Room to []interface{}
+	var untypedRooms []interface{}
+	for _, room := range rooms {
+		untypedRooms = append(untypedRooms, room)
+	}
+	rdl.Rooms.Set(untypedRooms)
+}
+
+// AddRoom adiciona uma nova sala à lista
+func (rdl *RealtimeDataLayer) AddRoom(room *storage.Room) {
+	rdl.mu.Lock()
+	defer rdl.mu.Unlock()
+
+	currentRooms, _ := rdl.Rooms.Get()
+	rdl.Rooms.Set(append(currentRooms, room))
+}
+
+// RemoveRoom remove uma sala da lista pelo ID
+func (rdl *RealtimeDataLayer) RemoveRoom(roomID string) {
+	rdl.mu.Lock()
+	defer rdl.mu.Unlock()
+
+	currentRooms, _ := rdl.Rooms.Get()
+	var updatedRooms []interface{}
+	for _, r := range currentRooms {
+		if room, ok := r.(*storage.Room); ok && room.ID != roomID {
+			updatedRooms = append(updatedRooms, room)
+		}
+	}
+	rdl.Rooms.Set(updatedRooms)
+}
+
+// UpdateRoom atualiza uma sala existente na lista
+func (rdl *RealtimeDataLayer) UpdateRoom(index int, room *storage.Room) {
+	rdl.mu.Lock()
+	defer rdl.mu.Unlock()
+
+	currentRooms, _ := rdl.Rooms.Get()
+	if index >= 0 && index < len(currentRooms) {
+		currentRooms[index] = room
+		rdl.Rooms.Set(currentRooms)
+	}
+}
+
+// GetRooms retorna a lista atual de salas
+func (rdl *RealtimeDataLayer) GetRooms() []*storage.Room {
+	rdl.mu.Lock()
+	defer rdl.mu.Unlock()
+
+	currentRooms, _ := rdl.Rooms.Get()
+	rooms := make([]*storage.Room, len(currentRooms))
+	for i, r := range currentRooms {
+		if room, ok := r.(*storage.Room); ok {
+			rooms[i] = room
+		}
+	}
+	return rooms
 }
 
 // Subscribe inscreve um novo assinante para eventos

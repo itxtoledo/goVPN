@@ -6,11 +6,8 @@ toolchain go1.21.13
 
 require (
 	fyne.io/fyne/v2 v2.6.0
-	fyne.io/systray v1.11.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/itxtoledo/govpn/libs/crypto_utils v0.0.0
 	github.com/itxtoledo/govpn/libs/models v0.0.0
-	github.com/itxtoledo/govpn/libs/network v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.22
 )
 
@@ -21,16 +18,13 @@ replace (
 )
 
 require (
+	fyne.io/systray v1.11.0 // indirect
 	github.com/go-text/render v0.2.0 // indirect
-	github.com/google/uuid v1.3.1 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/kr/text v0.1.0 // indirect
-	github.com/wlynxg/anet v0.0.3 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
 )
 
 require (
-	fyne.io/fyne v1.4.3
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
