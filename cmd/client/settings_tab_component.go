@@ -76,7 +76,7 @@ func (stc *SettingsTabComponent) CreateSettingsContainer() *fyne.Container {
 	form := &widget.Form{
 		Items: []*widget.FormItem{
 			{Text: "Username", Widget: stc.UsernameEntry, HintText: "Your display name in the VPN"},
-			{Text: "Server Address", Widget: stc.ServerAddressEntry, HintText: "Address of the signaling server"},
+			{Text: "Server", Widget: stc.ServerAddressEntry, HintText: "Address of the signaling server"},
 			{Text: "Theme", Widget: stc.ThemeSelect, HintText: "Application theme"},
 		},
 	}

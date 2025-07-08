@@ -204,7 +204,7 @@ func (ui *UIManager) refreshNetworkList() {
 
 	// Update network tree component
 	if ui.NetworkListComp != nil {
-		ui.NetworkListComp.updateNetworkList()
+		ui.NetworkListComp.UpdateNetworkList()
 	}
 
 	// Update UI

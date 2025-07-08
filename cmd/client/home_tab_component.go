@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -12,7 +13,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/dialogs"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
@@ -118,9 +119,33 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			username = "User" // Default fallback
 		}
 
-		// Create and show the room creation window
-		createRoomWindow := dialogs.NewCreateRoomDialog(&NetworkManagerAdapter{htc.UI.VPN.NetworkManager}, htc.UI.MainWindow, username)
-		createRoomWindow.Show(dialogs.ValidatePassword, dialogs.ConfigurePasswordEntry)
+		// Create and show the room creation window (singleton pattern)
+		if globalRoomWindow != nil && globalRoomWindow.isOpen && globalRoomWindow.Window != nil {
+			// Focus on existing window if already open
+			globalRoomWindow.Window.RequestFocus()
+			return
+		}
+
+		adapter := &NetworkManagerAdapter{htc.UI.VPN.NetworkManager}
+		globalRoomWindow = NewRoomWindow(
+			htc.UI.App,
+			htc.UI.MainWindow,
+			adapter.CreateRoom,
+			func(roomID, name, password string) error {
+				// This is where you'd save the room to local storage if needed
+				// For now, we'll just add it to the RealtimeDataLayer
+				room := &storage.Room{
+					ID:            roomID,
+					Name:          name,
+					LastConnected: time.Now(),
+				}
+				adapter.GetRealtimeData().AddRoom(room)
+				return nil
+			},
+			adapter.GetRoomID,
+			username,
+		)
+		globalRoomWindow.Show(ValidatePassword, ConfigurePasswordEntry)
 	})
 
 	// Criar um botão para entrar em uma sala
@@ -141,9 +166,25 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			username = "User" // Default fallback
 		}
 
-		// Create and show the room joining window
-		joinRoomWindow := dialogs.NewJoinRoomDialog(&NetworkManagerAdapter{htc.UI.VPN.NetworkManager}, htc.UI.MainWindow, username)
-		joinRoomWindow.Show(dialogs.ValidatePassword, dialogs.ConfigurePasswordEntry)
+		// Create and show the room joining window (singleton pattern)
+		if globalJoinWindow != nil && globalJoinWindow.isOpen && globalJoinWindow.Window != nil {
+			// Focus on existing window if already open
+			globalJoinWindow.Window.RequestFocus()
+			return
+		}
+
+		adapter := &NetworkManagerAdapter{htc.UI.VPN.NetworkManager}
+		globalJoinWindow = NewJoinWindow(
+			htc.UI.App,
+			htc.UI.MainWindow,
+			adapter.JoinRoom,
+			func(roomID, name, password string) error {
+				// Save room logic if needed
+				return nil
+			},
+			username,
+		)
+		globalJoinWindow.Show(ValidatePassword, ConfigurePasswordEntry)
 	})
 
 	// Criar o container da aba de salas
