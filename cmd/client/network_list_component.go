@@ -95,16 +95,23 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			// Create connected computers list
 			computersContainer := container.NewVBox()
 
-			// Add current computer to the list
+			// Add current computer to the list (always show if we're in this room)
+			currentActivity := widget.NewActivity()
+			if isConnected {
+				currentActivity.Start() // Green and animated when connected/online
+			} else {
+				currentActivity.Stop() // Gray and static when disconnected/offline
+			}
+
 			currentComputerItem := container.NewHBox(
-				widget.NewLabel("🟢"),
+				currentActivity, // TODO if not connected just display a static circle
 				widget.NewLabel(username+" (you)"),
 			)
-
 			computersContainer.Add(currentComputerItem)
 
-			// Add other connected computers if we're connected to this room
-			if isConnected && ntc.UI.VPN.NetworkManager != nil {
+			// Add other computers in the room
+			// Add other computers in the room
+			if ntc.UI.VPN.NetworkManager != nil && len(ntc.UI.VPN.NetworkManager.Computers) > 0 {
 				// Get computers in the room from the NetworkManager
 				for _, computer := range ntc.UI.VPN.NetworkManager.Computers {
 					// Skip our own computer
@@ -112,18 +119,18 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 						continue
 					}
 
-					// Create status icon based on online status
-					var statusIcon string
+					// Create activity indicator based on online status
+					activity := widget.NewActivity()
 					if computer.IsOnline {
-						statusIcon = "🟢"
+						activity.Start() // Green and animated when online
 					} else {
-						statusIcon = "🔴"
+						activity.Stop() // Gray and static when offline
 					}
 
-					// Create computer item with icon, status and name
+					// Create computer item with icon, activity indicator and name
 					computerItem := container.NewHBox(
 						widget.NewIcon(theme.AccountIcon()),
-						widget.NewLabel(statusIcon),
+						activity,
 						widget.NewLabel(computer.Name),
 					)
 					computersContainer.Add(computerItem)
@@ -215,28 +222,17 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				),
 			)
 
-			// Create the main content with clear visual separation and horizontal padding
 			content := container.NewPadded(
 				container.NewVBox(
+
 					computersBox,
 					widget.NewSeparator(),
 					actionsBox,
 				),
 			)
 
-			// Create title with just icon and name
-			var titleIcon string
-			if isConnected {
-				titleIcon = "🟢"
-			} else {
-				titleIcon = "🔵"
-			}
-
-			// Create title with icon and room name only
-			fullTitle := fmt.Sprintf("%s %s", titleIcon, room.Name)
-
-			// Create accordion item for the room
-			accordionItem := widget.NewAccordionItem(fullTitle, content)
+			// Create accordion item with simple room name
+			accordionItem := widget.NewAccordionItem(room.Name, content)
 			newItems = append(newItems, accordionItem)
 
 			// Track which items should be open
@@ -371,4 +367,94 @@ func (c *CustomRoomTitle) TappedSecondary(pe *fyne.PointEvent) {
 
 	// Show context menu
 	widget.ShowPopUpMenuAtPosition(menu, c.UI.MainWindow.Canvas(), pe.AbsolutePosition)
+}
+
+// CustomRoomItem creates a custom expandable room item with activity indicator in title
+type CustomRoomItem struct {
+	widget.BaseWidget
+	Room        *storage.Room
+	IsConnected bool
+	UI          *UIManager
+	Content     *fyne.Container
+	Activity    *widget.Activity
+	IsExpanded  bool
+	titleLabel  *widget.Label
+	expandBtn   *widget.Button
+	container   *fyne.Container
+}
+
+func NewCustomRoomItem(room *storage.Room, isConnected bool, ui *UIManager, content *fyne.Container) *CustomRoomItem {
+	item := &CustomRoomItem{
+		Room:        room,
+		IsConnected: isConnected,
+		UI:          ui,
+		Content:     content,
+		IsExpanded:  isConnected, // Auto-expand if connected
+	}
+
+	item.Activity = widget.NewActivity()
+	item.Activity.Start()
+	if isConnected {
+		item.Activity.Start()
+	} else {
+		item.Activity.Stop()
+	}
+
+	item.titleLabel = widget.NewLabel(room.Name)
+	item.titleLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	item.expandBtn = widget.NewButton("▼", func() {
+		item.Toggle()
+	})
+	item.expandBtn.Importance = widget.LowImportance
+
+	item.ExtendBaseWidget(item)
+	item.updateUI()
+	return item
+}
+
+func (c *CustomRoomItem) Toggle() {
+	c.IsExpanded = !c.IsExpanded
+	c.updateUI()
+	c.Refresh()
+}
+
+func (c *CustomRoomItem) updateUI() {
+	// Update expand button text
+	if c.IsExpanded {
+		c.expandBtn.SetText("▲")
+	} else {
+		c.expandBtn.SetText("▼")
+	}
+
+	// Create title row with activity indicator
+	titleRow := container.NewHBox(
+		c.expandBtn,
+		c.Activity,
+		c.titleLabel,
+		layout.NewSpacer(),
+	)
+
+	if c.IsExpanded {
+		c.container = container.NewVBox(
+			titleRow,
+			c.Content,
+		)
+	} else {
+		c.container = container.NewVBox(titleRow)
+	}
+}
+
+func (c *CustomRoomItem) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(c.container)
+}
+
+func (c *CustomRoomItem) UpdateConnectionStatus(isConnected bool) {
+	c.IsConnected = isConnected
+	if isConnected {
+		c.Activity.Start()
+	} else {
+		c.Activity.Stop()
+	}
+	c.Refresh()
 }

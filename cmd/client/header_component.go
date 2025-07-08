@@ -20,9 +20,6 @@ type HeaderComponent struct {
 	UserIPLabel         *widget.Label
 	UsernameLabel       *widget.Label
 	RoomLabel           *widget.Label
-	BackendStatusLabel  *widget.Label
-	BackendActivity     *widget.Activity
-	MenuButton          *widget.Button
 	defaultWebsocketURL string
 }
 
@@ -48,19 +45,6 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 	hc.UsernameLabel.TextStyle = fyne.TextStyle{Bold: true} // Make username more prominent
 
 	hc.RoomLabel = widget.NewLabelWithData(hc.UI.RealtimeData.RoomName)
-
-	// Status do Backend
-	hc.BackendStatusLabel = widget.NewLabel("Backend: Disconnected")
-	hc.BackendStatusLabel.TextStyle = fyne.TextStyle{Monospace: true} // Use monospace for status
-
-	// Activity widget para indicar conexão ativa
-	hc.BackendActivity = widget.NewActivity()
-	hc.BackendActivity.Stop() // Inicialmente parado
-
-	// Botão de menu
-	hc.MenuButton = widget.NewButtonWithIcon("", theme.MenuIcon(), func() {
-		hc.showMenu()
-	})
 
 	// Configure listeners para atualização automática
 	hc.configureListeners()
@@ -94,36 +78,28 @@ func (hc *HeaderComponent) configureListeners() {
 
 // CreateHeaderContainer cria o container do cabeçalho
 func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
-	// Container para o status do backend (compacto)
-	backendStatusContainer := container.NewHBox(
-		hc.BackendStatusLabel,
-		hc.BackendActivity,
-	)
 
-	// Container para informações do usuário (IP e nome)
+	// Container para informações do usuário (IP e nome) - layout compacto
 	userInfoContainer := container.NewVBox(
 		hc.UserIPLabel,
 		hc.UsernameLabel,
 	)
 
-	// Container superior com botão de energia, informações do usuário e botão de menu
-	topContainer := container.NewBorder(
-		nil, nil,
-		container.NewHBox(hc.PowerButton, userInfoContainer),
-		hc.MenuButton,
-		backendStatusContainer,
+	// Container para o power button com tamanho fixo para garantir proporção 1:1
+	powerButtonContainer := container.NewWithoutLayout(hc.PowerButton)
+	powerButtonContainer.Resize(fyne.NewSize(44, 44))
+	hc.PowerButton.Move(fyne.NewPos(0, 0))
+	hc.PowerButton.Resize(fyne.NewSize(44, 44))
+
+	// Container superior usando HBox com duas colunas
+	topContainer := container.NewHBox(
+		powerButtonContainer, // Primeira coluna: power button
+		userInfoContainer,    // Segunda coluna: informações do usuário (IP e nome)
 	)
 
-	// Container inferior com informações de sala (compacto)
-	bottomContainer := container.NewHBox(
-		widget.NewIcon(theme.HomeIcon()),
-		hc.RoomLabel,
-	)
-
-	// Container principal mais compacto
+	// Container principal
 	headerContainer := container.NewVBox(
 		topContainer,
-		bottomContainer,
 		widget.NewSeparator(),
 	)
 
@@ -192,45 +168,15 @@ func (hc *HeaderComponent) updateRoomName() {
 
 // updateBackendStatus atualiza o status do backend
 func (hc *HeaderComponent) updateBackendStatus() {
-	state, _ := hc.UI.RealtimeData.ConnectionState.Get()
-	connectionState := data.ConnectionState(state)
+	// state, _ := hc.UI.RealtimeData.ConnectionState.Get()
+	// connectionState := data.ConnectionState(state)
 
-	switch connectionState {
-	case data.StateDisconnected:
-		hc.BackendStatusLabel.SetText("Backend: Disconnected")
-		hc.BackendActivity.Stop() // Para a animação quando desconectado
-	case data.StateConnecting:
-		hc.BackendStatusLabel.SetText("Backend: Connecting...")
-		hc.BackendActivity.Start() // Inicia a animação ao conectar
-	case data.StateConnected:
-		hc.BackendStatusLabel.SetText("Backend: Connected")
-		hc.BackendActivity.Start() // Mantém a animação enquanto conectado
-	}
-
-	hc.BackendStatusLabel.Refresh()
-}
-
-// showMenu mostra o menu de opções
-func (hc *HeaderComponent) showMenu() {
-	// Criar um menu popup
-	menu := widget.NewPopUpMenu(
-		fyne.NewMenu(
-			"Options",
-			fyne.NewMenuItem("About", func() {
-				// Always create a new About window to ensure content is properly initialized
-				hc.UI.AboutWindow = NewAboutWindow(hc.UI)
-				hc.UI.AboutWindow.Show()
-			}),
-			fyne.NewMenuItem("Exit", func() {
-				hc.UI.MainWindow.Close()
-			}),
-		),
-		hc.UI.MainWindow.Canvas(),
-	)
-
-	// Exibir o menu
-	menu.ShowAtPosition(fyne.NewPos(
-		hc.MenuButton.Position().X,
-		hc.MenuButton.Position().Y+hc.MenuButton.Size().Height,
-	))
+	// switch connectionState {
+	// case data.StateDisconnected:
+	// 	hc.BackendActivity.Stop() // Para a animação quando desconectado
+	// case data.StateConnecting:
+	// 	hc.BackendActivity.Start() // Inicia a animação ao conectar
+	// case data.StateConnected:
+	// 	hc.BackendActivity.Start() // Mantém a animação enquanto conectado
+	// }
 }

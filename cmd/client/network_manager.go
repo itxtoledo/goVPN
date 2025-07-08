@@ -127,6 +127,32 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			// Update the RealtimeDataLayer with the new rooms list
 			nm.RealtimeData.SetRooms(updatedRooms)
 			nm.refreshNetworkList()
+		case models.TypeClientIPInfo:
+			// Handle client IP information
+			var ipInfo models.ClientIPInfoResponse
+			if err := json.Unmarshal(payload, &ipInfo); err != nil {
+				log.Printf("Failed to unmarshal client IP info in handler: %v", err)
+				return
+			}
+
+			// Format the IP information for display
+			ipDisplay := ""
+			if ipInfo.IPv4 != "" {
+				ipDisplay = ipInfo.IPv4
+			}
+			if ipInfo.IPv6 != "" {
+				if ipDisplay != "" {
+					ipDisplay += " / " + ipInfo.IPv6
+				} else {
+					ipDisplay = ipInfo.IPv6
+				}
+			}
+			if ipDisplay == "" {
+				ipDisplay = "N/A"
+			}
+
+			// Update the user IP in the realtime data
+			nm.RealtimeData.SetUserIP(ipDisplay)
 		}
 	}
 	nm.SignalingServer = NewSignalingClient(publicKey, signalingHandler)

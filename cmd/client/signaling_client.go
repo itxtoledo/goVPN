@@ -832,6 +832,21 @@ func (s *SignalingClient) listenForMessages() {
 					}
 				}
 			}
+
+		case models.TypeClientIPInfo:
+			{
+				var ipInfo models.ClientIPInfoResponse
+				if err := json.Unmarshal(sigMsg.Payload, &ipInfo); err != nil {
+					log.Printf("Failed to unmarshal client IP info: %v", err)
+				} else {
+					log.Printf("Received client IP info - IPv4: %s, IPv6: %s", ipInfo.IPv4, ipInfo.IPv6)
+
+					// Notify the handler about the IP info
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeClientIPInfo, sigMsg.Payload)
+					}
+				}
+			}
 		}
 
 		// Also pass to custom handler if configured

@@ -16,37 +16,38 @@ const (
 	// Client to server message types
 	TypeCreateRoom     MessageType = "CreateRoom"
 	TypeJoinRoom       MessageType = "JoinRoom"
-	TypeConnectRoom    MessageType = "ConnectRoom"    // New: Conectar a uma sala previamente associada
-	TypeDisconnectRoom MessageType = "DisconnectRoom" // New: Desconectar de uma sala sem sair dela
+	TypeConnectRoom    MessageType = "ConnectRoom"
+	TypeDisconnectRoom MessageType = "DisconnectRoom"
 	TypeLeaveRoom      MessageType = "LeaveRoom"
 	TypeKick           MessageType = "Kick"
 	TypeRename         MessageType = "Rename"
-	TypePing           MessageType = "Ping"         // Added for connection testing
-	TypeGetUserRooms   MessageType = "GetUserRooms" // New: Get all rooms a user has joined
+	TypePing           MessageType = "Ping"
+	TypeGetUserRooms   MessageType = "GetUserRooms"
 
 	// Server to client message types
 	TypeError            MessageType = "Error"
 	TypeRoomCreated      MessageType = "RoomCreated"
 	TypeRoomJoined       MessageType = "RoomJoined"
-	TypeRoomConnected    MessageType = "RoomConnected"    // New: Confirmação de conexão à sala
-	TypeRoomDisconnected MessageType = "RoomDisconnected" // New: Confirmação de desconexão da sala
+	TypeRoomConnected    MessageType = "RoomConnected"
+	TypeRoomDisconnected MessageType = "RoomDisconnected"
 	TypeRoomDeleted      MessageType = "RoomDeleted"
 	TypeRoomRenamed      MessageType = "RoomRenamed"
 	TypePeerJoined       MessageType = "PeerJoined"
 	TypePeerLeft         MessageType = "PeerLeft"
-	TypePeerConnected    MessageType = "PeerConnected"    // New: Notificação de peer conectado
-	TypePeerDisconnected MessageType = "PeerDisconnected" // New: Notificação de peer desconectado
+	TypePeerConnected    MessageType = "PeerConnected"
+	TypePeerDisconnected MessageType = "PeerDisconnected"
 	TypeKicked           MessageType = "Kicked"
 	TypeKickSuccess      MessageType = "KickSuccess"
 	TypeRenameSuccess    MessageType = "RenameSuccess"
 	TypeDeleteSuccess    MessageType = "DeleteSuccess"
 	TypeServerShutdown   MessageType = "ServerShutdown"
-	TypeUserRooms        MessageType = "UserRooms" // New: Response with all rooms a user has joined
+	TypeUserRooms        MessageType = "UserRooms"
+	TypeClientIPInfo     MessageType = "ClientIPInfo"
 )
 
 // Password validation constants
 const (
-	// DefaultPasswordPattern é o padrão de validação de senha padrão: exatamente 4 dígitos numéricos
+	// DefaultPasswordPattern is the default password validation pattern: exactly 4 numeric digits
 	DefaultPasswordPattern = `^\d{4}$`
 )
 
@@ -234,9 +235,15 @@ type UserRoomsResponse struct {
 	Rooms []UserRoomInfo `json:"rooms"`
 }
 
+// ClientIPInfoResponse represents client IP address information
+type ClientIPInfoResponse struct {
+	IPv4 string `json:"ipv4"`
+	IPv6 string `json:"ipv6"`
+}
+
 // Helper functions
 
-// GenerateMessageID gera um ID aleatório em formato hexadecimal com base no comprimento especificado
+// GenerateMessageID generates a random ID in hexadecimal format based on the specified length
 func GenerateMessageID() (string, error) {
 	return GenerateRandomID(8)
 }
@@ -252,19 +259,18 @@ func GenerateRoomID() string {
 	return id
 }
 
-// GenerateRandomID gera um ID aleatório em formato hexadecimal com o comprimento desejado
-// Logic: Generate cryptographically secure random bytes and convert to hexadecimal format
+// GenerateRandomID generates a random ID in hexadecimal format with the desired length
 func GenerateRandomID(length int) (string, error) {
-	// Determine quantos bytes precisamos para gerar o ID
-	byteLength := (length + 1) / 2 // arredondamento para cima para garantir bytes suficientes
+	// Determine how many bytes we need to generate the ID
+	byteLength := (length + 1) / 2 // round up to ensure sufficient bytes
 
 	bytes := make([]byte, byteLength)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		return "", fmt.Errorf("falha ao gerar bytes aleatórios: %w", err)
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 
-	// Converte para hexadecimal e limita ao comprimento desejado
+	// Convert to hexadecimal and limit to desired length
 	id := hex.EncodeToString(bytes)
 	if len(id) > length {
 		id = id[:length]
