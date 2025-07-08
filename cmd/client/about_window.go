@@ -31,12 +31,11 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)
-	titleLabel.TextStyle.Bold = true
 
 	versionLabel := widget.NewLabelWithStyle(
 		"Version "+AppVersion,
 		fyne.TextAlignCenter,
-		fyne.TextStyle{},
+		fyne.TextStyle{Monospace: true},
 	)
 
 	descriptionLabel := widget.NewLabelWithStyle(
@@ -48,7 +47,7 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 	authorLabel := widget.NewLabelWithStyle(
 		"Created by "+AppAuthor,
 		fyne.TextAlignCenter,
-		fyne.TextStyle{},
+		fyne.TextStyle{Italic: true},
 	)
 
 	// Obter a chave pública

@@ -43,7 +43,7 @@ func (ntc *NetworkListComponent) init() {
 
 	// Criar o container principal
 	ntc.Container = container.NewBorder(
-		widget.NewLabelWithStyle("Available Rooms", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		nil, // widget.NewLabelWithStyle("Available Rooms", fyne.TextAlignLeading, fyne.TextStyle{Bold: true, Monospace: false}),
 		nil,
 		nil,
 		nil,
@@ -70,7 +70,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 
 	log.Printf("Updating room list. Total: %d", len(rooms))
 
-	if rooms != nil && len(rooms) > 0 {
+	if len(rooms) > 0 {
 		// Criar estrutura temporária para os novos itens
 		var newItems []*widget.AccordionItem
 
@@ -92,14 +92,18 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			// Check if this room is the one we're currently connected to
 			isConnected := room.ID == currentRoomID
 
-			// Create members container
-			membersContainer := container.NewVBox()
+			// Create connected computers list
+			computersContainer := container.NewVBox()
 
-			// Add current user to members list
-			userLabel := widget.NewLabel("• " + username + " (you)")
-			membersContainer.Add(userLabel)
+			// Add current computer to the list
+			currentComputerItem := container.NewHBox(
+				widget.NewLabel("🟢"),
+				widget.NewLabel(username+" (you)"),
+			)
 
-			// Add other room members if we're connected to this room
+			computersContainer.Add(currentComputerItem)
+
+			// Add other connected computers if we're connected to this room
 			if isConnected && ntc.UI.VPN.NetworkManager != nil {
 				// Get computers in the room from the NetworkManager
 				for _, computer := range ntc.UI.VPN.NetworkManager.Computers {
@@ -108,34 +112,34 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 						continue
 					}
 
-					// Create status text based on online status
-					statusText := ""
+					// Create status icon based on online status
+					var statusIcon string
 					if computer.IsOnline {
-						statusText = " (online)"
+						statusIcon = "🟢"
 					} else {
-						statusText = " (offline)"
+						statusIcon = "🔴"
 					}
 
-					// Add this computer to the members list
-					computerLabel := widget.NewLabel("• " + computer.Name + statusText)
-					membersContainer.Add(computerLabel)
+					// Create computer item with icon, status and name
+					computerItem := container.NewHBox(
+						widget.NewIcon(theme.AccountIcon()),
+						widget.NewLabel(statusIcon),
+						widget.NewLabel(computer.Name),
+					)
+					computersContainer.Add(computerItem)
 				}
 			}
 
-			// Add "Members" header
-			membersBox := container.NewVBox(
-				widget.NewLabelWithStyle("Room Members:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-				membersContainer,
-			)
+			// Create computers section
+			computersBox := computersContainer
 
-			// Create buttons for room actions
-			// Change button label based on whether the user is already connected to the room
-			connectButtonText := "Connect"
+			// Create buttons for room actions with improved styling
+			connectButtonText := "🔗 Connect"
 			connectIcon := theme.LoginIcon()
 
 			// If already connected to this room, use "Disconnect" text and different icon
 			if isConnected {
-				connectButtonText = "Disconnect"
+				connectButtonText = "🔌 Disconnect"
 				connectIcon = theme.LogoutIcon()
 			}
 
@@ -166,7 +170,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				}
 			}(room, isConnected))
 
-			leaveButton := widget.NewButtonWithIcon("Leave", theme.LogoutIcon(), func(currentRoom *storage.Room) func() {
+			leaveButton := widget.NewButtonWithIcon("🚪 Leave", theme.LogoutIcon(), func(currentRoom *storage.Room) func() {
 				return func() {
 					// Delegate deletion to NetworkManager
 					if ntc.UI.VPN.NetworkManager != nil {
@@ -193,35 +197,46 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 				}
 			}(room))
 
-			// Create layout for buttons
-			buttonBox := container.NewHBox(
-				layout.NewSpacer(),
-				connectButton,
-				leaveButton,
-			)
-
-			// Create room info container
-			infoBox := container.NewVBox(
-				membersBox,
-				widget.NewLabel("Last connected: "+room.LastConnected.Format("2006-01-02 15:04:05")),
-			)
-
-			content := container.NewVBox(
-				infoBox,
-				buttonBox,
-			)
-
-			// Create title with status indicator
-			var titleText string
+			// Style buttons based on connection status
 			if isConnected {
-				titleText = "🟢 " + room.Name // Green circle for connected
+				connectButton.Importance = widget.HighImportance
 			} else {
-				// Show a different indicator for rooms the user is a member of but not currently connected to
-				titleText = "🔵 " + room.Name // Blue circle for joined but not connected
+				connectButton.Importance = widget.MediumImportance
 			}
 
+			// Create actions section
+			actionsBox := container.NewVBox(
+				widget.NewLabelWithStyle("Actions", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				widget.NewSeparator(),
+				container.NewHBox(
+					layout.NewSpacer(),
+					connectButton,
+					leaveButton,
+				),
+			)
+
+			// Create the main content with clear visual separation and horizontal padding
+			content := container.NewPadded(
+				container.NewVBox(
+					computersBox,
+					widget.NewSeparator(),
+					actionsBox,
+				),
+			)
+
+			// Create title with just icon and name
+			var titleIcon string
+			if isConnected {
+				titleIcon = "🟢"
+			} else {
+				titleIcon = "🔵"
+			}
+
+			// Create title with icon and room name only
+			fullTitle := fmt.Sprintf("%s %s", titleIcon, room.Name)
+
 			// Create accordion item for the room
-			accordionItem := widget.NewAccordionItem(titleText, content)
+			accordionItem := widget.NewAccordionItem(fullTitle, content)
 			newItems = append(newItems, accordionItem)
 
 			// Track which items should be open
@@ -238,12 +253,11 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 			// Refresh the accordion presentation
 			ntc.RoomAccordion.Refresh()
 		} else {
-			log.Printf("No rooms available to display after filtering/processing")
-			// Add informative message when no rooms are available
+			log.Printf("No rooms available to display after filtering/processing") // Add informative message when no rooms are available
 			noRoomsLabel := widget.NewLabelWithStyle(
 				"No rooms available.\nCreate or join a room to get started.",
 				fyne.TextAlignCenter,
-				fyne.TextStyle{},
+				fyne.TextStyle{Italic: true},
 			)
 			ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
 		}
@@ -253,7 +267,7 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 		noRoomsLabel := widget.NewLabelWithStyle(
 			"No rooms available.\nCreate or join a room to get started.",
 			fyne.TextAlignCenter,
-			fyne.TextStyle{},
+			fyne.TextStyle{Italic: true},
 		)
 		ntc.contentContainer.Add(container.NewCenter(noRoomsLabel)) // Add centered label
 	}
@@ -266,4 +280,95 @@ func (ntc *NetworkListComponent) updateNetworkList() {
 // GetContainer retorna o container principal
 func (ntc *NetworkListComponent) GetContainer() *fyne.Container {
 	return ntc.Container
+}
+
+// CustomRoomTitle creates a clickable room title with context menu
+type CustomRoomTitle struct {
+	widget.BaseWidget
+	Text        string
+	Room        *storage.Room
+	IsConnected bool
+	UI          *UIManager
+}
+
+func NewCustomRoomTitle(text string, room *storage.Room, isConnected bool, ui *UIManager) *CustomRoomTitle {
+	title := &CustomRoomTitle{
+		Text:        text,
+		Room:        room,
+		IsConnected: isConnected,
+		UI:          ui,
+	}
+	title.ExtendBaseWidget(title)
+	return title
+}
+
+func (c *CustomRoomTitle) CreateRenderer() fyne.WidgetRenderer {
+	text := widget.NewLabel(c.Text)
+	text.TextStyle = fyne.TextStyle{Bold: true}
+
+	return widget.NewSimpleRenderer(text)
+}
+
+func (c *CustomRoomTitle) Tapped(pe *fyne.PointEvent) {
+	// Handle normal click - expand/collapse accordion
+}
+
+func (c *CustomRoomTitle) TappedSecondary(pe *fyne.PointEvent) {
+	// Handle right-click - show context menu
+	menu := fyne.NewMenu("Room Actions")
+
+	// Add connect/disconnect option
+	if c.IsConnected {
+		disconnectItem := fyne.NewMenuItem("🔌 Disconnect", func() {
+			c.UI.SelectedRoom = c.Room
+			log.Println("Disconnecting from room:", c.Room.Name)
+			go func() {
+				err := c.UI.VPN.NetworkManager.DisconnectRoom(c.Room.ID)
+				if err != nil {
+					log.Printf("Error disconnecting from room: %v", err)
+					dialog.ShowError(fmt.Errorf("failed to disconnect from room: %v", err), c.UI.MainWindow)
+				} else {
+					log.Println("Successfully disconnected from room.")
+					dialog.ShowInformation("Success", "Successfully disconnected from room.", c.UI.MainWindow)
+				}
+			}()
+		})
+		menu.Items = append(menu.Items, disconnectItem)
+	} else {
+		connectItem := fyne.NewMenuItem("🔗 Connect", func() {
+			c.UI.SelectedRoom = c.Room
+			if c.UI.ConnectDialog == nil {
+				c.UI.ConnectDialog = dialogs.NewConnectDialog(c.UI, c.UI.VPN.Username)
+			}
+			c.UI.ConnectDialog.Show()
+		})
+		menu.Items = append(menu.Items, connectItem)
+	}
+
+	// Add leave option
+	leaveItem := fyne.NewMenuItem("🚪 Leave", func() {
+		if c.UI.VPN.NetworkManager != nil {
+			go func() {
+				err := c.UI.VPN.NetworkManager.LeaveRoomById(c.Room.ID)
+				if err != nil {
+					log.Printf("Error deleting room: %v", err)
+					fyne.CurrentApp().SendNotification(&fyne.Notification{
+						Title:   "Error",
+						Content: "Failed to leave room: " + err.Error(),
+					})
+				} else {
+					log.Println("Successfully left room:", c.Room.Name)
+					fyne.CurrentApp().SendNotification(&fyne.Notification{
+						Title:   "Success",
+						Content: "Successfully left room: " + c.Room.Name,
+					})
+					dialog.ShowInformation("Success", "Successfully left room: "+c.Room.Name, c.UI.MainWindow)
+				}
+			}()
+		}
+	})
+	menu.Items = append(menu.Items, leaveItem)
+
+	// Show context menu
+	widget.ShowPopUpMenuAtPosition(menu, c.UI.MainWindow.Canvas(), pe.AbsolutePosition)
 }

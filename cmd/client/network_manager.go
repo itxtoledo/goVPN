@@ -39,7 +39,6 @@ type NetworkManager struct {
 	VirtualNetwork    NetworkInterface
 	SignalingServer   *SignalingClient
 	RoomID            string
-	RoomPassword      string
 	Computers         []Computer
 	connectionState   ConnectionState
 	ReconnectAttempts int
@@ -121,7 +120,6 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				storageRoom := &storage.Room{
 					ID:            room.RoomID,
 					Name:          room.RoomName,
-					Password:      "", // Password is not received from server
 					LastConnected: room.LastConnected,
 				}
 				updatedRooms = append(updatedRooms, storageRoom)
@@ -222,7 +220,6 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 	room := &storage.Room{
 		ID:            res.RoomID,
 		Name:          name,
-		Password:      password,
 		LastConnected: time.Now(),
 	}
 
@@ -231,10 +228,9 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 
 	// Store room information for current connection
 	nm.RoomID = res.RoomID
-	nm.RoomPassword = password
 
 	// Update data layer
-	nm.RealtimeData.SetRoomInfo(res.RoomID, password)
+	nm.RealtimeData.SetRoomInfo(res.RoomID)
 	nm.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
 
 	// Refresh network list now that we have added the room to memory
@@ -265,7 +261,6 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string, username stri
 	room := &storage.Room{
 		ID:            roomID,
 		Name:          roomName,
-		Password:      password,
 		LastConnected: time.Now(),
 	}
 
@@ -289,10 +284,9 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string, username stri
 
 	// Store room information for current connection
 	nm.RoomID = roomID
-	nm.RoomPassword = password
 
 	// Update data layer
-	nm.RealtimeData.SetRoomInfo(roomID, password)
+	nm.RealtimeData.SetRoomInfo(roomID)
 	nm.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
 
 	// Refresh network list now that we have added the room to memory
@@ -319,12 +313,10 @@ func (nm *NetworkManager) ConnectRoom(roomID string) error {
 	// Use roomName from the response
 	roomName := res.RoomName
 
-	// Find the room in memory to get the stored password
-	var roomPassword string
+	// Find the room in memory to update lastConnected time
 	roomExists := false
 	for i, existingRoom := range nm.RealtimeData.GetRooms() {
 		if existingRoom.ID == roomID {
-			roomPassword = existingRoom.Password
 			roomExists = true
 
 			// Update lastConnected time
@@ -342,10 +334,9 @@ func (nm *NetworkManager) ConnectRoom(roomID string) error {
 
 	// Store room information for current connection
 	nm.RoomID = roomID
-	nm.RoomPassword = roomPassword
 
-	// Update data layer
-	nm.RealtimeData.SetRoomInfo(roomID, roomPassword)
+	// Update data layer (without password since we don't store it)
+	nm.RealtimeData.SetRoomInfo(roomID)
 	nm.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
 
 	// Refresh network list now that we have re-connected to the room
@@ -375,10 +366,9 @@ func (nm *NetworkManager) DisconnectRoom(roomID string) error {
 	// If we're disconnecting from the current room, clear our room information
 	if nm.RoomID == roomID {
 		nm.RoomID = ""
-		nm.RoomPassword = ""
 
 		// Update data layer
-		nm.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.RealtimeData.SetRoomInfo("Not connected")
 		nm.RealtimeData.EmitEvent(data.EventRoomDisconnected, roomID, nil)
 	}
 
@@ -417,10 +407,9 @@ func (nm *NetworkManager) LeaveRoom() error {
 
 	// Clear room information
 	nm.RoomID = ""
-	nm.RoomPassword = ""
 
 	// Update data layer
-	nm.RealtimeData.SetRoomInfo("Not connected", "")
+	nm.RealtimeData.SetRoomInfo("Not connected")
 	nm.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
 
 	// Refresh the network list UI
@@ -453,10 +442,9 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 	// If we're leaving the current room, clear our room information
 	if nm.RoomID == roomID {
 		nm.RoomID = ""
-		nm.RoomPassword = ""
 
 		// Update data layer
-		nm.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.RealtimeData.SetRoomInfo("Not connected")
 	}
 
 	// Emit the room left event regardless
@@ -478,10 +466,9 @@ func (nm *NetworkManager) HandleRoomDeleted(roomID string) error {
 	// If we're in this room, clear our room data
 	if nm.RoomID == roomID {
 		nm.RoomID = ""
-		nm.RoomPassword = ""
 
 		// Update data layer
-		nm.RealtimeData.SetRoomInfo("Not connected", "")
+		nm.RealtimeData.SetRoomInfo("Not connected")
 	}
 
 	// Remove room from memory

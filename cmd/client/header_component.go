@@ -17,6 +17,7 @@ import (
 type HeaderComponent struct {
 	UI                  *UIManager
 	PowerButton         *widget.Button
+	UserIPLabel         *widget.Label
 	UsernameLabel       *widget.Label
 	RoomLabel           *widget.Label
 	BackendStatusLabel  *widget.Label
@@ -36,13 +37,21 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 	hc.PowerButton = widget.NewButtonWithIcon("", theme.MediaPlayIcon(), func() {
 		hc.toggleConnection()
 	})
+	hc.PowerButton.Importance = widget.HighImportance // Make power button more prominent
+
+	// Criar label para IP do usuário
+	hc.UserIPLabel = widget.NewLabelWithData(hc.UI.RealtimeData.UserIP)
+	hc.UserIPLabel.TextStyle = fyne.TextStyle{Monospace: true} // Use monospace for IP
 
 	// Criar labels com dados em tempo real vinculados
 	hc.UsernameLabel = widget.NewLabelWithData(hc.UI.RealtimeData.Username)
+	hc.UsernameLabel.TextStyle = fyne.TextStyle{Bold: true} // Make username more prominent
+
 	hc.RoomLabel = widget.NewLabelWithData(hc.UI.RealtimeData.RoomName)
 
 	// Status do Backend
 	hc.BackendStatusLabel = widget.NewLabel("Backend: Disconnected")
+	hc.BackendStatusLabel.TextStyle = fyne.TextStyle{Monospace: true} // Use monospace for status
 
 	// Activity widget para indicar conexão ativa
 	hc.BackendActivity = widget.NewActivity()
@@ -76,6 +85,11 @@ func (hc *HeaderComponent) configureListeners() {
 	hc.UI.RealtimeData.Username.AddListener(binding.NewDataListener(func() {
 		hc.updateUsername()
 	}))
+
+	// Listener para o IP do usuário
+	hc.UI.RealtimeData.UserIP.AddListener(binding.NewDataListener(func() {
+		hc.updateUserIP()
+	}))
 }
 
 // CreateHeaderContainer cria o container do cabeçalho
@@ -86,10 +100,16 @@ func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 		hc.BackendActivity,
 	)
 
-	// Container superior com botão de energia, nome de usuário e botão de menu
+	// Container para informações do usuário (IP e nome)
+	userInfoContainer := container.NewVBox(
+		hc.UserIPLabel,
+		hc.UsernameLabel,
+	)
+
+	// Container superior com botão de energia, informações do usuário e botão de menu
 	topContainer := container.NewBorder(
 		nil, nil,
-		container.NewHBox(hc.PowerButton, hc.UsernameLabel),
+		container.NewHBox(hc.PowerButton, userInfoContainer),
 		hc.MenuButton,
 		backendStatusContainer,
 	)
@@ -158,6 +178,12 @@ func (hc *HeaderComponent) updateUsername() {
 	// Esta função é mantida para compatibilidade e possíveis futuras extensões
 }
 
+// updateUserIP atualiza o IP do usuário
+func (hc *HeaderComponent) updateUserIP() {
+	// O IP do usuário já está vinculado diretamente via binding
+	// Esta função é mantida para compatibilidade e possíveis futuras extensões
+}
+
 // updateRoomName atualiza o nome da sala
 func (hc *HeaderComponent) updateRoomName() {
 	// O nome da sala já está vinculado diretamente via binding
@@ -191,9 +217,8 @@ func (hc *HeaderComponent) showMenu() {
 		fyne.NewMenu(
 			"Options",
 			fyne.NewMenuItem("About", func() {
-				if hc.UI.AboutWindow == nil {
-					hc.UI.AboutWindow = NewAboutWindow(hc.UI)
-				}
+				// Always create a new About window to ensure content is properly initialized
+				hc.UI.AboutWindow = NewAboutWindow(hc.UI)
 				hc.UI.AboutWindow.Show()
 			}),
 			fyne.NewMenuItem("Exit", func() {

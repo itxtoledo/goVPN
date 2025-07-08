@@ -133,11 +133,17 @@ func (stc *SettingsTabComponent) applySettings(config Config) {
 	// Atualizar o tema
 	switch config.Theme {
 	case "light":
-		stc.App.Settings().SetTheme(theme.LightTheme())
+		lightTheme := theme.LightTheme()
+		customTheme := NewCustomTheme(lightTheme)
+		stc.App.Settings().SetTheme(customTheme)
 	case "dark":
-		stc.App.Settings().SetTheme(theme.DarkTheme())
+		darkTheme := theme.DarkTheme()
+		customTheme := NewCustomTheme(darkTheme)
+		stc.App.Settings().SetTheme(customTheme)
 	default:
-		// System é o padrão
+		currentTheme := stc.App.Settings().Theme()
+		customTheme := NewCustomTheme(currentTheme)
+		stc.App.Settings().SetTheme(customTheme)
 	}
 
 	// Atualizar o nome de usuário na camada de dados em tempo real

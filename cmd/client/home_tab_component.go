@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
@@ -100,7 +101,7 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	htc.NetworksContainer = roomsContainer
 
 	// Criar um botão para criar uma nova sala
-	createRoomButton := widget.NewButtonWithIcon("Create Room", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "contentAdd"), func() {
+	createRoomButton := widget.NewButtonWithIcon("Create Room", theme.ContentAddIcon(), func() {
 		log.Println("Create room button clicked")
 
 		// Check network connection status

@@ -50,7 +50,6 @@ The GoVPN client follows a modular architecture with the following main componen
    - **HomeTabComponent**: Main screen with room list and options
    - **SettingsTabComponent**: Application settings
    - **NetworkListComponent**: List of available rooms
-   - **RoomItemComponent**: Visual representation of a room
 
 3. **Dialogs**:
    - **ConnectDialog**: Dialog to connect to a room

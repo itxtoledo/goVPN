@@ -1,11 +1,12 @@
 package dialogs
 
 import (
+	"time"
+
 	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
-	"time"
 )
 
 // NetworkManagerInterface defines the necessary methods from NetworkManager for dialogs
@@ -27,7 +28,6 @@ func NewCreateRoomDialog(networkManager NetworkManagerInterface, mainWindow fyne
 			room := &storage.Room{
 				ID:            roomID,
 				Name:          name,
-				Password:      password,
 				LastConnected: time.Now(),
 			}
 			networkManager.GetRealtimeData().AddRoom(room)
@@ -51,7 +51,6 @@ func NewJoinRoomDialog(networkManager NetworkManagerInterface, mainWindow fyne.W
 			room := &storage.Room{
 				ID:            roomID,
 				Name:          name,
-				Password:      password,
 				LastConnected: time.Now(),
 			}
 			networkManager.GetRealtimeData().AddRoom(room)
@@ -62,6 +61,3 @@ func NewJoinRoomDialog(networkManager NetworkManagerInterface, mainWindow fyne.W
 		ConfigurePasswordEntry,
 	)
 }
-
-
-

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -84,6 +85,7 @@ func main() {
 
 	// Executar a aplicação
 	ui.Run(websocketURL)
+	tidyUp()
 }
 
 // setupDataPath cria os diretórios necessários para o aplicativo
@@ -100,4 +102,8 @@ func setupDataPath() {
 	if err != nil {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
+}
+
+func tidyUp() {
+	fmt.Println("Exited")
 }

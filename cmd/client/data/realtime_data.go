@@ -53,6 +53,7 @@ type RealtimeDataLayer struct {
 
 	// Dados de usuário
 	Username binding.String
+	UserIP   binding.String
 
 	// Dados de configuração
 	ServerAddress binding.String
@@ -66,9 +67,8 @@ type RealtimeDataLayer struct {
 	PublicKey        binding.String // Public key identifier
 
 	// Dados de sala
-	RoomName     binding.String
-	RoomPassword binding.String
-	Rooms        binding.UntypedList // Lista de salas do usuário
+	RoomName binding.String
+	Rooms    binding.UntypedList // Lista de salas do usuário
 
 	// Canal de eventos
 	eventChan   chan Event
@@ -84,6 +84,7 @@ func NewRealtimeDataLayer() *RealtimeDataLayer {
 		IsConnected:      binding.NewBool(),
 		StatusMessage:    binding.NewString(),
 		Username:         binding.NewString(),
+		UserIP:           binding.NewString(),
 		ServerAddress:    binding.NewString(),
 		Language:         binding.NewString(),
 		PeerCount:        binding.NewInt(),
@@ -92,7 +93,6 @@ func NewRealtimeDataLayer() *RealtimeDataLayer {
 		ReceivedBytes:    binding.NewFloat(),
 		PublicKey:        binding.NewString(),
 		RoomName:         binding.NewString(),
-		RoomPassword:     binding.NewString(),
 		Rooms:            binding.NewUntypedList(),
 
 		// Canal de eventos
@@ -112,9 +112,10 @@ func (rdl *RealtimeDataLayer) InitDefaults() {
 	rdl.SetConnectionState(StateDisconnected)
 	rdl.SetStatusMessage("Not connected")
 	rdl.SetUsername("User")
+	rdl.SetUserIP("0.0.0.0")
 	rdl.SetServerAddress("ws://localhost:8080")
 	rdl.SetLanguage("en")
-	rdl.SetRoomInfo("Not connected", "")
+	rdl.SetRoomInfo("Not connected")
 	rdl.UpdateNetworkStats(0, 0.0, 0.0, 0.0)
 }
 
@@ -137,6 +138,11 @@ func (rdl *RealtimeDataLayer) SetUsername(username string) {
 	rdl.Username.Set(username)
 }
 
+// SetUserIP define o IP do usuário
+func (rdl *RealtimeDataLayer) SetUserIP(ip string) {
+	rdl.UserIP.Set(ip)
+}
+
 // SetServerAddress define o endereço do servidor
 func (rdl *RealtimeDataLayer) SetServerAddress(address string) {
 	rdl.ServerAddress.Set(address)
@@ -156,9 +162,8 @@ func (rdl *RealtimeDataLayer) UpdateNetworkStats(peerCount int, latency, sent, r
 }
 
 // SetRoomInfo define as informações da sala
-func (rdl *RealtimeDataLayer) SetRoomInfo(name, password string) {
+func (rdl *RealtimeDataLayer) SetRoomInfo(name string) {
 	rdl.RoomName.Set(name)
-	rdl.RoomPassword.Set(password)
 }
 
 // SetRooms define a lista completa de salas
