@@ -58,6 +58,18 @@ func NewConfigManager() *ConfigManager {
 	// Carrega as configurações do arquivo
 	cm.LoadConfig()
 
+	// If computer name is still default or empty, try to set it to hostname
+	if cm.config.ComputerName == "Computer" || cm.config.ComputerName == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			log.Printf("Error getting hostname: %v", err)
+			cm.config.ComputerName = "Computer" // Fallback to default
+		} else {
+			cm.config.ComputerName = hostname
+			cm.SaveConfig() // Save the updated config
+		}
+	}
+
 	return cm
 }
 

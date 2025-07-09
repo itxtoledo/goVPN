@@ -65,7 +65,6 @@ func (nma *NetworkManagerAdapter) GetRealtimeData() *data.RealtimeDataLayer {
 
 // HomeTabComponent representa o componente da aba principal
 type HomeTabComponent struct {
-	SettingsTab       *SettingsTabComponent
 	AppTabs           *container.AppTabs
 	NetworksContainer *fyne.Container
 
@@ -88,9 +87,6 @@ func NewHomeTabComponent(configManager *ConfigManager, realtimeData *data.Realti
 		NetworkListComp: networkListComp,
 		UI:              ui,
 	}
-
-	// Inicializar a aba de configurações
-	htc.SettingsTab = NewSettingsTabComponent(configManager, realtimeData, app, refreshUI)
 
 	return htc
 }
@@ -198,13 +194,9 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 		networksContainer,
 	)
 
-	// Criar o container da aba de configurações
-	settingsTabContent := htc.SettingsTab.CreateSettingsContainer()
-
 	// Criar o AppTabs com múltiplas abas
 	htc.AppTabs = container.NewAppTabs(
 		container.NewTabItem("Networks", networksTabContent),
-		container.NewTabItem("Settings", settingsTabContent),
 	)
 
 	// Definir a posição das abas na parte superior (abaixo do cabeçalho)

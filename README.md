@@ -66,10 +66,14 @@ sequenceDiagram
     participant STUN/TURN
 
     ClientA->>Server: Connect (WebSocket)
-    ClientB->>Server: Connect (WebSocket)
-
     Server-->>ClientA: Connection Acknowledged
+    ClientA->>Server: Authenticate (Ed25519)
+    Server-->>ClientA: Authentication Success
+
+    ClientB->>Server: Connect (WebSocket)
     Server-->>ClientB: Connection Acknowledged
+    ClientB->>Server: Authenticate (Ed25519)
+    Server-->>ClientB: Authentication Success
 
     ClientA->>Server: Create/Join Network Request
     Server->>ClientA: Network Confirmation / Peer List

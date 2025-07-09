@@ -2,11 +2,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
@@ -15,11 +17,11 @@ import (
 
 // HeaderComponent representa o componente de cabeçalho da aplicação
 type HeaderComponent struct {
-	UI                  *UIManager
-	PowerButton         *widget.Button
-	ComputerIPLabel     *widget.Label
-	ComputerNameLabel   *widget.Label
+	UI          *UIManager
+	PowerButton *widget.Button
+
 	NetworkLabel        *widget.Label
+	SettingsButton      *widget.Button // New field for settings button
 	defaultWebsocketURL string
 }
 
@@ -36,15 +38,14 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 	})
 	hc.PowerButton.Importance = widget.HighImportance // Make power button more prominent
 
-	// Criar label para IP do usuário
-	hc.ComputerIPLabel = widget.NewLabelWithData(hc.UI.RealtimeData.ComputerIP)
-	hc.ComputerIPLabel.TextStyle = fyne.TextStyle{Monospace: true} // Use monospace for IP
-
-	// Criar labels com dados em tempo real vinculados
-	hc.ComputerNameLabel = widget.NewLabelWithData(hc.UI.RealtimeData.ComputerName)
-	hc.ComputerNameLabel.TextStyle = fyne.TextStyle{Bold: true} // Make computername more prominent
-
 	hc.NetworkLabel = widget.NewLabelWithData(hc.UI.RealtimeData.NetworkName)
+
+	// New Settings Button
+	hc.SettingsButton = widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
+		// Open the settings window
+		settingsWin := NewSettingsWindow(hc.UI, hc.UI.ConfigManager, hc.UI.RealtimeData, hc.UI.App, hc.UI.refreshUI)
+		settingsWin.Show()
+	})
 
 	// Configure listeners para atualização automática
 	hc.configureListeners()
@@ -80,9 +81,28 @@ func (hc *HeaderComponent) configureListeners() {
 func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 
 	// Container para informações do usuário (IP e nome) - layout compacto
+	combinedInfoBinding := binding.NewString()
+	hc.UI.RealtimeData.ComputerIP.AddListener(binding.NewDataListener(func() {
+		ip, _ := hc.UI.RealtimeData.ComputerIP.Get()
+		name, _ := hc.UI.RealtimeData.ComputerName.Get()
+		combinedInfoBinding.Set(fmt.Sprintf("%s\n%s", ip, name))
+	}))
+	hc.UI.RealtimeData.ComputerName.AddListener(binding.NewDataListener(func() {
+		ip, _ := hc.UI.RealtimeData.ComputerIP.Get()
+		name, _ := hc.UI.RealtimeData.ComputerName.Get()
+		combinedInfoBinding.Set(fmt.Sprintf("%s\n%s", ip, name))
+	}))
+
+	// Initialize the combined binding with current values
+	ip, _ := hc.UI.RealtimeData.ComputerIP.Get()
+	name, _ := hc.UI.RealtimeData.ComputerName.Get()
+	combinedInfoBinding.Set(fmt.Sprintf("%s\n%s", ip, name))
+
+	combinedInfoLabel := widget.NewLabelWithData(combinedInfoBinding)
+	combinedInfoLabel.TextStyle = fyne.TextStyle{Monospace: true, Bold: true}
+
 	computerInfoContainer := container.NewVBox(
-		hc.ComputerIPLabel,
-		hc.ComputerNameLabel,
+		combinedInfoLabel,
 	)
 
 	// Container para o power button com tamanho fixo para garantir proporção 1:1
@@ -91,10 +111,18 @@ func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 	hc.PowerButton.Move(fyne.NewPos(0, 0))
 	hc.PowerButton.Resize(fyne.NewSize(44, 44))
 
-	// Container superior usando HBox com duas colunas
+	// Container para o settings button com tamanho fixo para garantir proporção 1:1
+	settingsButtonContainer := container.NewWithoutLayout(hc.SettingsButton)
+	settingsButtonContainer.Resize(fyne.NewSize(44, 44))
+	hc.SettingsButton.Move(fyne.NewPos(0, 0))
+	hc.SettingsButton.Resize(fyne.NewSize(44, 44))
+
+	// Container superior usando HBox com três colunas
 	topContainer := container.NewHBox(
-		powerButtonContainer,  // Primeira coluna: power button
-		computerInfoContainer, // Segunda coluna: informações do usuário (IP e nome)
+		powerButtonContainer,    // Primeira coluna: power button
+		computerInfoContainer,   // Segunda coluna: informações do usuário (IP e nome)
+		layout.NewSpacer(),      // Spacer to push settings button to the right
+		settingsButtonContainer, // Terceira coluna: settings button
 	)
 
 	// Container principal
