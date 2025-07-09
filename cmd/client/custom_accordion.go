@@ -10,25 +10,25 @@ import (
 // TappableContainer é um container que aceita eventos de tap
 type TappableContainer struct {
 	widget.BaseWidget
-	content   fyne.CanvasObject
-	onTap     func()
-	container *fyne.Container
+	content        fyne.CanvasObject
+	onTap          func()
+	onTapSecondary func(pe *fyne.PointEvent)
 }
 
 // NewTappableContainer cria um novo container clicável
-func NewTappableContainer(content fyne.CanvasObject, onTap func()) *TappableContainer {
+func NewTappableContainer(content fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *TappableContainer {
 	tc := &TappableContainer{
-		content: content,
-		onTap:   onTap,
+		content:        content,
+		onTap:          onTap,
+		onTapSecondary: onTapSecondary,
 	}
 	tc.ExtendBaseWidget(tc)
-	tc.container = container.NewStack(content)
 	return tc
 }
 
 // CreateRenderer implementa o WidgetRenderer
 func (tc *TappableContainer) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(tc.container)
+	return widget.NewSimpleRenderer(tc.content)
 }
 
 // Tapped implementa o evento de clique
@@ -38,16 +38,23 @@ func (tc *TappableContainer) Tapped(pe *fyne.PointEvent) {
 	}
 }
 
+// TappedSecondary implementa o evento de clique secundário (direito)
+func (tc *TappableContainer) TappedSecondary(pe *fyne.PointEvent) {
+	if tc.onTapSecondary != nil {
+		tc.onTapSecondary(pe)
+	}
+}
+
 // CustomAccordionItem representa um item do accordion personalizado que aceita qualquer widget como título
 type CustomAccordionItem struct {
-	Title       fyne.CanvasObject // Pode ser qualquer widget
-	Content     fyne.CanvasObject
-	EndContent  fyne.CanvasObject // Conteúdo que fica no final da linha (ex: contador de usuários)
-	IsOpen      bool
-	container   *fyne.Container
-	expandLabel *widget.Label
-	titleButton *CustomButton
-	OnTap       func() // Callback opcional para clique no título
+	Title          fyne.CanvasObject // Pode ser qualquer widget
+	Content        fyne.CanvasObject
+	EndContent     fyne.CanvasObject // Conteúdo que fica no final da linha (ex: contador de usuários)
+	IsOpen         bool
+	container      *fyne.Container
+	expandLabel    *widget.Label
+	OnTap          func()                       // Callback opcional para clique no título
+	OnTapSecondary func(pe *fyne.PointEvent) // Callback para clique secundário
 }
 
 // NewCustomAccordionItem cria um novo item do accordion personalizado
@@ -73,14 +80,15 @@ func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.Canvas
 }
 
 // NewCustomAccordionItemWithCallbacks cria um novo item do accordion personalizado com callbacks
-func NewCustomAccordionItemWithCallbacks(title, content fyne.CanvasObject, onTap func()) *CustomAccordionItem {
-	return NewCustomAccordionItemWithEndContentAndCallbacks(title, content, nil, onTap)
+func NewCustomAccordionItemWithCallbacks(title, content fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *CustomAccordionItem {
+	return NewCustomAccordionItemWithEndContentAndCallbacks(title, content, nil, onTap, onTapSecondary)
 }
 
 // NewCustomAccordionItemWithEndContentAndCallbacks cria um novo item do accordion personalizado com conteúdo no final e callbacks
-func NewCustomAccordionItemWithEndContentAndCallbacks(title, content, endContent fyne.CanvasObject, onTap func()) *CustomAccordionItem {
+func NewCustomAccordionItemWithEndContentAndCallbacks(title, content, endContent fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *CustomAccordionItem {
 	item := NewCustomAccordionItemWithEndContent(title, content, endContent)
 	item.OnTap = onTap
+	item.OnTapSecondary = onTapSecondary
 	return item
 }
 
@@ -123,7 +131,7 @@ func (item *CustomAccordionItem) updateContainer() {
 		item.expandLabel.SetText("▶")
 	}
 
-	// Create the content for the button (title + end content + expand indicator)
+	// Create the content for the title row
 	var endItems []fyne.CanvasObject
 	if item.EndContent != nil {
 		endItems = []fyne.CanvasObject{item.EndContent, item.expandLabel}
@@ -131,32 +139,33 @@ func (item *CustomAccordionItem) updateContainer() {
 		endItems = []fyne.CanvasObject{item.expandLabel}
 	}
 
-	buttonContent := container.NewHBox(
+	titleContent := container.NewHBox(
 		item.Title,
 		layout.NewSpacer(),
 	)
 
-	// Add end items to the button content
+	// Add end items to the title content
 	for _, endItem := range endItems {
-		buttonContent.Add(endItem)
+		titleContent.Add(endItem)
 	}
 
-	// Create a button that spans the entire title row
-	if item.titleButton == nil {
-		item.titleButton = NewCustomButton("", func() {
-			// Toggle state
-			item.toggleState()
-			// Update the container with new state
-			item.updateContainer()
-			item.container.Refresh()
-			// Call custom callback if set
-			if item.OnTap != nil {
-				item.OnTap()
-			}
-		})
-		// Make button flat and remove importance
-		item.titleButton.SetImportance(widget.LowImportance)
-	}
+	// Create a tappable container for the title row
+	titleContainer := NewTappableContainer(container.NewPadded(titleContent), func() {
+		// Toggle state
+		item.toggleState()
+		// Update the container with new state
+		item.updateContainer()
+		item.container.Refresh()
+		// Call custom callback if set
+		if item.OnTap != nil {
+			item.OnTap()
+		}
+	}, func(pe *fyne.PointEvent) {
+		// Call secondary tap callback if set
+		if item.OnTapSecondary != nil {
+			item.OnTapSecondary(pe)
+		}
+	})
 
 	// Clear and rebuild container
 	if item.container != nil {
@@ -164,12 +173,6 @@ func (item *CustomAccordionItem) updateContainer() {
 	} else {
 		item.container = container.NewVBox()
 	}
-
-	// Create a container that overlays the button content on the button
-	titleContainer := container.NewStack(
-		item.titleButton,
-		container.NewPadded(buttonContent),
-	)
 
 	// Add title container
 	item.container.Add(titleContainer)
@@ -263,43 +266,4 @@ func (accordion *CustomAccordion) CreateRenderer() fyne.WidgetRenderer {
 // GetContainer retorna o container principal
 func (accordion *CustomAccordion) GetContainer() *fyne.Container {
 	return accordion.container
-}
-
-// CustomButton é um botão customizado
-type CustomButton struct {
-	widget.BaseWidget
-	button *widget.Button
-	onTap  func()
-}
-
-// NewCustomButton cria um novo botão customizado
-func NewCustomButton(text string, onTap func()) *CustomButton {
-	cb := &CustomButton{
-		onTap: onTap,
-	}
-	cb.button = widget.NewButton(text, onTap)
-	cb.ExtendBaseWidget(cb)
-	return cb
-}
-
-// CreateRenderer implementa o WidgetRenderer para CustomButton
-func (cb *CustomButton) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(cb.button)
-}
-
-// Tapped implementa o evento de clique
-func (cb *CustomButton) Tapped(pe *fyne.PointEvent) {
-	if cb.onTap != nil {
-		cb.onTap()
-	}
-}
-
-// SetText define o texto do botão
-func (cb *CustomButton) SetText(text string) {
-	cb.button.SetText(text)
-}
-
-// SetImportance define a importância do botão
-func (cb *CustomButton) SetImportance(importance widget.Importance) {
-	cb.button.Importance = importance
 }

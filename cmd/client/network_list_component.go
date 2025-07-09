@@ -273,7 +273,65 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			)
 
 			// Create custom accordion item with context menu support and computer count
-			accordionItem := NewCustomAccordionItemWithEndContentAndCallbacks(customTitle, content, computerCountLabel, nil)
+			accordionItem := NewCustomAccordionItemWithEndContentAndCallbacks(customTitle, content, computerCountLabel, nil, func(pe *fyne.PointEvent) {
+				leaveItem := fyne.NewMenuItem("Leave Network", func() {
+					// Delegate deletion to NetworkManager
+					if ntc.UI.VPN.NetworkManager != nil {
+						go func() {
+							err := ntc.UI.VPN.NetworkManager.LeaveNetworkById(network.ID)
+							if err != nil {
+								log.Printf("Error deleting network: %v", err)
+								fyne.CurrentApp().SendNotification(&fyne.Notification{
+									Title:   "Error",
+									Content: "Failed to leave network: " + err.Error(),
+								})
+							} else {
+								log.Println("Successfully left network:", network.Name)
+								fyne.CurrentApp().SendNotification(&fyne.Notification{
+									Title:   "Success",
+									Content: "Successfully left network: " + network.Name,
+								})
+
+								// Show success dialog on the main thread
+								dialog.ShowInformation("Success", "Successfully left network: "+network.Name, ntc.UI.MainWindow)
+							}
+						}()
+					}
+				})
+
+				connectItemLabel := "Connect"
+				if isConnected {
+					connectItemLabel = "Disconnect"
+				}
+				connectItem := fyne.NewMenuItem(connectItemLabel, func() {
+					ntc.UI.SelectedNetwork = network
+
+					if isConnected {
+						// If already connected, disconnect
+						log.Println("Disconnecting from network:", network.Name)
+						go func() {
+							err := ntc.UI.VPN.NetworkManager.DisconnectNetwork(network.ID)
+							if err != nil {
+								log.Printf("Error disconnecting from network: %v", err)
+								dialog.ShowError(fmt.Errorf("failed to disconnect from network: %v", err), ntc.UI.MainWindow)
+							} else {
+								log.Println("Successfully disconnected from network.")
+								dialog.ShowInformation("Success", "Successfully disconnected from network.", ntc.UI.MainWindow)
+							}
+						}()
+					} else {
+						// Show connection dialog
+						if ntc.UI.ConnectDialog == nil {
+							ntc.UI.ConnectDialog = dialogs.NewConnectDialog(ntc.UI, ntc.UI.VPN.ComputerName)
+						}
+						ntc.UI.ConnectDialog.Show()
+					}
+				})
+
+				menu := fyne.NewMenu(network.Name, connectItem, leaveItem)
+				popUp := widget.NewPopUpMenu(menu, ntc.UI.MainWindow.Canvas())
+				popUp.ShowAtPosition(pe.AbsolutePosition)
+			})
 
 			// Auto-open if connected
 			if isConnected {
