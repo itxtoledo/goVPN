@@ -9,23 +9,23 @@ import (
 
 // ConnectDialogManager é a interface que define as operações necessárias para o diálogo de conexão
 type ConnectDialogManager interface {
-	GetSelectedRoom() *storage.Room
-	ConnectToRoom(roomID, username string) error
+	GetSelectedNetwork() *storage.Network
+	ConnectToNetwork(networkID, computername string) error
 }
 
 // ConnectDialog representa um diálogo para conexão a uma sala
 type ConnectDialog struct {
-	UI            ConnectDialogManager
-	Dialog        dialog.Dialog
-	
-	Username      string
+	UI     ConnectDialogManager
+	Dialog dialog.Dialog
+
+	ComputerName string
 }
 
 // NewConnectDialog cria uma nova instância do diálogo de conexão
-func NewConnectDialog(ui ConnectDialogManager, username string) *ConnectDialog {
+func NewConnectDialog(ui ConnectDialogManager, computername string) *ConnectDialog {
 	cd := &ConnectDialog{
-		UI:       ui,
-		Username: username,
+		UI:           ui,
+		ComputerName: computername,
 	}
 	return cd
 }
@@ -33,23 +33,23 @@ func NewConnectDialog(ui ConnectDialogManager, username string) *ConnectDialog {
 // Show exibe o diálogo de conexão
 func (cd *ConnectDialog) Show() {
 	// Obter a sala selecionada
-	room := cd.UI.GetSelectedRoom()
-	if room == nil {
+	network := cd.UI.GetSelectedNetwork()
+	if network == nil {
 		return
 	}
 
-	roomID := room.ID
+	networkID := network.ID
 
 	// Criar o diálogo
 	cd.Dialog = dialog.NewCustomConfirm(
-		"Connect to Room",
+		"Connect to Network",
 		"Connect",
 		"Cancel",
-		widget.NewLabel("Connect to this room?"),
+		widget.NewLabel("Connect to this network?"),
 		func(confirmed bool) {
 			if confirmed {
 				// Tentar conectar à sala
-				err := cd.UI.ConnectToRoom(roomID, cd.Username)
+				err := cd.UI.ConnectToNetwork(networkID, cd.ComputerName)
 				if err != nil {
 					// Exibir erro em caso de falha
 					errorDialog := dialog.NewError(err, fyne.CurrentApp().Driver().AllWindows()[0])

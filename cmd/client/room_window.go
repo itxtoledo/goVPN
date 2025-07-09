@@ -13,57 +13,52 @@ import (
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
-// Global variable to ensure only one room window can be open
-var globalRoomWindow *RoomWindow
+// Global variable to ensure only one network window can be open
+var globalNetworkWindow *NetworkWindow
 
-// RoomWindow manages the room (network) creation interface as a window
-type RoomWindow struct {
-	App        fyne.App
-	MainWindow fyne.Window
-	CreateRoom func(string, string) (*models.CreateRoomResponse, error)
-	SaveRoom   func(string, string, string) error
-	GetRoomID  func() string
-	Username   string
-	Window     fyne.Window
-	isOpen     bool
+// NetworkWindow manages the network (network) creation interface as a window
+type NetworkWindow struct {
+	*BaseWindow
+	CreateNetwork          func(string, string) (*models.CreateNetworkResponse, error)
+	SaveNetwork            func(string, string, string) error
+	GetNetworkID           func() string
+	ComputerName           string
+	ValidatePassword       func(string) bool
+	ConfigurePasswordEntry func(*widget.Entry)
 }
 
-// NewRoomWindow creates a new room creation window
-func NewRoomWindow(
-	app fyne.App,
-	mainWindow fyne.Window,
-	createRoom func(string, string) (*models.CreateRoomResponse, error),
-	saveRoom func(string, string, string) error,
-	getRoomID func() string,
-	username string,
-) *RoomWindow {
-	return &RoomWindow{
-		App:        app,
-		MainWindow: mainWindow,
-		CreateRoom: createRoom,
-		SaveRoom:   saveRoom,
-		GetRoomID:  getRoomID,
-		Username:   username,
+// NewNetworkWindow creates a new network creation window
+func NewNetworkWindow(
+	ui *UIManager,
+	createNetwork func(string, string) (*models.CreateNetworkResponse, error),
+	saveNetwork func(string, string, string) error,
+	getNetworkID func() string,
+	computername string,
+	validatePassword func(string) bool,
+	configurePasswordEntry func(*widget.Entry),
+) *NetworkWindow {
+	rw := &NetworkWindow{
+		BaseWindow:             NewBaseWindow(ui.createWindow, "Create Network", 320, 260),
+		CreateNetwork:          createNetwork,
+		SaveNetwork:            saveNetwork,
+		GetNetworkID:           getNetworkID,
+		ComputerName:           computername,
+		ValidatePassword:       validatePassword,
+		ConfigurePasswordEntry: configurePasswordEntry,
 	}
-}
-
-// Show displays the room creation interface as a new window
-func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePasswordEntry func(*widget.Entry)) {
-	// Create a new window using the existing app instance
-	rw.Window = rw.App.NewWindow("Create Network")
-	rw.Window.Resize(fyne.NewSize(320, 260))
-	rw.Window.SetFixedSize(true)
-	rw.Window.CenterOnScreen()
-
-	// Mark window as open
-	rw.isOpen = true
 
 	// Set close callback to reset the global instance when window closes
-	rw.Window.SetCloseIntercept(func() {
-		rw.isOpen = false
-		globalRoomWindow = nil
-		rw.Window.Close()
+	// This ensures that only one network window can be open at a time
+	rw.BaseWindow.Window.SetOnClosed(func() {
+		globalNetworkWindow = nil
 	})
+
+	return rw
+}
+
+func (rw *NetworkWindow) Show() {
+	// Mark window as open
+	globalNetworkWindow = rw
 
 	// Create title with icon
 	titleIcon := widget.NewIcon(theme.ContentAddIcon())
@@ -77,7 +72,7 @@ func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePassword
 
 	passwordEntry := widget.NewPasswordEntry()
 	passwordEntry.PlaceHolder = "4-digit PIN"
-	configurePasswordEntry(passwordEntry)
+	rw.ConfigurePasswordEntry(passwordEntry)
 
 	// Add keyboard shortcuts
 	nameEntry.OnSubmitted = func(text string) {
@@ -86,7 +81,7 @@ func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePassword
 
 	passwordEntry.OnSubmitted = func(text string) {
 		// Trigger create button when Enter is pressed on password field
-		if nameEntry.Text != "" && validatePassword(text) {
+		if nameEntry.Text != "" && rw.ValidatePassword(text) {
 			// Will be triggered by the create button logic
 		}
 	}
@@ -107,13 +102,13 @@ func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePassword
 
 		// Validate name
 		if name == "" {
-			dialog.ShowError(errors.New("network name cannot be empty"), rw.Window)
+			dialog.ShowError(errors.New("network name cannot be empty"), rw.BaseWindow.Window)
 			return
 		}
 
 		// Validate password using the abstract function
-		if !validatePassword(password) {
-			dialog.ShowError(errors.New("password must be exactly 4 digits"), rw.Window)
+		if !rw.ValidatePassword(password) {
+			dialog.ShowError(errors.New("password must be exactly 4 digits"), rw.BaseWindow.Window)
 			return
 		}
 
@@ -123,8 +118,8 @@ func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePassword
 
 		// Create network in a goroutine
 		go func() {
-			// Send create room command to backend
-			res, err := rw.CreateRoom(name, password)
+			// Send create network command to backend
+			res, err := rw.CreateNetwork(name, password)
 
 			// Update UI on the main thread
 			go func() {
@@ -132,55 +127,51 @@ func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePassword
 				createButton.Enable()
 
 				if err != nil {
-					dialog.ShowError(fmt.Errorf("failed to create network: %v", err), rw.Window)
+					dialog.ShowError(fmt.Errorf("failed to create network: %v", err), rw.BaseWindow.Window)
 					return
 				}
 
-				// Get room ID created by the server
-				roomID := res.RoomID
+				// Get network ID created by the server
+				networkID := res.NetworkID
 
-				if roomID != "" {
-					// Save room to database
-					err := rw.SaveRoom(roomID, name, password)
+				if networkID != "" {
+					// Save network to database
+					err := rw.SaveNetwork(networkID, name, password)
 					if err != nil {
-						log.Printf("Error saving room to database: %v", err)
+						log.Printf("Error saving network to database: %v", err)
 					}
 
-					// Show success dialog with room ID
-					roomIDEntry := widget.NewEntry()
-					roomIDEntry.Text = roomID
-					roomIDEntry.Disable()
+					// Show success dialog with network ID
+					networkIDEntry := widget.NewEntry()
+					networkIDEntry.Text = networkID
+					networkIDEntry.Disable()
 
 					content := container.NewVBox(
 						widget.NewLabel("Network created successfully!"),
 						widget.NewLabel(""),
 						widget.NewLabel("Network ID (share this with friends):"),
-						roomIDEntry,
+						networkIDEntry,
 						widget.NewButton("Copy to Clipboard", func() {
-							rw.Window.Clipboard().SetContent(roomID)
+							rw.BaseWindow.Window.Clipboard().SetContent(networkID)
 							dialog.ShowInformation("Copied", "Network ID copied to clipboard", rw.Window)
 						}),
 					)
 
-					successDialog := dialog.NewCustom("Success", "Close", content, rw.Window)
+					successDialog := dialog.NewCustom("Success", "Close", content, rw.BaseWindow.Window)
 					successDialog.Show()
 
 					// Close the create window after showing success
-					rw.isOpen = false
-					globalRoomWindow = nil
-					rw.Window.Close()
+					rw.BaseWindow.Close()
 				} else {
-					// If roomID is empty, it's likely an error occurred but wasn't caught
-					dialog.ShowError(errors.New("failed to create network: no network ID returned"), rw.Window)
+					// If networkID is empty, it's likely an error occurred but wasn't caught
+					dialog.ShowError(errors.New("failed to create network: no network ID returned"), rw.BaseWindow.Window)
 				}
 			}()
 		}()
 	})
 
 	cancelButton := widget.NewButtonWithIcon("Cancel", theme.CancelIcon(), func() {
-		rw.isOpen = false
-		globalRoomWindow = nil
-		rw.Window.Close()
+		rw.BaseWindow.Close()
 	})
 
 	// Style buttons
@@ -198,9 +189,9 @@ func (rw *RoomWindow) Show(validatePassword func(string) bool, configurePassword
 		container.NewPadded(buttonContainer),
 	)
 
-	rw.Window.SetContent(content)
-	rw.Window.Show()
+	rw.BaseWindow.SetContent(content)
+	rw.BaseWindow.Show()
 
 	// Set focus on the name field when window opens
-	rw.Window.Canvas().Focus(nameEntry)
+	rw.BaseWindow.Window.Canvas().Focus(nameEntry)
 }

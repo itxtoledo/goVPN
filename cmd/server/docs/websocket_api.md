@@ -1,22 +1,22 @@
 # GoVPN WebSocket Server API Documentation
 
-This document describes the WebSocket API for the GoVPN server, allowing developers to implement compatible clients in any programming language. The server provides a signaling mechanism for establishing peer-to-peer VPN connections between clients.
+This document describes the WebSocket API for the GoVPN server, allowing developers to implement compatible clients in any programming language. The server provides a signaling mechanism for establishing computer-to-computer VPN connections between clients.
 
 ## Table of Contents
 
 1. [Connection Establishment](#connection-establishment)
 2. [Message Format](#message-format)
 3. [Authentication and Security](#authentication-and-security)
-4. [Room Operations](#room-operations)
-   - [Creating a Room](#creating-a-room)
-   - [Joining a Room](#joining-a-room)
-   - [Leaving a Room](#leaving-a-room)
-   - [Renaming a Room](#renaming-a-room)
-   - [Deleting a Room](#deleting-a-room)
-   - [Connecting to a Previously Joined Room](#connecting-to-a-previously-joined-room)
-   - [Disconnecting from a Room](#disconnecting-from-a-room)
-5. [User Management](#user-management)
-   - [Kicking a User](#kicking-a-user)
+4. [Network Operations](#network-operations)
+   - [Creating a Network](#creating-a-network)
+   - [Joining a Network](#joining-a-network)
+   - [Leaving a Network](#leaving-a-network)
+   - [Renaming a Network](#renaming-a-network)
+   - [Deleting a Network](#deleting-a-network)
+   - [Connecting to a Previously Joined Network](#connecting-to-a-previously-joined-network)
+   - [Disconnecting from a Network](#disconnecting-from-a-network)
+5. [Computer Management](#computer-management)
+   - [Kicking a Computer](#kicking-a-computer)
 6. [Connection Management](#connection-management)
    - [Ping/Pong](#pingpong)
 7. [WebRTC Signaling](#webrtc-signaling)
@@ -26,7 +26,7 @@ This document describes the WebSocket API for the GoVPN server, allowing develop
 8. [Error Handling](#error-handling)
 9. [Message ID Tracking](#message-id-tracking)
 10. [Rate Limiting](#rate-limiting)
-11. [Room Expiration](#room-expiration)
+11. [Network Expiration](#network-expiration)
 
 ## Connection Establishment
 
@@ -62,65 +62,65 @@ The GoVPN system uses a message format that encapsulates all communications:
 
 ### Client to Server Message Types
 
-- `CreateRoom`: Create a new VPN room
-- `JoinRoom`: Join an existing room
-- `ConnectRoom`: Connect to a previously joined room without providing password again
-- `DisconnectRoom`: Temporarily disconnect from a room without leaving it
-- `LeaveRoom`: Leave a room
+- `CreateNetwork`: Create a new VPN network
+- `JoinNetwork`: Join an existing network
+- `ConnectNetwork`: Connect to a previously joined network without providing password again
+- `DisconnectNetwork`: Temporarily disconnect from a network without leaving it
+- `LeaveNetwork`: Leave a network
 - `Ping`: Check connection and measure latency
-- `Offer`: Send a WebRTC offer to a peer
-- `Answer`: Send a WebRTC answer to a peer
-- `Candidate`: Send an ICE candidate to a peer
-- `Kick`: Kick a user from a room (room owner only)
-- `Rename`: Rename a room (room owner only)
+- `Offer`: Send a WebRTC offer to a computer
+- `Answer`: Send a WebRTC answer to a computer
+- `Candidate`: Send an ICE candidate to a computer
+- `Kick`: Kick a computer from a network (network owner only)
+- `Rename`: Rename a network (network owner only)
 
 ### Server to Client Message Types
 
 - `Error`: An error occurred
-- `RoomCreated`: A room was successfully created
-- `RoomJoined`: Successfully joined a room
-- `RoomConnected`: Successfully connected to a previously joined room  
-- `RoomDisconnected`: Successfully disconnected from a room (but still a member)
-- `RoomDeleted`: A room was deleted
-- `RoomRenamed`: A room was renamed
-- `PeerJoined`: A new peer joined the room
-- `PeerLeft`: A peer left the room
-- `PeerConnected`: A peer connected to the room (after previously joining)
-- `PeerDisconnected`: A peer disconnected from the room (without leaving)
-- `Kicked`: You were kicked from a room
-- `KickSuccess`: Successfully kicked a user
-- `RenameSuccess`: Successfully renamed a room
-- `DeleteSuccess`: Successfully deleted a room
-- `LeaveRoomSuccess`: Successfully left a room
+- `NetworkCreated`: A network was successfully created
+- `NetworkJoined`: Successfully joined a network
+- `NetworkConnected`: Successfully connected to a previously joined network  
+- `NetworkDisconnected`: Successfully disconnected from a network (but still a member)
+- `NetworkDeleted`: A network was deleted
+- `NetworkRenamed`: A network was renamed
+- `ComputerJoined`: A new computer joined the network
+- `ComputerLeft`: A computer left the network
+- `ComputerConnected`: A computer connected to the network (after previously joining)
+- `ComputerDisconnected`: A computer disconnected from the network (without leaving)
+- `Kicked`: You were kicked from a network
+- `KickSuccess`: Successfully kicked a computer
+- `RenameSuccess`: Successfully renamed a network
+- `DeleteSuccess`: Successfully deleted a network
+- `LeaveNetworkSuccess`: Successfully left a network
 
 ## Authentication and Security
 
-The server uses Ed25519 key pairs for room ownership verification and client authentication. All messages that require authentication must include the client's public key in the payload. The client that creates a room must provide its public key during room creation. Any operations that require room ownership (such as kicking users, renaming, or deleting the room) must be performed using the same public key used to create the room.
+The server uses Ed25519 key pairs for network ownership verification and client authentication. All messages that require authentication must include the client's public key in the payload. The client that creates a network must provide its public key during network creation. Any operations that require network ownership (such as kicking computers, renaming, or deleting the network) must be performed using the same public key used to create the network.
 
 ### Password Requirements
 
-Room passwords must match the following pattern: exactly 4 numeric digits (e.g., "1234").
+Network passwords must match the following pattern: exactly 4 numeric digits (e.g., "1234").
 
-## Room Operations
+## Network Operations
 
-### Creating a Room
+### Creating a Network
 
 **Request (ClientMessage):**
 
 ```json
 {
   "message_id": "<unique-message-id>",
-  "type": "CreateRoom",
+  "type": "CreateNetwork",
   "payload": {
-    "room_name": "My VPN Room",
+    "network_name": "My VPN Network",
     "password": "1234",
     "public_key": "<base64-encoded-public-key>"
   }
 }
 ```
 
-- `room_name`: A name for the room
-- `password`: A password for the room (must be 4 digits)
+- `network_name`: A name for the network
+- `password`: A password for the network (must be 4 digits)
 - `public_key`: Base64-encoded Ed25519 public key
 
 **Response (Success - ServerMessage):**
@@ -128,10 +128,10 @@ Room passwords must match the following pattern: exactly 4 numeric digits (e.g.,
 ```json
 {
   "message_id": "<same-message-id-from-request>",
-  "type": "RoomCreated",
+  "type": "NetworkCreated",
   "payload": {
-    "room_id": "abc123",
-    "room_name": "My VPN Room",
+    "network_id": "abc123",
+    "network_name": "My VPN Network",
     "password": "1234",
     "public_key": "<base64-encoded-public-key>"
   }
@@ -151,57 +151,57 @@ Room passwords must match the following pattern: exactly 4 numeric digits (e.g.,
 ```
 
 Common error messages include:
-- "Room name, password, and public key are required"
+- "Network name, password, and public key are required"
 - "Password does not match required pattern" 
-- "This public key has already created room: {roomID}"
-- "Room ID conflict, please try again"
+- "This public key has already created network: {networkID}"
+- "Network ID conflict, please try again"
 - "Invalid public key format"
-- "Error creating room in database"
+- "Error creating network in database"
 
-### Joining a Room
+### Joining a Network
 
 **Request (ClientMessage):**
 
 ```json
 {
   "message_id": "<unique-message-id>",
-  "type": "JoinRoom",
+  "type": "JoinNetwork",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "password": "1234",
     "public_key": "<base64-encoded-public-key>",
-    "username": "User1"
+    "computername": "Computer1"
   }
 }
 ```
 
-- `room_id`: ID of the room to join
-- `password`: Password for the room
+- `network_id`: ID of the network to join
+- `password`: Password for the network
 - `public_key`: Base64-encoded Ed25519 public key
-- `username`: Optional username to display
+- `computername`: Optional computername to display
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
   "message_id": "<same-message-id-from-request>",
-  "type": "RoomJoined",
+  "type": "NetworkJoined",
   "payload": {
-    "room_id": "abc123",
-    "room_name": "My VPN Room"
+    "network_id": "abc123",
+    "network_name": "My VPN Network"
   }
 }
 ```
 
-**Additional Messages (to all users in the room - ServerMessage):**
+**Additional Messages (to all computers in the network - ServerMessage):**
 
 ```json
 {
-  "type": "PeerJoined",
+  "type": "ComputerJoined",
   "payload": {
-    "room_id": "abc123",
-    "public_key": "<new-user-public-key>",
-    "username": "User1"
+    "network_id": "abc123",
+    "public_key": "<new-computer-public-key>",
+    "computername": "Computer1"
   }
 }
 ```
@@ -219,28 +219,28 @@ Common error messages include:
 ```
 
 Common error messages include:
-- "Room does not exist"
+- "Network does not exist"
 - "Incorrect password"
 - "Public key is required"
-- "Room is full"
+- "Network is full"
 - "Rate limit exceeded. Please try again later."
 
-### Leaving a Room
+### Leaving a Network
 
 **Request (ClientMessage):**
 
 ```json
 {
   "message_id": "<unique-message-id>",
-  "type": "LeaveRoom",
+  "type": "LeaveNetwork",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "public_key": "<base64-encoded-public-key>"
   }
 }
 ```
 
-- `room_id`: ID of the room to leave (if not provided, the server will use the room ID associated with the connection)
+- `network_id`: ID of the network to leave (if not provided, the server will use the network ID associated with the connection)
 - `public_key`: Base64-encoded Ed25519 public key
 
 **Response (Success - ServerMessage):**
@@ -248,27 +248,27 @@ Common error messages include:
 ```json
 {
   "message_id": "<same-message-id-from-request>",
-  "type": "LeaveRoom",
+  "type": "LeaveNetwork",
   "payload": {
-    "room_id": "abc123"
+    "network_id": "abc123"
   }
 }
 ```
 
-**Note:** If the room owner leaves, the room will be deleted and all other users will be kicked with a notification.
+**Note:** If the network owner leaves, the network will be deleted and all other computers will be kicked with a notification.
 
-**Message to Other Users (when owner leaves - ServerMessage):**
+**Message to Other Computers (when owner leaves - ServerMessage):**
 
 ```json
 {
-  "type": "RoomDeleted",
+  "type": "NetworkDeleted",
   "payload": {
-    "room_id": "abc123"
+    "network_id": "abc123"
   }
 }
 ```
 
-### Renaming a Room
+### Renaming a Network
 
 **Request (ClientMessage):**
 
@@ -277,15 +277,15 @@ Common error messages include:
   "message_id": "<unique-message-id>",
   "type": "Rename",
   "payload": {
-    "room_id": "abc123",
-    "room_name": "New Room Name",
+    "network_id": "abc123",
+    "network_name": "New Network Name",
     "public_key": "<base64-encoded-public-key>"
   }
 }
 ```
 
-- `room_id`: ID of the room to rename
-- `room_name`: New name for the room
+- `network_id`: ID of the network to rename
+- `network_name`: New name for the network
 - `public_key`: Base64-encoded Ed25519 public key
 
 **Response (Success - ServerMessage):**
@@ -295,70 +295,70 @@ Common error messages include:
   "message_id": "<same-message-id-from-request>",
   "type": "RenameSuccess",
   "payload": {
-    "room_id": "abc123",
-    "room_name": "New Room Name"
+    "network_id": "abc123",
+    "network_name": "New Network Name"
   }
 }
 ```
 
-**Additional Messages (to all users in the room - ServerMessage):**
+**Additional Messages (to all computers in the network - ServerMessage):**
 
 ```json
 {
-  "type": "RoomRenamed",
+  "type": "NetworkRenamed",
   "payload": {
-    "room_id": "abc123",
-    "room_name": "New Room Name"
+    "network_id": "abc123",
+    "network_name": "New Network Name"
   }
 }
 ```
 
-### Deleting a Room
+### Deleting a Network
 
-Room deletion happens automatically when the owner leaves a room. There's no explicit delete message type needed.
+Network deletion happens automatically when the owner leaves a network. There's no explicit delete message type needed.
 
-### Connecting to a Previously Joined Room
+### Connecting to a Previously Joined Network
 
 **Request (ClientMessage):**
 
 ```json
 {
   "message_id": "<unique-message-id>",
-  "type": "ConnectRoom",
+  "type": "ConnectNetwork",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "public_key": "<base64-encoded-public-key>",
-    "username": "User1"
+    "computername": "Computer1"
   }
 }
 ```
 
-- `room_id`: ID of the room to connect to
+- `network_id`: ID of the network to connect to
 - `public_key`: Base64-encoded Ed25519 public key
-- `username`: Optional username to display
+- `computername`: Optional computername to display
 
 **Response (Success - ServerMessage):**
 
 ```json
 {
   "message_id": "<same-message-id-from-request>",
-  "type": "RoomConnected",
+  "type": "NetworkConnected",
   "payload": {
-    "room_id": "abc123",
-    "room_name": "My VPN Room"
+    "network_id": "abc123",
+    "network_name": "My VPN Network"
   }
 }
 ```
 
-**Additional Messages (to all users in the room - ServerMessage):**
+**Additional Messages (to all computers in the network - ServerMessage):**
 
 ```json
 {
-  "type": "PeerConnected",
+  "type": "ComputerConnected",
   "payload": {
-    "room_id": "abc123",
-    "public_key": "<user-public-key>",
-    "username": "User1"
+    "network_id": "abc123",
+    "public_key": "<computer-public-key>",
+    "computername": "Computer1"
   }
 }
 ```
@@ -376,26 +376,26 @@ Room deletion happens automatically when the owner leaves a room. There's no exp
 ```
 
 Common error messages include:
-- "Room does not exist"
+- "Network does not exist"
 - "Public key is required"
-- "Room is full"
+- "Network is full"
 
-### Disconnecting from a Room (without leaving it)
+### Disconnecting from a Network (without leaving it)
 
 **Request (ClientMessage):**
 
 ```json
 {
   "message_id": "<unique-message-id>",
-  "type": "DisconnectRoom",
+  "type": "DisconnectNetwork",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "public_key": "<base64-encoded-public-key>"
   }
 }
 ```
 
-- `room_id`: ID of the room to disconnect from (if not provided, the server will use the room ID associated with the connection)
+- `network_id`: ID of the network to disconnect from (if not provided, the server will use the network ID associated with the connection)
 - `public_key`: Base64-encoded Ed25519 public key
 
 **Response (Success - ServerMessage):**
@@ -403,28 +403,28 @@ Common error messages include:
 ```json
 {
   "message_id": "<same-message-id-from-request>",
-  "type": "RoomDisconnected",
+  "type": "NetworkDisconnected",
   "payload": {
-    "room_id": "abc123"
+    "network_id": "abc123"
   }
 }
 ```
 
-**Additional Messages (to all users in the room - ServerMessage):**
+**Additional Messages (to all computers in the network - ServerMessage):**
 
 ```json
 {
-  "type": "PeerDisconnected",
+  "type": "ComputerDisconnected",
   "payload": {
-    "room_id": "abc123",
-    "public_key": "<disconnected-user-public-key>"
+    "network_id": "abc123",
+    "public_key": "<disconnected-computer-public-key>"
   }
 }
 ```
 
-## User Management
+## Computer Management
 
-### Kicking a User
+### Kicking a Computer
 
 **Request (ClientMessage):**
 
@@ -433,15 +433,15 @@ Common error messages include:
   "message_id": "<unique-message-id>",
   "type": "Kick",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "target_id": "<target-client-connection-id>",
     "public_key": "<base64-encoded-public-key>"
   }
 }
 ```
 
-- `room_id`: ID of the room
-- `target_id`: Connection ID of the user to kick
+- `network_id`: ID of the network
+- `target_id`: Connection ID of the computer to kick
 - `public_key`: Base64-encoded Ed25519 public key
 
 **Response (Success - ServerMessage):**
@@ -451,19 +451,19 @@ Common error messages include:
   "message_id": "<same-message-id-from-request>",
   "type": "KickSuccess",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "target_id": "<target-client-connection-id>"
   }
 }
 ```
 
-**Message to Kicked User (ServerMessage):**
+**Message to Kicked Computer (ServerMessage):**
 
 ```json
 {
   "type": "Kicked",
   "payload": {
-    "room_id": "abc123"
+    "network_id": "abc123"
   }
 }
 ```
@@ -521,7 +521,7 @@ The ping/pong mechanism allows clients to verify their connection to the server 
   "message_id": "<unique-message-id>",
   "type": "Offer",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "public_key": "<base64-encoded-public-key>",
     "destination_id": "<destination-connection-id>",
     "offer": "<webrtc-offer-string>"
@@ -529,9 +529,9 @@ The ping/pong mechanism allows clients to verify their connection to the server 
 }
 ```
 
-- `room_id`: ID of the room
+- `network_id`: ID of the network
 - `public_key`: Sender's public key
-- `destination_id`: Connection ID of the destination user
+- `destination_id`: Connection ID of the destination computer
 - `offer`: WebRTC offer in serialized format
 
 ### Sending Answers
@@ -543,7 +543,7 @@ The ping/pong mechanism allows clients to verify their connection to the server 
   "message_id": "<unique-message-id>",
   "type": "Answer",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "public_key": "<base64-encoded-public-key>",
     "destination_id": "<destination-connection-id>",
     "answer": "<webrtc-answer-string>"
@@ -551,9 +551,9 @@ The ping/pong mechanism allows clients to verify their connection to the server 
 }
 ```
 
-- `room_id`: ID of the room
+- `network_id`: ID of the network
 - `public_key`: Sender's public key
-- `destination_id`: Connection ID of the destination user
+- `destination_id`: Connection ID of the destination computer
 - `answer`: WebRTC answer in serialized format
 
 ### Exchanging ICE Candidates
@@ -565,7 +565,7 @@ The ping/pong mechanism allows clients to verify their connection to the server 
   "message_id": "<unique-message-id>",
   "type": "Candidate",
   "payload": {
-    "room_id": "abc123",
+    "network_id": "abc123",
     "public_key": "<base64-encoded-public-key>",
     "destination_id": "<destination-connection-id>",
     "candidate": "<webrtc-ice-candidate-string>"
@@ -573,9 +573,9 @@ The ping/pong mechanism allows clients to verify their connection to the server 
 }
 ```
 
-- `room_id`: ID of the room
+- `network_id`: ID of the network
 - `public_key`: Sender's public key
-- `destination_id`: Connection ID of the destination user
+- `destination_id`: Connection ID of the destination computer
 - `candidate`: WebRTC ICE candidate in serialized format
 
 ## Error Handling
@@ -593,9 +593,9 @@ Error messages have the following format (ServerMessage):
 ```
 
 Common error conditions include:
-- Invalid room ID
+- Invalid network ID
 - Invalid password
-- Room is full
+- Network is full
 - Rate limit exceeded
 - Invalid public key format
 - Missing required fields
@@ -616,11 +616,11 @@ To track message responses, include a unique `message_id` field in your requests
 
 ## Rate Limiting
 
-The server implements rate limiting to prevent abuse. The default rate limiting is 3 requests per minute for room creation and joining operations. Clients that exceed the rate limit will receive an `Error` message indicating that the rate limit has been exceeded.
+The server implements rate limiting to prevent abuse. The default rate limiting is 3 requests per minute for network creation and joining operations. Clients that exceed the rate limit will receive an `Error` message indicating that the rate limit has been exceeded.
 
-## Room Expiration
+## Network Expiration
 
-Rooms will automatically expire after a period of inactivity (default: 30 days). The server periodically cleans up inactive rooms. Room activity is updated whenever a client joins or performs actions in the room.
+Networks will automatically expire after a period of inactivity (default: 30 days). The server periodically cleans up inactive networks. Network activity is updated whenever a client joins or performs actions in the network.
 
 ## Implementation Example (Pseudocode)
 
@@ -632,17 +632,17 @@ publicKeyBase64 = base64Encode(publicKey)
 // Connect to the WebSocket server
 websocket = new WebSocket("ws://server:port/ws")
 
-// Create a room
+// Create a network
 messageID = generateUUID()
 payload = {
-  room_name: "My Room",
+  network_name: "My Network",
   password: "1234",
   public_key: publicKeyBase64
 }
 
 message = {
   message_id: messageID,
-  type: "CreateRoom",
+  type: "CreateNetwork",
   payload: JSON.stringify(payload)
 }
 
@@ -653,15 +653,15 @@ websocket.onMessage = function(event) {
   const serverMessage = JSON.parse(event.data)
   
   switch(serverMessage.type) {
-    case "RoomCreated":
+    case "NetworkCreated":
       const responsePayload = JSON.parse(serverMessage.payload)
-      console.log("Room created:", responsePayload.room_id)
+      console.log("Network created:", responsePayload.network_id)
       break
       
-    case "PeerJoined":
-      const peerPayload = JSON.parse(serverMessage.payload)
-      console.log("Peer joined:", peerPayload.public_key)
-      initiateWebRTCConnection(peerPayload.public_key)
+    case "ComputerJoined":
+      const computerPayload = JSON.parse(serverMessage.payload)
+      console.log("Computer joined:", computerPayload.public_key)
+      initiateWebRTCConnection(computerPayload.public_key)
       break
       
     case "Ping":

@@ -1,10 +1,14 @@
 # GoVPN
 
+**🚧 WORK IN PROGRESS 🚧**
+
+This project is currently under active development. It is not yet functional, and there are no stable releases available.
+
 A Virtual Local Area Network (VLAN) solution for games that allows players to connect as if they were on the same local network.
 
 ## Features
 
-- Create and join virtual game rooms
+- Create and join virtual game networks
 - NAT traversal using STUN/TURN for P2P connections
 - End-to-end encryption
 - Cross-platform support (Windows, macOS, Linux)
@@ -23,7 +27,7 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
   - Secure identifier generation
 
 - **libs/models**: Defines data structures shared between client and server:
-  - Room: Represents a virtual game room
+  - Network: Represents a virtual game network
   - Message: Defines the format of messages exchanged via WebSocket
   - NetworkPacket: Structure for network packets tunneled through the VPN
   - ClientInfo: Information about connected clients
@@ -36,7 +40,7 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
 ### System Components
 
 - **cmd/server**: Signaling server that facilitates:
-  - Room creation and management
+  - Network creation and management
   - Operation authentication via Ed25519 keys
   - Establishment of connections between clients
   - Data persistence in Supabase
@@ -44,7 +48,7 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
   - SupabaseManager: Interface with Supabase database
 
 - **cmd/client**: Client application with a graphical interface that allows:
-  - Creating and joining game rooms
+  - Creating and joining game networks
   - Managing P2P connections
   - Local configuration storage in SQLite
   - Graphical interface built with Fyne (v2.0+)
@@ -52,9 +56,52 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
 
 ### Communication Flow
 
+Here's a simplified diagram of the client-server communication flow:
+
+```mermaid
+sequenceDiagram
+    participant ClientA
+    participant ClientB
+    participant Server
+    participant STUN/TURN
+
+    ClientA->>Server: Connect (WebSocket)
+    ClientB->>Server: Connect (WebSocket)
+
+    Server-->>ClientA: Connection Acknowledged
+    Server-->>ClientB: Connection Acknowledged
+
+    ClientA->>Server: Create/Join Network Request
+    Server->>ClientA: Network Confirmation / Peer List
+
+    ClientB->>Server: Join Network Request
+    Server->>ClientB: Network Confirmation / Peer List
+
+    ClientA->>Server: Send Offer (WebRTC SDP) to ClientB
+    Server-->>ClientB: Relay Offer from ClientA
+
+    ClientB->>Server: Send Answer (WebRTC SDP) to ClientA
+    Server-->>ClientA: Relay Answer from ClientB
+
+    ClientA->>STUN/TURN: Discover Public IP
+    STUN/TURN-->>ClientA: Public IP
+
+    ClientB->>STUN/TURN: Discover Public IP
+    STUN/TURN-->>ClientB: Public IP
+
+    ClientA->>Server: Send ICE Candidates to ClientB
+    Server-->>ClientB: Relay ICE Candidates from ClientA
+
+    ClientB->>Server: Send ICE Candidates to ClientA
+    Server-->>ClientA: Relay ICE Candidates from ClientB
+
+    Note over ClientA,ClientB: P2P Connection Established
+    ClientA<->>ClientB: Direct Encrypted Communication (VPN Tunnel)
+```
+
 1. **Signaling Phase**:
    - The server acts as an intermediary to establish initial connections
-   - Clients authenticate and exchange information about available rooms
+   - Clients authenticate and exchange information about available networks
    
 2. **P2P Connection Establishment**:
    - Exchange of offers, answers, and candidates via server
@@ -63,7 +110,7 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
 
 3. **Direct Communication**:
    - Once established, communication occurs directly between clients
-   - Data is end-to-end encrypted (key derived from room password)
+   - Data is end-to-end encrypted (key derived from network password)
 
 4. **Virtual Network**:
    - Each client receives a virtual IP address (format 10.0.0.x)
@@ -95,9 +142,9 @@ migrations/                      # SQL scripts for the database
 
 ### Main Client Components
 
-- **UIManager**: Manages the entire user interface
+- **UIManager**: Manages the entire computer interface
 - **VPNClient**: Controls all VPN connection logic
-- **NetworkManager**: Manages network connections and rooms
+- **NetworkManager**: Manages network connections and networks
 - **SignalingClient**: Communicates with the signaling server
 - **DatabaseManager**: Manages local storage using SQLite
 - **ConfigManager**: Manages application settings
@@ -105,9 +152,9 @@ migrations/                      # SQL scripts for the database
 
 ### Main Server Components
 
-- **WebSocketServer**: Manages WebSocket connections, rooms, and clients
+- **WebSocketServer**: Manages WebSocket connections, networks, and clients
 - **SupabaseManager**: Interface with Supabase database
-- **Room Management**: Manages room creation, deletion, and modification
+- **Network Management**: Manages network creation, deletion, and modification
 - **Authentication**: Authentication based on Ed25519 keys
 - **Connection Management**: Manages the connection lifecycle
 
@@ -118,18 +165,18 @@ The server implements a robust WebSocket API for communication with clients. Ful
 ### Main Message Types
 
 - **Client to Server**:
-  - `CreateRoom`: Creates a new room
-  - `JoinRoom`: Joins an existing room
-  - `LeaveRoom`: Leaves a room
-  - `Kick`: Kicks a user from a room
-  - `Rename`: Renames a room
+  - `CreateNetwork`: Creates a new network
+  - `JoinNetwork`: Joins an existing network
+  - `LeaveNetwork`: Leaves a network
+  - `Kick`: Kicks a computer from a network
+  - `Rename`: Renames a network
 
 - **Server to Client**:
-  - `RoomCreated`: Room creation confirmation
-  - `RoomJoined`: Room join confirmation
-  - `PeerJoined`: Notification of a new peer in the room
-  - `PeerLeft`: Notification of a peer leaving the room
-  - `RoomDeleted`: Notification of room deletion
+  - `NetworkCreated`: Network creation confirmation
+  - `NetworkJoined`: Network join confirmation
+  - `PeerJoined`: Notification of a new peer in the network
+  - `PeerLeft`: Notification of a peer leaving the network
+  - `NetworkDeleted`: Notification of network deletion
 
 ## Server Environment Variables
 
@@ -137,18 +184,18 @@ The server implements a robust WebSocket API for communication with clients. Ful
 |----------|-------------|---------|
 | `PORT` | Port for the server to listen on | `8080` |
 | `ALLOW_ALL_ORIGINS` | Allow WebSocket connections from any origin | `true` |
-| `PASSWORD_PATTERN` | Regex to validate room passwords | `^\d{4}$` |
-| `MAX_ROOMS` | Maximum number of allowed rooms | `100` |
-| `MAX_CLIENTS_PER_ROOM` | Maximum number of clients in a room | `10` |
+| `PASSWORD_PATTERN` | Regex to validate network passwords | `^\d{4}$` |
+| `MAX_NETWORKS` | Maximum number of allowed networks | `100` |
+| `MAX_CLIENTS_PER_NETWORK` | Maximum number of clients in a network | `10` |
 | `LOG_LEVEL` | Log level (info, debug) | `info` |
 | `IDLE_TIMEOUT_SECONDS` | Timeout for inactive connections in seconds | `60` |
 | `PING_INTERVAL_SECONDS` | WebSocket ping interval in seconds | `30` |
 | `READ_BUFFER_SIZE` | WebSocket read buffer size | `1024` |
 | `WRITE_BUFFER_SIZE` | WebSocket write buffer size | `1024` |
-| `SUPABASE_URL` | Supabase URL for room persistence (required) | `""` |
+| `SUPABASE_URL` | Supabase URL for network persistence (required) | `""` |
 | `SUPABASE_KEY` | Supabase API key for authentication (required) | `""` |
-| `ROOM_EXPIRY_DAYS` | Days after which inactive rooms are deleted | `7` |
-| `CLEANUP_INTERVAL_HOURS` | Interval for cleaning up expired rooms in hours | `24` |
+| `NETWORK_EXPIRY_DAYS` | Days after which inactive networks are deleted | `7` |
+| `CLEANUP_INTERVAL_HOURS` | Interval for cleaning up expired networks in hours | `24` |
 
 **Note:** `SUPABASE_URL` and `SUPABASE_KEY` are required for proper server operation.
 
@@ -156,17 +203,17 @@ The server implements a robust WebSocket API for communication with clients. Ful
 
 The GoVPN client features a graphical interface built with Fyne 2.0+ with a fixed size of 300x600 pixels. Main features:
 
-- **Home Tab**: Displays saved rooms and connection options
+- **Home Tab**: Displays saved networks and connection options
 - **Settings Tab**: Application settings
-- **Network List**: List of saved rooms with connection options
-- **Dialogs**: For creating/joining rooms and managing connections
+- **Network List**: List of saved networks with connection options
+- **Dialogs**: For creating/joining networks and managing connections
 
 ### Local Storage
 
 The client stores data locally using SQLite, including:
 
-- User settings
-- Saved rooms and passwords
+- Computer settings
+- Saved networks and passwords
 - Connection history
 - Cryptographic keys
 
@@ -279,7 +326,7 @@ cd cmd/client && go run .
 ## Security Features
 
 - Authentication based on Ed25519 keys
-- Validated room passwords (default: 4 numeric digits)
+- Validated network passwords (default: 4 numeric digits)
 - Encrypted communication between client and server
 - Secure local credential persistence
 

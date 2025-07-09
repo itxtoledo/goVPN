@@ -74,7 +74,7 @@ func (s *SignalingClient) Connect(serverAddress string) error {
 
 	// Configurar headers para o handshake inicial
 	headers := make(map[string][]string)
-	headers["User-Agent"] = []string{"goVPN-Client/1.0"}
+	headers["Computer-Agent"] = []string{"goVPN-Client/1.0"}
 
 	// Adicionar identificador do cliente usando a chave pública armazenada diretamente
 	if s.PublicKeyStr != "" {
@@ -225,60 +225,60 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 // parseResponse parses the response payload based on the request type
 func (s *SignalingClient) parseResponse(requestType models.MessageType, response models.SignalingMessage) (interface{}, error) {
 	switch requestType {
-	case models.TypeCreateRoom:
-		if response.Type == models.TypeRoomCreated {
-			var resp models.CreateRoomResponse
+	case models.TypeCreateNetwork:
+		if response.Type == models.TypeNetworkCreated {
+			var resp models.CreateNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal create room response: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal create network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeJoinRoom:
-		if response.Type == models.TypeRoomJoined {
-			var resp models.JoinRoomResponse
+	case models.TypeJoinNetwork:
+		if response.Type == models.TypeNetworkJoined {
+			var resp models.JoinNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal join room response: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal join network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeConnectRoom:
-		if response.Type == models.TypeRoomConnected {
-			var resp models.ConnectRoomResponse
+	case models.TypeConnectNetwork:
+		if response.Type == models.TypeNetworkConnected {
+			var resp models.ConnectNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal connect room response: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal connect network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeDisconnectRoom:
-		if response.Type == models.TypeDisconnectRoom || response.Type == models.TypeRoomDisconnected {
-			var resp models.DisconnectRoomResponse
+	case models.TypeDisconnectNetwork:
+		if response.Type == models.TypeDisconnectNetwork || response.Type == models.TypeNetworkDisconnected {
+			var resp models.DisconnectNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				// If it fails, it might be because the server is using a different format
-				// Try to extract just the roomID
-				var roomData map[string]interface{}
-				if jsonErr := json.Unmarshal(response.Payload, &roomData); jsonErr != nil {
-					return nil, fmt.Errorf("failed to unmarshal disconnect room response: %v", err)
+				// Try to extract just the networkID
+				var networkData map[string]interface{}
+				if jsonErr := json.Unmarshal(response.Payload, &networkData); jsonErr != nil {
+					return nil, fmt.Errorf("failed to unmarshal disconnect network response: %v", err)
 				}
 
-				// Extract room ID from the map and return it
-				if roomID, ok := roomData["room_id"].(string); ok {
+				// Extract network ID from the map and return it
+				if networkID, ok := networkData["network_id"].(string); ok {
 					return map[string]interface{}{
-						"room_id": roomID,
+						"network_id": networkID,
 					}, nil
 				}
-				return nil, fmt.Errorf("failed to find room_id in response: %v", err)
+				return nil, fmt.Errorf("failed to find network_id in response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeLeaveRoom:
-		if response.Type == models.TypeLeaveRoom {
-			var resp models.LeaveRoomResponse
+	case models.TypeLeaveNetwork:
+		if response.Type == models.TypeLeaveNetwork {
+			var resp models.LeaveNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal leave room response: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal leave network response: %v", err)
 			}
 			return resp, nil
 		}
@@ -301,11 +301,11 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 			return resp, nil
 		}
 
-	case models.TypeGetUserRooms:
-		if response.Type == models.TypeUserRooms {
-			var resp models.UserRoomsResponse
+	case models.TypeGetComputerNetworks:
+		if response.Type == models.TypeComputerNetworks {
+			var resp models.ComputerNetworksResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal user rooms response: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal computer networks response: %v", err)
 			}
 			return resp, nil
 		}
@@ -323,124 +323,124 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 	return genericResponse, nil
 }
 
-// CreateRoom cria uma nova sala no servidor
-func (s *SignalingClient) CreateRoom(name string, password string) (*models.CreateRoomResponse, error) {
+// CreateNetwork cria uma nova sala no servidor
+func (s *SignalingClient) CreateNetwork(name string, password string) (*models.CreateNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Creating room: %s", name)
+	log.Printf("Creating network: %s", name)
 
 	// Criar payload para a requisição
-	payload := &models.CreateRoomRequest{
+	payload := &models.CreateNetworkRequest{
 		BaseRequest: models.BaseRequest{},
-		RoomName:    name,
+		NetworkName: name,
 		Password:    password,
 	}
 
 	// Enviar solicitação de criação de sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeCreateRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeCreateNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.CreateRoomResponse); ok {
+	if resp, ok := response.(models.CreateNetworkResponse); ok {
 		return &resp, nil
 	}
 
 	return nil, errors.New("unexpected response type")
 }
 
-// JoinRoom entra em uma sala
-func (s *SignalingClient) JoinRoom(roomID string, password string, username string) (*models.JoinRoomResponse, error) {
+// JoinNetwork entra em uma sala
+func (s *SignalingClient) JoinNetwork(networkID string, password string, computername string) (*models.JoinNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Joining room: %s", roomID)
+	log.Printf("Joining network: %s", networkID)
 
-	// Criar payload para join room
-	payload := &models.JoinRoomRequest{
-		BaseRequest: models.BaseRequest{},
-		RoomID:      roomID,
-		Password:    password,
-		Username:    username,
+	// Criar payload para join network
+	payload := &models.JoinNetworkRequest{
+		BaseRequest:  models.BaseRequest{},
+		NetworkID:    networkID,
+		Password:     password,
+		ComputerName: computername,
 	}
 
 	// Enviar solicitação para entrar na sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeJoinRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeJoinNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.JoinRoomResponse); ok {
+	if resp, ok := response.(models.JoinNetworkResponse); ok {
 		return &resp, nil
 	}
 
 	return nil, errors.New("unexpected response type")
 }
 
-// ConnectRoom conecta a uma sala previamente associada
-func (s *SignalingClient) ConnectRoom(roomID string, username string) (*models.ConnectRoomResponse, error) {
+// ConnectNetwork conecta a uma sala previamente associada
+func (s *SignalingClient) ConnectNetwork(networkID string, computerName string) (*models.ConnectNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Connecting to room: %s", roomID)
+	log.Printf("Connecting to network: %s", networkID)
 
-	// Criar payload para connect room
-	payload := &models.ConnectRoomRequest{
-		BaseRequest: models.BaseRequest{},
-		RoomID:      roomID,
-		Username:    username,
+	// Criar payload para connect network
+	payload := &models.ConnectNetworkRequest{
+		BaseRequest:  models.BaseRequest{},
+		NetworkID:    networkID,
+		ComputerName: computerName,
 	}
 
 	// Enviar solicitação para conectar à sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeConnectRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeConnectNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.ConnectRoomResponse); ok {
+	if resp, ok := response.(models.ConnectNetworkResponse); ok {
 		return &resp, nil
 	}
 
 	return nil, errors.New("unexpected response type")
 }
 
-// DisconnectRoom desconecta de uma sala sem sair dela
-func (s *SignalingClient) DisconnectRoom(roomID string) (*models.DisconnectRoomResponse, error) {
+// DisconnectNetwork desconecta de uma sala sem sair dela
+func (s *SignalingClient) DisconnectNetwork(networkID string) (*models.DisconnectNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Disconnecting from room: %s", roomID)
+	log.Printf("Disconnecting from network: %s", networkID)
 
-	// Criar payload para disconnect room
-	payload := &models.DisconnectRoomRequest{
+	// Criar payload para disconnect network
+	payload := &models.DisconnectNetworkRequest{
 		BaseRequest: models.BaseRequest{},
-		RoomID:      roomID,
+		NetworkID:   networkID,
 	}
 
 	// Enviar solicitação para desconectar da sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeDisconnectRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeDisconnectNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	// Check if we got a map response (like from TypeRoomDisconnected)
+	// Check if we got a map response (like from TypeNetworkDisconnected)
 	if respMap, ok := response.(map[string]interface{}); ok {
-		// Extract room ID from the map
-		roomID, _ := respMap["room_id"].(string)
-		resp := models.DisconnectRoomResponse{
-			RoomID: roomID,
+		// Extract network ID from the map
+		networkID, _ := respMap["network_id"].(string)
+		resp := models.DisconnectNetworkResponse{
+			NetworkID: networkID,
 		}
 		return &resp, nil
-	} else if resp, ok := response.(models.DisconnectRoomResponse); ok {
+	} else if resp, ok := response.(models.DisconnectNetworkResponse); ok {
 		return &resp, nil
 	}
 
@@ -449,47 +449,47 @@ func (s *SignalingClient) DisconnectRoom(roomID string) (*models.DisconnectRoomR
 	return nil, errors.New("unexpected response type")
 }
 
-// LeaveRoom sai de uma sala
-func (s *SignalingClient) LeaveRoom(roomID string) (*models.LeaveRoomResponse, error) {
+// LeaveNetwork sai de uma sala
+func (s *SignalingClient) LeaveNetwork(networkID string) (*models.LeaveNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Leaving room: %s", roomID)
+	log.Printf("Leaving network: %s", networkID)
 
-	// Criar payload para leave room
-	payload := &models.LeaveRoomRequest{
+	// Criar payload para leave network
+	payload := &models.LeaveNetworkRequest{
 		BaseRequest: models.BaseRequest{},
-		RoomID:      roomID,
+		NetworkID:   networkID,
 	}
 
 	// Enviar solicitação para sair da sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeLeaveRoom, payload)
+	response, err := s.sendPackagedMessage(models.TypeLeaveNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.LeaveRoomResponse); ok {
+	if resp, ok := response.(models.LeaveNetworkResponse); ok {
 		return &resp, nil
 	}
 
 	return nil, errors.New("unexpected response type")
 }
 
-// RenameRoom renomeia uma sala (apenas o proprietário pode fazer isso)
-func (s *SignalingClient) RenameRoom(roomID string, newName string) (*models.RenameResponse, error) {
+// RenameNetwork renomeia uma sala (apenas o proprietário pode fazer isso)
+func (s *SignalingClient) RenameNetwork(networkID string, newName string) (*models.RenameResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Renaming room %s to %s", roomID, newName)
+	log.Printf("Renaming network %s to %s", networkID, newName)
 
-	// Criar payload para rename room
+	// Criar payload para rename network
 	payload := &models.RenameRequest{
 		BaseRequest: models.BaseRequest{},
-		RoomID:      roomID,
-		RoomName:    newName,
+		NetworkID:   networkID,
+		NetworkName: newName,
 	}
 
 	// Enviar solicitação para renomear a sala usando a função de empacotamento
@@ -506,18 +506,18 @@ func (s *SignalingClient) RenameRoom(roomID string, newName string) (*models.Ren
 	return nil, errors.New("unexpected response type")
 }
 
-// KickUser expulsa um usuário da sala (apenas o proprietário pode fazer isso)
-func (s *SignalingClient) KickUser(roomID string, targetID string) (*models.KickResponse, error) {
+// KickComputer expulsa um usuário da sala (apenas o proprietário pode fazer isso)
+func (s *SignalingClient) KickComputer(networkID string, targetID string) (*models.KickResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Kicking user %s from room %s", targetID, roomID)
+	log.Printf("Kicking computer %s from network %s", targetID, networkID)
 
-	// Criar payload para kick user
+	// Criar payload para kick computer
 	payload := &models.KickRequest{
 		BaseRequest: models.BaseRequest{},
-		RoomID:      roomID,
+		NetworkID:   networkID,
 		TargetID:    targetID,
 	}
 
@@ -614,44 +614,44 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 
-		case models.TypeRoomDisconnected:
+		case models.TypeNetworkDisconnected:
 			{
-				var response models.DisconnectRoomResponse
+				var response models.DisconnectNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal room disconnected response: %v", err)
+					log.Printf("Failed to unmarshal network disconnected response: %v", err)
 				} else {
-					log.Printf("Successfully disconnected from room: %s", response.RoomID)
-					// Handle client disconnecting from room
+					log.Printf("Successfully disconnected from network: %s", response.NetworkID)
+					// Handle client disconnecting from network
 					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// Clean up computers list when disconnecting from a room
+						// Clean up computers list when disconnecting from a network
 						s.VPNClient.NetworkManager.Computers = []Computer{}
-						// Notify the handler about the room disconnection
+						// Notify the handler about the network disconnection
 						if s.MessageHandler != nil {
-							s.MessageHandler(models.TypeRoomDisconnected, sigMsg.Payload)
+							s.MessageHandler(models.TypeNetworkDisconnected, sigMsg.Payload)
 						}
 					}
 				}
 			}
 
-		case models.TypeRoomJoined:
+		case models.TypeNetworkJoined:
 			{
-				var response models.JoinRoomResponse
+				var response models.JoinNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal room joined response: %v", err)
+					log.Printf("Failed to unmarshal network joined response: %v", err)
 				} else {
-					log.Printf("Successfully joined room: %s (%s)", response.RoomName, response.RoomID)
-					// Notify the handler about the room joined event
+					log.Printf("Successfully joined network: %s (%s)", response.NetworkName, response.NetworkID)
+					// Notify the handler about the network joined event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeRoomJoined, sigMsg.Payload)
+						s.MessageHandler(models.TypeNetworkJoined, sigMsg.Payload)
 					}
 
-					// Initialize computers list for the room
+					// Initialize computers list for the network
 					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// Initialize with just this user for now
+						// Initialize with just this computer for now
 						s.VPNClient.NetworkManager.Computers = []Computer{
 							{
 								ID:       s.VPNClient.PublicKeyStr,
-								Name:     s.VPNClient.Username,
+								Name:     s.VPNClient.ComputerName,
 								OwnerID:  s.VPNClient.PublicKeyStr,
 								IsOnline: true,
 							},
@@ -660,25 +660,25 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 
-		case models.TypeRoomCreated:
+		case models.TypeNetworkCreated:
 			{
-				var response models.CreateRoomResponse
+				var response models.CreateNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal room created response: %v", err)
+					log.Printf("Failed to unmarshal network created response: %v", err)
 				} else {
-					log.Printf("Successfully created room: %s (%s)", response.RoomName, response.RoomID)
-					// Notify the handler about the room created event
+					log.Printf("Successfully created network: %s (%s)", response.NetworkName, response.NetworkID)
+					// Notify the handler about the network created event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeRoomCreated, sigMsg.Payload)
+						s.MessageHandler(models.TypeNetworkCreated, sigMsg.Payload)
 					}
 
-					// Initialize computers list for the room
+					// Initialize computers list for the network
 					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// When creating a room, just add this user as the only member
+						// When creating a network, just add this computer as the only member
 						s.VPNClient.NetworkManager.Computers = []Computer{
 							{
 								ID:       s.VPNClient.PublicKeyStr,
-								Name:     s.VPNClient.Username,
+								Name:     s.VPNClient.ComputerName,
 								OwnerID:  s.VPNClient.PublicKeyStr,
 								IsOnline: true,
 							},
@@ -687,16 +687,16 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 
-		case models.TypeLeaveRoom:
+		case models.TypeLeaveNetwork:
 			{
-				var response models.LeaveRoomResponse
+				var response models.LeaveNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal leave room response: %v", err)
+					log.Printf("Failed to unmarshal leave network response: %v", err)
 				} else {
-					log.Printf("Successfully left room: %s", response.RoomID)
-					// Notify the handler about the room left event
+					log.Printf("Successfully left network: %s", response.NetworkID)
+					// Notify the handler about the network left event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeLeaveRoom, sigMsg.Payload)
+						s.MessageHandler(models.TypeLeaveNetwork, sigMsg.Payload)
 					}
 				}
 			}
@@ -711,7 +711,7 @@ func (s *SignalingClient) listenForMessages() {
 					if reason == "" {
 						reason = "No reason provided"
 					}
-					log.Printf("Kicked from room %s: %s", notification.RoomID, reason)
+					log.Printf("Kicked from network %s: %s", notification.NetworkID, reason)
 					// Notify the handler about the kicked event
 					if s.MessageHandler != nil {
 						s.MessageHandler(models.TypeKicked, sigMsg.Payload)
@@ -719,26 +719,26 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 
-		case models.TypePeerJoined:
+		case models.TypeComputerJoined:
 			{
-				var notification models.PeerJoinedNotification
+				var notification models.ComputerJoinedNotification
 				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-					log.Printf("Failed to unmarshal peer joined notification: %v", err)
+					log.Printf("Failed to unmarshal computer joined notification: %v", err)
 				} else {
-					username := notification.Username
-					if username == "" {
-						username = "Unknown user"
+					computerName := notification.ComputerName
+					if computerName == "" {
+						computerName = "Unknown computer"
 					}
-					log.Printf("New peer joined room %s: %s (Key: %s)", notification.RoomID, username, notification.PublicKey)
+					log.Printf("New computer joined network %s: %s (Key: %s)", notification.NetworkID, computerName, notification.PublicKey)
 
-					// Add the new peer to the computers list
+					// Add the new computer to the computers list
 					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
 						// Skip if this is our own public key
 						if notification.PublicKey != s.VPNClient.PublicKeyStr {
-							// Add the new peer to the computers list
+							// Add the new computer to the computers list
 							newComputer := Computer{
 								ID:       notification.PublicKey,
-								Name:     username,
+								Name:     computerName,
 								OwnerID:  notification.PublicKey,
 								IsOnline: true,
 							}
@@ -748,27 +748,27 @@ func (s *SignalingClient) listenForMessages() {
 								newComputer,
 							)
 
-							// Notify the handler about the peer joined event
+							// Notify the handler about the computer joined event
 							if s.MessageHandler != nil {
-								s.MessageHandler(models.TypePeerJoined, sigMsg.Payload)
+								s.MessageHandler(models.TypeComputerJoined, sigMsg.Payload)
 							}
 						}
 					}
 				}
 			}
 
-		case models.TypePeerLeft:
-			var notification models.PeerLeftNotification
+		case models.TypeComputerLeft:
+			var notification models.ComputerLeftNotification
 			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-				log.Printf("Failed to unmarshal peer left notification: %v", err)
+				log.Printf("Failed to unmarshal computer left notification: %v", err)
 			} else {
-				log.Printf("Peer left room %s: %s", notification.RoomID, notification.PublicKey)
+				log.Printf("Computer left network %s: %s", notification.NetworkID, notification.PublicKey)
 
-				// Remove the peer from the computers list
+				// Remove the computer from the computers list
 				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil && len(s.VPNClient.NetworkManager.Computers) > 0 {
 					// Skip if this is our own public key
 					if notification.PublicKey != s.VPNClient.PublicKeyStr {
-						// Find and remove the peer from the computers list
+						// Find and remove the computer from the computers list
 						updatedComputers := []Computer{}
 						for _, computer := range s.VPNClient.NetworkManager.Computers {
 							if computer.ID != notification.PublicKey {
@@ -777,58 +777,58 @@ func (s *SignalingClient) listenForMessages() {
 						}
 						s.VPNClient.NetworkManager.Computers = updatedComputers
 
-						// Notify the handler about the peer left event
+						// Notify the handler about the computer left event
 						if s.MessageHandler != nil {
-							s.MessageHandler(models.TypePeerLeft, sigMsg.Payload)
+							s.MessageHandler(models.TypeComputerLeft, sigMsg.Payload)
 						}
 					}
 				}
 			}
 
-		case models.TypeRoomDeleted:
+		case models.TypeNetworkDeleted:
 			{
-				var notification models.RoomDeletedNotification
+				var notification models.NetworkDeletedNotification
 				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-					log.Printf("Failed to unmarshal room deleted notification: %v", err)
+					log.Printf("Failed to unmarshal network deleted notification: %v", err)
 				} else {
-					log.Printf("Room deleted: %s", notification.RoomID)
-					// Clear computers list when a room is deleted
+					log.Printf("Network deleted: %s", notification.NetworkID)
+					// Clear computers list when a network is deleted
 					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
 						s.VPNClient.NetworkManager.Computers = []Computer{}
 					}
-					s.VPNClient.NetworkManager.HandleRoomDeleted(notification.RoomID)
+					s.VPNClient.NetworkManager.HandleNetworkDeleted(notification.NetworkID)
 				}
 			}
 
-		case models.TypeUserRooms:
+		case models.TypeComputerNetworks:
 			{
-				var response models.UserRoomsResponse
+				var response models.ComputerNetworksResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal user rooms response: %v", err)
+					log.Printf("Failed to unmarshal computer networks response: %v", err)
 				} else {
-					log.Printf("========== USER ROOMS RECEIVED ==========")
-					log.Printf("Total rooms found: %d", len(response.Rooms))
+					log.Printf("========== COMPUTER NETWORKS RECEIVED ==========")
+					log.Printf("Total networks found: %d", len(response.Networks))
 
-					// Create a slice to store the converted rooms
+					// Create a slice to store the converted networks
 
-					for i, room := range response.Rooms {
+					for i, network := range response.Networks {
 						connectionStatus := "Disconnected"
-						if room.IsConnected {
+						if network.IsConnected {
 							connectionStatus = "Connected"
 						}
 
-						log.Printf("Room %d: %s (ID: %s)", i+1, room.RoomName, room.RoomID)
+						log.Printf("Network %d: %s (ID: %s)", i+1, network.NetworkName, network.NetworkID)
 						log.Printf("  Status: %s", connectionStatus)
-						log.Printf("  Joined at: %s", room.JoinedAt.Format(time.RFC1123))
-						log.Printf("  Last connected: %s", room.LastConnected.Format(time.RFC1123))
+						log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
+						log.Printf("  Last connected: %s", network.LastConnected.Format(time.RFC1123))
 						log.Printf("  ---")
 					}
 
 					log.Printf("========================================")
 
-					// Notify the handler about the updated room list
+					// Notify the handler about the updated network list
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeUserRooms, sigMsg.Payload)
+						s.MessageHandler(models.TypeComputerNetworks, sigMsg.Payload)
 					}
 				}
 			}
@@ -961,27 +961,27 @@ func (s *SignalingClient) injectPublicKey(payload interface{}) bool {
 	return false
 }
 
-// GetUserRooms requests all rooms the user has joined from the server
-func (s *SignalingClient) GetUserRooms() (*models.UserRoomsResponse, error) {
+// GetComputerNetworks requests all networks the computer has joined from the server
+func (s *SignalingClient) GetComputerNetworks() (*models.ComputerNetworksResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	log.Printf("Requesting user rooms from server")
+	log.Printf("Requesting computer networks from server")
 
 	// Create payload for the request
-	payload := &models.GetUserRoomsRequest{
+	payload := &models.GetComputerNetworksRequest{
 		BaseRequest: models.BaseRequest{},
 	}
 
 	// Send request using the packaging function
-	response, err := s.sendPackagedMessage(models.TypeGetUserRooms, payload)
+	response, err := s.sendPackagedMessage(models.TypeGetComputerNetworks, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.UserRoomsResponse); ok {
+	if resp, ok := response.(models.ComputerNetworksResponse); ok {
 		return &resp, nil
 	}
 

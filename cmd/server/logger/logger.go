@@ -1,4 +1,4 @@
-// filepath: /Users/gustavotoledodesouza/Projects/fun/goVPN/cmd/server/logger/logger.go
+// filepath: /Computers/gustavotoledodesouza/Projects/fun/goVPN/cmd/server/logger/logger.go
 package logger
 
 import (

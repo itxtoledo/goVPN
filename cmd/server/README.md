@@ -4,40 +4,40 @@ Signaling server for the GoVPN application, built in Go. This server manages com
 
 ## Architecture
 
-The GoVPN server follows a simple architecture, focused on signaling, where the main objective is to facilitate initial communication between clients and manage rooms. There is no TLS implementation.
+The GoVPN server follows a simple architecture, focused on signaling, where the main objective is to facilitate initial communication between clients and manage networks. There is no TLS implementation.
 
 ### Main Components
 
 1. **WebSocketServer**: Central component responsible for:
    - Managing WebSocket connections with clients
    - Routing messages between clients
-   - Administering rooms and their participants
+   - Administering networks and their participants
    - Implementing basic authentication logic
    - Handling disconnection situations
    - Monitoring usage statistics
-   - Managing the lifecycle of rooms
+   - Managing the lifecycle of networks
 
 2. **SupabaseManager**: Interface for the Supabase database:
-   - Persistent storage of room information
-   - Querying and modifying room data
-   - Managing room lifecycle (expiration, cleanup)
+   - Persistent storage of network information
+   - Querying and modifying network data
+   - Managing network lifecycle (expiration, cleanup)
    - Public key ownership verification
 
 3. **StatsManager**: Monitoring component:
    - Tracking active connections
-   - Room and message statistics
+   - Network and message statistics
    - Performance metrics
    - Endpoint for monitoring
 
 ### Main Data Structures
 
 1. **In-Memory Mappings**:
-   - `clients`: Maps WebSocket connections to room IDs
-   - `networks`: Maps room IDs to lists of connections
+   - `clients`: Maps WebSocket connections to network IDs
+   - `networks`: Maps network IDs to lists of connections
    - `clientToPublicKey`: Associates each connection with its public key
 
-2. **ServerRoom**: Extension of the basic room structure:
-   - Fundamental room data (ID, name, password)
+2. **ServerNetwork**: Extension of the basic network structure:
+   - Fundamental network data (ID, name, password)
    - Owner's public key
    - Metadata (creation, last activity)
 
@@ -50,36 +50,36 @@ WebSocket Client → WebSocketServer → [Message Processing]
                                        ↓
                             [Specific Action by Type]
                            /       |        \        \
-                     Create Room  Join    Leave    Other Actions
+                     Create Network  Join    Leave    Other Actions
                          |         |         |          |
                          v         v         v          v
                      [Supabase] [Notify] [Cleanup] [Process]
                                   Others    Resources
 ```
 
-## Room Management
+## Network Management
 
-1. **Room Creation**:
+1. **Network Creation**:
    - Data validation (password, name)
    - Unique ID generation
    - Persistence in Supabase
    - Owner association
    - Public key uniqueness verification
 
-2. **Room Joining**:
+2. **Network Joining**:
    - Credential validation
    - Limit verification
    - Notification to existing peers
    - Connection tracking
-   - Room activity update
+   - Network activity update
 
-3. **Room Leaving**:
-   - Client removal from the room
+3. **Network Leaving**:
+   - Client removal from the network
    - Conditional cleanup based on ownership
    - Notification to other participants
-   - Optional room preservation
+   - Optional network preservation
 
-4. **Room Ownership**:
+4. **Network Ownership**:
    - Public key as owner identifier
    - Special permissions (rename, kick)
    - Automatic deletion when owner leaves (if not configured to preserve)
@@ -89,7 +89,7 @@ WebSocket Client → WebSocketServer → [Message Processing]
 The server implements a JSON-over-WebSocket messaging protocol:
 
 - **SignalingMessage**: Envelope structure for all messages
-- **Message Types**: CreateRoom, JoinRoom, LeaveRoom, Ping, Rename, Kick, etc.
+- **Message Types**: CreateNetwork, JoinNetwork, LeaveNetwork, Ping, Rename, Kick, etc.
 - **Identification**: Each message has a unique ID for tracking and response correlation
 
 Full API details can be found in `docs/websocket_api.md`.
@@ -97,9 +97,9 @@ Full API details can be found in `docs/websocket_api.md`.
 ## Security Features
 
 - **Public Key Verification**: Identity validation via Ed25519 keys
-- **Room Authentication**: Password protection for room access
-- **Room Isolation**: Messages are routed only within the correct rooms
-- **Data Validation**: Strict verification of user inputs
+- **Network Authentication**: Password protection for network access
+- **Network Isolation**: Messages are routed only within the correct networks
+- **Data Validation**: Strict verification of computer inputs
 - **Access Control**: Only owners can perform administrative actions
 - **Timeouts**: Automatic disconnection of inactive clients
 
@@ -110,7 +110,7 @@ The server provides a `/stats` endpoint that returns real-time metrics:
 - Total number of connections
 - Active connections
 - Processed messages
-- Active rooms
+- Active networks
 - Cleanup statistics
 - Uptime
 
@@ -123,9 +123,9 @@ The server provides a `/stats` endpoint that returns real-time metrics:
 
 ## Data Persistence
 
-Room data is stored in Supabase with the following fields:
-- Room ID
-- Room Name
+Network data is stored in Supabase with the following fields:
+- Network ID
+- Network Name
 - Password (hash)
 - Owner's public key
 - Creation timestamp
@@ -135,7 +135,7 @@ Room data is stored in Supabase with the following fields:
 
 - **Efficient Memory Usage**: Optimized data structures
 - **Concurrency**: Leveraging goroutines for parallel operations
-- **Automatic Cleanup**: Scheduled removal of inactive rooms to free up resources
+- **Automatic Cleanup**: Scheduled removal of inactive networks to free up resources
 - **Graceful Shutdown**: Notification to clients and state persistence during restarts
 - **Timeouts**: Prevention of resource leaks from pending connections
 
@@ -150,13 +150,13 @@ export SUPABASE_KEY="your-supabase-key"
 
 # Optional
 export PORT="8080"
-export MAX_CLIENTS_PER_ROOM="50"
-export ROOM_EXPIRY_DAYS="7"
+export MAX_CLIENTS_PER_NETWORK="50"
+export NETWORK_EXPIRY_DAYS="7"
 export LOG_LEVEL="info"
 export READ_BUFFER_SIZE="4096"
 export WRITE_BUFFER_SIZE="4096"
 export CLEANUP_INTERVAL="24h"
-export SUPABASE_ROOMS_TABLE="govpn_rooms"
+export SUPABASE_NETWORKS_TABLE="govpn_networks"
 export ALLOW_ALL_ORIGINS="true"
 ```
 
@@ -177,7 +177,7 @@ cd cmd/server && go run .
 The server supports graceful shutdown, where:
 
 1. All connected clients are notified of the imminent shutdown
-2. The current state of the rooms is preserved in Supabase
+2. The current state of the networks is preserved in Supabase
 3. Connections are closed orderly
 4. Resources are released before termination
 

@@ -26,24 +26,24 @@ type NetworkPacket struct {
 
 // VirtualNetwork gerencia a rede virtual entre os clientes
 type VirtualNetwork struct {
-	localIP        string
-	interfaces     map[string]net.Interface
-	connections    map[string]*webrtc.DataChannel
-	roomID         string
-	roomPassword   string
-	encryptTraffic bool
-	mu             sync.RWMutex
+	localIP         string
+	interfaces      map[string]net.Interface
+	connections     map[string]*webrtc.DataChannel
+	networkID       string
+	networkPassword string
+	encryptTraffic  bool
+	mu              sync.RWMutex
 }
 
 // NewVirtualNetwork cria uma nova rede virtual
-func NewVirtualNetwork(roomID, password string) *VirtualNetwork {
+func NewVirtualNetwork(networkID, password string) *VirtualNetwork {
 	return &VirtualNetwork{
-		localIP:        "10.0.0.1", // IP base, será incrementado para cada cliente
-		interfaces:     make(map[string]net.Interface),
-		connections:    make(map[string]*webrtc.DataChannel),
-		roomID:         roomID,
-		roomPassword:   password,
-		encryptTraffic: true,
+		localIP:         "10.0.0.1", // IP base, será incrementado para cada cliente
+		interfaces:      make(map[string]net.Interface),
+		connections:     make(map[string]*webrtc.DataChannel),
+		networkID:       networkID,
+		networkPassword: password,
+		encryptTraffic:  true,
 	}
 }
 
@@ -52,12 +52,12 @@ func (v *VirtualNetwork) GetLocalIP() string {
 	return v.localIP
 }
 
-// AddPeer adiciona um novo peer à rede virtual
-func (v *VirtualNetwork) AddPeer(peerID string, dataChannel *webrtc.DataChannel) error {
+// AddComputer adiciona um novo computer à rede virtual
+func (v *VirtualNetwork) AddComputer(computerID string, dataChannel *webrtc.DataChannel) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	// Gera um endereço IP virtual para o novo peer
+	// Gera um endereço IP virtual para o novo computer
 	newIP := fmt.Sprintf("10.0.0.%d", len(v.connections)+2) // +2 porque começamos em 10.0.0.1 e o primeiro cliente é 10.0.0.2
 
 	// Configura a interface virtual
@@ -66,10 +66,10 @@ func (v *VirtualNetwork) AddPeer(peerID string, dataChannel *webrtc.DataChannel)
 		Flags: net.FlagUp | net.FlagPointToPoint,
 	}
 
-	v.interfaces[peerID] = iface
-	v.connections[peerID] = dataChannel
+	v.interfaces[computerID] = iface
+	v.connections[computerID] = dataChannel
 
-	// Envia o IP atribuído ao peer
+	// Envia o IP atribuído ao computer
 	ipAssignment := struct {
 		Type    string `json:"type"`
 		IP      string `json:"ip"`
@@ -87,7 +87,7 @@ func (v *VirtualNetwork) AddPeer(peerID string, dataChannel *webrtc.DataChannel)
 
 	// Se a VPN estiver configurada para criptografar o tráfego, criptografa o pacote
 	if v.encryptTraffic {
-		key := pbkdf2.Key([]byte(v.roomPassword), []byte(v.roomID), 4096, 32, sha256.New)
+		key := pbkdf2.Key([]byte(v.networkPassword), []byte(v.networkID), 4096, 32, sha256.New)
 		data, err = crypto_utils.Encrypt(data, key)
 		if err != nil {
 			return fmt.Errorf("erro ao criptografar pacote: %v", err)
@@ -100,38 +100,38 @@ func (v *VirtualNetwork) AddPeer(peerID string, dataChannel *webrtc.DataChannel)
 		return fmt.Errorf("erro ao enviar pacote: %v", err)
 	}
 
-	log.Printf("Peer %s adicionado à rede virtual com IP %s", peerID, newIP)
+	log.Printf("Computer %s adicionado à rede virtual com IP %s", computerID, newIP)
 	return nil
 }
 
-// RemovePeer remove um peer da rede virtual
-func (v *VirtualNetwork) RemovePeer(peerID string) {
+// RemoveComputer remove um computer da rede virtual
+func (v *VirtualNetwork) RemoveComputer(computerID string) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	delete(v.interfaces, peerID)
-	delete(v.connections, peerID)
-	log.Printf("Peer %s removido da rede virtual", peerID)
+	delete(v.interfaces, computerID)
+	delete(v.connections, computerID)
+	log.Printf("Computer %s removido da rede virtual", computerID)
 }
 
-// SendPacket envia um pacote para outro peer na rede
+// SendPacket envia um pacote para outro computer na rede
 func (v *VirtualNetwork) SendPacket(destIP string, protocol string, port int, data []byte) error {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	// Encontra o peer com o IP de destino
-	var targetPeerID string
-	for peerID := range v.interfaces {
+	// Encontra o computer com o IP de destino
+	var targetComputerID string
+	for computerID := range v.interfaces {
 		// Normalmente teríamos que consultar o IP da interface, mas estamos usando uma simplificação
-		// onde o ID do peer é mapeado para um IP gerado de forma sequencial
-		ifaceIP := fmt.Sprintf("10.0.0.%s", peerID[len(peerID)-1:])
+		// onde o ID da máquina é mapeado para um IP gerado de forma sequencial
+		ifaceIP := fmt.Sprintf("10.0.0.%s", computerID[len(computerID)-1:])
 		if ifaceIP == destIP {
-			targetPeerID = peerID
+			targetComputerID = computerID
 			break
 		}
 	}
 
-	if targetPeerID == "" {
+	if targetComputerID == "" {
 		return fmt.Errorf("IP de destino não encontrado na rede virtual: %s", destIP)
 	}
 
@@ -152,7 +152,7 @@ func (v *VirtualNetwork) SendPacket(destIP string, protocol string, port int, da
 
 	// Se necessário, criptografa o pacote
 	if v.encryptTraffic {
-		key := pbkdf2.Key([]byte(v.roomPassword), []byte(v.roomID), 4096, 32, sha256.New)
+		key := pbkdf2.Key([]byte(v.networkPassword), []byte(v.networkID), 4096, 32, sha256.New)
 		packetData, err = crypto_utils.Encrypt(packetData, key)
 		if err != nil {
 			return fmt.Errorf("erro ao criptografar pacote: %v", err)
@@ -160,19 +160,19 @@ func (v *VirtualNetwork) SendPacket(destIP string, protocol string, port int, da
 	}
 
 	// Envia o pacote pelo canal de dados WebRTC
-	dataChannel := v.connections[targetPeerID]
+	dataChannel := v.connections[targetComputerID]
 	if dataChannel == nil {
-		return fmt.Errorf("canal de dados não encontrado para o peer %s", targetPeerID)
+		return fmt.Errorf("canal de dados não encontrado para a máquina %s", targetComputerID)
 	}
 
 	return dataChannel.Send(packetData)
 }
 
 // HandleIncomingPacket processa um pacote recebido
-func (v *VirtualNetwork) HandleIncomingPacket(peerID string, data []byte) ([]byte, error) {
+func (v *VirtualNetwork) HandleIncomingPacket(computerID string, data []byte) ([]byte, error) {
 	// Se necessário, descriptografa o pacote
 	if v.encryptTraffic {
-		key := pbkdf2.Key([]byte(v.roomPassword), []byte(v.roomID), 4096, 32, sha256.New)
+		key := pbkdf2.Key([]byte(v.networkPassword), []byte(v.networkID), 4096, 32, sha256.New)
 		var err error
 		data, err = crypto_utils.Decrypt(data, key)
 		if err != nil {
@@ -217,6 +217,6 @@ func (v *VirtualNetwork) CaptureAndSendPackets() {
 	log.Println("Iniciando captura de pacotes (simulação)")
 }
 
-func (v *VirtualNetwork) GetRoomPassword() string {
-	return v.roomPassword
+func (v *VirtualNetwork) GetNetworkPassword() string {
+	return v.networkPassword
 }

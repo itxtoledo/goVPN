@@ -25,8 +25,8 @@ func main() {
 	setupDataPath()
 
 	configManager := storage.NewConfigManager()
-	username := configManager.GetConfig().Username
-	ui := NewUIManager(websocketURL, username)
+	computername := configManager.GetConfig().ComputerName
+	ui := NewUIManager(websocketURL, computername)
 
 	// Set up system tray
 	if desk, ok := ui.App.(desktop.App); ok {

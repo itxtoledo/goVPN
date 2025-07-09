@@ -25,14 +25,14 @@ type EventType string
 const (
 	// EventConnectionStateChanged é emitido quando o estado da conexão muda
 	EventConnectionStateChanged EventType = "connection_state_changed"
-	// EventRoomJoined é emitido quando entra em uma sala
-	EventRoomJoined EventType = "room_joined"
-	// EventRoomLeft é emitido quando sai de uma sala
-	EventRoomLeft EventType = "room_left"
-	// EventRoomDisconnected é emitido quando desconecta de uma sala sem sair dela
-	EventRoomDisconnected EventType = "room_disconnected"
-	EventRoomDeleted      EventType = "room_deleted" // Add this constant for room deletion event
-	EventSettingsChanged  EventType = "settings_changed"
+	// EventNetworkJoined é emitido quando entra em uma sala
+	EventNetworkJoined EventType = "network_joined"
+	// EventNetworkLeft é emitido quando sai de uma sala
+	EventNetworkLeft EventType = "network_left"
+	// EventNetworkDisconnected é emitido quando desconecta de uma sala sem sair dela
+	EventNetworkDisconnected EventType = "network_disconnected"
+	EventNetworkDeleted      EventType = "network_deleted" // Add this constant for network deletion event
+	EventSettingsChanged     EventType = "settings_changed"
 	// EventError é emitido quando ocorre um erro
 	EventError EventType = "error"
 )
@@ -52,23 +52,23 @@ type RealtimeDataLayer struct {
 	StatusMessage   binding.String
 
 	// Dados de usuário
-	Username binding.String
-	UserIP   binding.String
+	ComputerName binding.String
+	ComputerIP   binding.String
 
 	// Dados de configuração
 	ServerAddress binding.String
 	Language      binding.String
 
 	// Dados de rede
-	PeerCount        binding.Int
+	ComputersCount   binding.Int
 	NetworkLatency   binding.Float
 	TransferredBytes binding.Float
 	ReceivedBytes    binding.Float
 	PublicKey        binding.String // Public key identifier
 
 	// Dados de sala
-	RoomName binding.String
-	Rooms    binding.UntypedList // Lista de salas do usuário
+	NetworkName binding.String
+	Networks    binding.UntypedList // Lista de salas do usuário
 
 	// Canal de eventos
 	eventChan   chan Event
@@ -83,17 +83,17 @@ func NewRealtimeDataLayer() *RealtimeDataLayer {
 		ConnectionState:  binding.NewInt(),
 		IsConnected:      binding.NewBool(),
 		StatusMessage:    binding.NewString(),
-		Username:         binding.NewString(),
-		UserIP:           binding.NewString(),
+		ComputerName:     binding.NewString(),
+		ComputerIP:       binding.NewString(),
 		ServerAddress:    binding.NewString(),
 		Language:         binding.NewString(),
-		PeerCount:        binding.NewInt(),
+		ComputersCount:   binding.NewInt(),
 		NetworkLatency:   binding.NewFloat(),
 		TransferredBytes: binding.NewFloat(),
 		ReceivedBytes:    binding.NewFloat(),
 		PublicKey:        binding.NewString(),
-		RoomName:         binding.NewString(),
-		Rooms:            binding.NewUntypedList(),
+		NetworkName:      binding.NewString(),
+		Networks:         binding.NewUntypedList(),
 
 		// Canal de eventos
 		eventChan:   make(chan Event, 100),
@@ -111,11 +111,11 @@ func (rdl *RealtimeDataLayer) InitDefaults() {
 	// Valores padrão
 	rdl.SetConnectionState(StateDisconnected)
 	rdl.SetStatusMessage("Not connected")
-	rdl.SetUsername("User")
-	rdl.SetUserIP("0.0.0.0")
+	rdl.SetComputerName("Computer")
+	rdl.SetComputerIP("0.0.0.0")
 	rdl.SetServerAddress("ws://localhost:8080")
 	rdl.SetLanguage("en")
-	rdl.SetRoomInfo("Not connected")
+	rdl.SetNetworkInfo("Not connected")
 	rdl.UpdateNetworkStats(0, 0.0, 0.0, 0.0)
 }
 
@@ -133,14 +133,14 @@ func (rdl *RealtimeDataLayer) SetStatusMessage(message string) {
 	rdl.StatusMessage.Set(message)
 }
 
-// SetUsername define o nome de usuário
-func (rdl *RealtimeDataLayer) SetUsername(username string) {
-	rdl.Username.Set(username)
+// SetComputerName define o nome de usuário
+func (rdl *RealtimeDataLayer) SetComputerName(computername string) {
+	rdl.ComputerName.Set(computername)
 }
 
-// SetUserIP define o IP do usuário
-func (rdl *RealtimeDataLayer) SetUserIP(ip string) {
-	rdl.UserIP.Set(ip)
+// SetComputerIP define o IP do usuário
+func (rdl *RealtimeDataLayer) SetComputerIP(ip string) {
+	rdl.ComputerIP.Set(ip)
 }
 
 // SetServerAddress define o endereço do servidor
@@ -154,80 +154,80 @@ func (rdl *RealtimeDataLayer) SetLanguage(lang string) {
 }
 
 // UpdateNetworkStats atualiza as estatísticas de rede
-func (rdl *RealtimeDataLayer) UpdateNetworkStats(peerCount int, latency, sent, received float64) {
-	rdl.PeerCount.Set(peerCount)
+func (rdl *RealtimeDataLayer) UpdateNetworkStats(computersCount int, latency, sent, received float64) {
+	rdl.ComputersCount.Set(computersCount)
 	rdl.NetworkLatency.Set(latency)
 	rdl.TransferredBytes.Set(sent)
 	rdl.ReceivedBytes.Set(received)
 }
 
-// SetRoomInfo define as informações da sala
-func (rdl *RealtimeDataLayer) SetRoomInfo(name string) {
-	rdl.RoomName.Set(name)
+// SetNetworkInfo define as informações da sala
+func (rdl *RealtimeDataLayer) SetNetworkInfo(name string) {
+	rdl.NetworkName.Set(name)
 }
 
-// SetRooms define a lista completa de salas
-func (rdl *RealtimeDataLayer) SetRooms(rooms []*storage.Room) {
+// SetNetworks define a lista completa de salas
+func (rdl *RealtimeDataLayer) SetNetworks(networks []*storage.Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
-	// Convert []*storage.Room to []interface{}
-	var untypedRooms []interface{}
-	for _, room := range rooms {
-		untypedRooms = append(untypedRooms, room)
+	// Convert []*storage.Network to []interface{}
+	var untypedNetworks []interface{}
+	for _, network := range networks {
+		untypedNetworks = append(untypedNetworks, network)
 	}
-	rdl.Rooms.Set(untypedRooms)
+	rdl.Networks.Set(untypedNetworks)
 }
 
-// AddRoom adiciona uma nova sala à lista
-func (rdl *RealtimeDataLayer) AddRoom(room *storage.Room) {
+// AddNetwork adiciona uma nova sala à lista
+func (rdl *RealtimeDataLayer) AddNetwork(network *storage.Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
-	currentRooms, _ := rdl.Rooms.Get()
-	rdl.Rooms.Set(append(currentRooms, room))
+	currentNetworks, _ := rdl.Networks.Get()
+	rdl.Networks.Set(append(currentNetworks, network))
 }
 
-// RemoveRoom remove uma sala da lista pelo ID
-func (rdl *RealtimeDataLayer) RemoveRoom(roomID string) {
+// RemoveNetwork remove uma sala da lista pelo ID
+func (rdl *RealtimeDataLayer) RemoveNetwork(networkID string) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
-	currentRooms, _ := rdl.Rooms.Get()
-	var updatedRooms []interface{}
-	for _, r := range currentRooms {
-		if room, ok := r.(*storage.Room); ok && room.ID != roomID {
-			updatedRooms = append(updatedRooms, room)
+	currentNetworks, _ := rdl.Networks.Get()
+	var updatedNetworks []interface{}
+	for _, r := range currentNetworks {
+		if network, ok := r.(*storage.Network); ok && network.ID != networkID {
+			updatedNetworks = append(updatedNetworks, network)
 		}
 	}
-	rdl.Rooms.Set(updatedRooms)
+	rdl.Networks.Set(updatedNetworks)
 }
 
-// UpdateRoom atualiza uma sala existente na lista
-func (rdl *RealtimeDataLayer) UpdateRoom(index int, room *storage.Room) {
+// UpdateNetwork atualiza uma sala existente na lista
+func (rdl *RealtimeDataLayer) UpdateNetwork(index int, network *storage.Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
-	currentRooms, _ := rdl.Rooms.Get()
-	if index >= 0 && index < len(currentRooms) {
-		currentRooms[index] = room
-		rdl.Rooms.Set(currentRooms)
+	currentNetworks, _ := rdl.Networks.Get()
+	if index >= 0 && index < len(currentNetworks) {
+		currentNetworks[index] = network
+		rdl.Networks.Set(currentNetworks)
 	}
 }
 
-// GetRooms retorna a lista atual de salas
-func (rdl *RealtimeDataLayer) GetRooms() []*storage.Room {
+// GetNetworks retorna a lista atual de salas
+func (rdl *RealtimeDataLayer) GetNetworks() []*storage.Network {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
-	currentRooms, _ := rdl.Rooms.Get()
-	rooms := make([]*storage.Room, len(currentRooms))
-	for i, r := range currentRooms {
-		if room, ok := r.(*storage.Room); ok {
-			rooms[i] = room
+	currentNetworks, _ := rdl.Networks.Get()
+	networks := make([]*storage.Network, len(currentNetworks))
+	for i, r := range currentNetworks {
+		if network, ok := r.(*storage.Network); ok {
+			networks[i] = network
 		}
 	}
-	return rooms
+	return networks
 }
 
 // Subscribe inscreve um novo assinante para eventos

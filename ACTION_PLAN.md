@@ -16,10 +16,10 @@ This section focuses on creating the virtual network adapter that the operating 
 
 - [ ] **1.2: Implement TUN Interface Lifecycle**
     - **Component**: Client (`cmd/client/vpn_client.go`, `libs/network/network.go`)
-    - **Details**: The TUN interface should be created when a user connects to a room and destroyed when they disconnect.
+    - **Details**: The TUN interface should be created when a computer connects to a network and destroyed when they disconnect.
     - **Action**:
         - Create a function `createTUNInterface()` that initializes the interface using `water.New()`.
-        - Upon connecting to a room and receiving a virtual IP from the server (see 4.1), configure the interface with this IP and its subnet mask (e.g., `10.10.0.5/24`).
+        - Upon connecting to a network and receiving a virtual IP from the server (see 4.1), configure the interface with this IP and its subnet mask (e.g., `10.10.0.5/24`).
         - Bring the interface up using OS-specific commands (`ip addr`, `ifconfig`).
         - Implement a `closeTUNInterface()` function to be called on disconnect.
 
@@ -27,7 +27,7 @@ This section focuses on creating the virtual network adapter that the operating 
 
 ## Section 2: P2P WebRTC Connectivity
 
-This section details the establishment of direct WebRTC data channels between all peers in a room.
+This section details the establishment of direct WebRTC data channels between all peers in a network.
 
 - [ ] **2.1: Enhance Signaling Protocol**
     - **Component**: Server & Client (`libs/models/models.go`, `cmd/server/websocket_server.go`)
@@ -35,11 +35,11 @@ This section details the establishment of direct WebRTC data channels between al
     - **Action**:
         - Add new `MessageType` values to `models.go` for `SdpOffer`, `SdpAnswer`, and `IceCandidate`.
         - Create corresponding structs for these messages. They should include a `TargetID` field to route the message to the correct peer.
-        - The server must be updated to parse these new messages and forward them to the specified `TargetID` within the same room.
+        - The server must be updated to parse these new messages and forward them to the specified `TargetID` within the same network.
 
 - [ ] **2.2: Implement Full-Mesh PeerConnection Logic**
     - **Component**: Client
-    - **Details**: Each client in a room must establish a direct WebRTC connection with every other client in that room.
+    - **Details**: Each client in a network must establish a direct WebRTC connection with every other client in that network.
     - **Action**:
         - When a `PeerJoined` notification is received, the existing client should initiate a new `webrtc.PeerConnection` for the new peer.
         - Create an SDP offer and send it to the new peer via the signaling server (`SdpOffer` message).
@@ -86,12 +86,12 @@ This section covers the logistics of IP address assignment and system routing co
 
 - [ ] **4.1: Implement IP Address Management (IPAM)**
     - **Component**: Server
-    - **Details**: The server needs to act as a simple IPAM service to ensure no two clients in a room have the same virtual IP.
+    - **Details**: The server needs to act as a simple IPAM service to ensure no two clients in a network have the same virtual IP.
     - **Action**:
-        - When a room is created, associate an IP subnet with it (e.g., `10.20.30.0/24`).
-        - When a user joins a room, assign them the next available IP from that subnet.
-        - Send this assigned IP to the client in the `RoomJoined` response.
-        - When a user leaves, release their IP back to the pool for that room.
+        - When a network is created, associate an IP subnet with it (e.g., `10.20.30.0/24`).
+        - When a computer joins a network, assign them the next available IP from that subnet.
+        - Send this assigned IP to the client in the `NetworkJoined` response.
+        - When a computer leaves, release their IP back to the pool for that network.
 
 - [ ] **4.2: Configure System Routing Table**
     - **Component**: Client

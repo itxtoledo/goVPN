@@ -56,8 +56,8 @@ func CreateStatusLabel(text string) *widget.Label {
 	return label
 }
 
-// CreateRoomTitleLabel creates a label optimized for room titles
-func CreateRoomTitleLabel(text string) *widget.Label {
+// CreateNetworkTitleLabel creates a label optimized for network titles
+func CreateNetworkTitleLabel(text string) *widget.Label {
 	label := widget.NewLabel(text)
 	label.TextStyle = fyne.TextStyle{Bold: true, Monospace: false}
 	return label
@@ -71,9 +71,9 @@ func CreateSectionHeaderLabel(text string) *widget.Label {
 }
 
 // CreateMemberLabel creates a label for displaying member information
-func CreateMemberLabel(text string, isCurrentUser bool, isOnline bool) *widget.Label {
+func CreateMemberLabel(text string, isCurrentComputer bool, isOnline bool) *widget.Label {
 	label := widget.NewLabel(text)
-	if isCurrentUser {
+	if isCurrentComputer {
 		label.TextStyle = fyne.TextStyle{Bold: true}
 	} else if !isOnline {
 		label.TextStyle = fyne.TextStyle{Italic: true}
@@ -88,8 +88,8 @@ func CreateInfoLabel(text string) *widget.Label {
 	return label
 }
 
-// CreateRoomCard creates a card widget with improved styling for room content
-func CreateRoomCard(content fyne.CanvasObject) *widget.Card {
+// CreateNetworkCard creates a card widget with improved styling for network content
+func CreateNetworkCard(content fyne.CanvasObject) *widget.Card {
 	return widget.NewCard("", "", content)
 }
 

@@ -12,325 +12,325 @@ import (
 
 // SupabaseManager handles all Supabase database operations for the server
 type SupabaseManager struct {
-	client     *supabase.Client
-	roomsTable string
-	logLevel   string
+	client        *supabase.Client
+	networksTable string
+	logLevel      string
 }
 
 // NewSupabaseManager creates a new instance of the Supabase manager
-func NewSupabaseManager(supabaseURL, supabaseKey, roomsTable, logLevel string) (*SupabaseManager, error) {
+func NewSupabaseManager(supabaseURL, supabaseKey, networksTable, logLevel string) (*SupabaseManager, error) {
 	client, err := supabase.NewClient(supabaseURL, supabaseKey, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Supabase client: %w", err)
 	}
 
 	return &SupabaseManager{
-		client:     client,
-		roomsTable: roomsTable,
-		logLevel:   logLevel,
+		client:        client,
+		networksTable: networksTable,
+		logLevel:      logLevel,
 	}, nil
 }
 
-// CreateRoom inserts a new room into the Supabase database
-func (sm *SupabaseManager) CreateRoom(room ServerRoom) error {
-	roomData := map[string]interface{}{
-		"id":          room.ID,
-		"name":        room.Name,
-		"password":    room.Password,
-		"public_key":  room.PublicKeyB64,
-		"created_at":  room.CreatedAt.Format(time.RFC3339),
-		"last_active": room.LastActive.Format(time.RFC3339),
+// CreateNetwork inserts a new network into the Supabase database
+func (sm *SupabaseManager) CreateNetwork(network ServerNetwork) error {
+	networkData := map[string]interface{}{
+		"id":          network.ID,
+		"name":        network.Name,
+		"password":    network.Password,
+		"public_key":  network.PublicKeyB64,
+		"created_at":  network.CreatedAt.Format(time.RFC3339),
+		"last_active": network.LastActive.Format(time.RFC3339),
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Creating room in Supabase", "roomID", room.ID, "roomName", room.Name)
+		logger.Debug("Creating network in Supabase", "networkID", network.ID, "networkName", network.Name)
 	}
 
-	_, _, err := sm.client.From(sm.roomsTable).Insert(roomData, false, "", "", "").Execute()
+	_, _, err := sm.client.From(sm.networksTable).Insert(networkData, false, "", "", "").Execute()
 	if err != nil {
-		return fmt.Errorf("failed to create room in Supabase: %w", err)
+		return fmt.Errorf("failed to create network in Supabase: %w", err)
 	}
 
 	return nil
 }
 
-// GetRoom fetches a room from the Supabase database by its ID
-func (sm *SupabaseManager) GetRoom(roomID string) (ServerRoom, error) {
-	var rooms []SupabaseRoom
-	data, _, err := sm.client.From(sm.roomsTable).Select("*", "", false).Eq("id", roomID).Execute()
+// GetNetwork fetches a network from the Supabase database by its ID
+func (sm *SupabaseManager) GetNetwork(networkID string) (ServerNetwork, error) {
+	var networks []SupabaseNetwork
+	data, _, err := sm.client.From(sm.networksTable).Select("*", "", false).Eq("id", networkID).Execute()
 	if err != nil {
-		return ServerRoom{}, fmt.Errorf("failed to fetch room from Supabase: %w", err)
+		return ServerNetwork{}, fmt.Errorf("failed to fetch network from Supabase: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &rooms); err != nil {
-		return ServerRoom{}, fmt.Errorf("failed to parse room data: %w", err)
+	if err := json.Unmarshal(data, &networks); err != nil {
+		return ServerNetwork{}, fmt.Errorf("failed to parse network data: %w", err)
 	}
 
-	if len(rooms) == 0 {
-		return ServerRoom{}, fmt.Errorf("room not found: %s", roomID)
+	if len(networks) == 0 {
+		return ServerNetwork{}, fmt.Errorf("network not found: %s", networkID)
 	}
 
-	dbRoom := rooms[0]
+	dbNetwork := networks[0]
 
-	// Create a ServerRoom from the SupabaseRoom data
-	return ServerRoom{
-		Room: models.Room{
-			ID:       dbRoom.ID,
-			Name:     dbRoom.Name,
-			Password: dbRoom.Password,
+	// Create a ServerNetwork from the SupabaseNetwork data
+	return ServerNetwork{
+		Network: models.Network{
+			ID:       dbNetwork.ID,
+			Name:     dbNetwork.Name,
+			Password: dbNetwork.Password,
 		},
-		PublicKeyB64: dbRoom.PublicKey,
-		CreatedAt:    dbRoom.CreatedAt,
-		LastActive:   dbRoom.LastActive,
+		PublicKeyB64: dbNetwork.PublicKey,
+		CreatedAt:    dbNetwork.CreatedAt,
+		LastActive:   dbNetwork.LastActive,
 	}, nil
 }
 
-// UpdateRoomActivity updates the last_active timestamp for a room
-func (sm *SupabaseManager) UpdateRoomActivity(roomID string) error {
+// UpdateNetworkActivity updates the last_active timestamp for a network
+func (sm *SupabaseManager) UpdateNetworkActivity(networkID string) error {
 	now := time.Now().Format(time.RFC3339)
 	updateData := map[string]interface{}{
 		"last_active": now,
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Updating last_active for room", "roomID", roomID, "timestamp", now)
+		logger.Debug("Updating last_active for network", "networkID", networkID, "timestamp", now)
 	}
 
-	_, _, err := sm.client.From(sm.roomsTable).Update(updateData, "", "").Eq("id", roomID).Execute()
+	_, _, err := sm.client.From(sm.networksTable).Update(updateData, "", "").Eq("id", networkID).Execute()
 	if err != nil {
-		return fmt.Errorf("failed to update room activity: %w", err)
+		return fmt.Errorf("failed to update network activity: %w", err)
 	}
 
 	return nil
 }
 
-// UpdateRoomName updates the name of a room
-func (sm *SupabaseManager) UpdateRoomName(roomID, newName string) error {
+// UpdateNetworkName updates the name of a network
+func (sm *SupabaseManager) UpdateNetworkName(networkID, newName string) error {
 	updateData := map[string]interface{}{
 		"name":        newName,
 		"last_active": time.Now().Format(time.RFC3339),
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Updating name for room", "roomID", roomID, "newName", newName)
+		logger.Debug("Updating name for network", "networkID", networkID, "newName", newName)
 	}
 
-	_, _, err := sm.client.From(sm.roomsTable).Update(updateData, "", "").Eq("id", roomID).Execute()
+	_, _, err := sm.client.From(sm.networksTable).Update(updateData, "", "").Eq("id", networkID).Execute()
 	if err != nil {
-		return fmt.Errorf("failed to update room name: %w", err)
+		return fmt.Errorf("failed to update network name: %w", err)
 	}
 
 	return nil
 }
 
-// DeleteRoom removes a room from the Supabase database
-func (sm *SupabaseManager) DeleteRoom(roomID string) error {
+// DeleteNetwork removes a network from the Supabase database
+func (sm *SupabaseManager) DeleteNetwork(networkID string) error {
 	if sm.logLevel == "debug" {
-		logger.Debug("Deleting room from Supabase", "roomID", roomID)
+		logger.Debug("Deleting network from Supabase", "networkID", networkID)
 	}
 
-	_, _, err := sm.client.From(sm.roomsTable).Delete("", "").Eq("id", roomID).Execute()
+	_, _, err := sm.client.From(sm.networksTable).Delete("", "").Eq("id", networkID).Execute()
 	if err != nil {
-		return fmt.Errorf("failed to delete room: %w", err)
+		return fmt.Errorf("failed to delete network: %w", err)
 	}
 
 	return nil
 }
 
-// GetRoomByPublicKey fetches a room by the owner's public key
-func (sm *SupabaseManager) GetRoomByPublicKey(publicKey string) (ServerRoom, error) {
-	var rooms []SupabaseRoom
-	data, _, err := sm.client.From(sm.roomsTable).Select("*", "", false).Eq("public_key", publicKey).Execute()
+// GetNetworkByPublicKey fetches a network by the owner's public key
+func (sm *SupabaseManager) GetNetworkByPublicKey(publicKey string) (ServerNetwork, error) {
+	var networks []SupabaseNetwork
+	data, _, err := sm.client.From(sm.networksTable).Select("*", "", false).Eq("public_key", publicKey).Execute()
 	if err != nil {
-		return ServerRoom{}, fmt.Errorf("failed to fetch room by public key: %w", err)
+		return ServerNetwork{}, fmt.Errorf("failed to fetch network by public key: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &rooms); err != nil {
-		return ServerRoom{}, fmt.Errorf("failed to parse room data: %w", err)
+	if err := json.Unmarshal(data, &networks); err != nil {
+		return ServerNetwork{}, fmt.Errorf("failed to parse network data: %w", err)
 	}
 
-	if len(rooms) == 0 {
-		return ServerRoom{}, fmt.Errorf("no room found for public key")
+	if len(networks) == 0 {
+		return ServerNetwork{}, fmt.Errorf("no network found for public key")
 	}
 
-	dbRoom := rooms[0]
+	dbNetwork := networks[0]
 
-	return ServerRoom{
-		Room: models.Room{
-			ID:       dbRoom.ID,
-			Name:     dbRoom.Name,
-			Password: dbRoom.Password,
+	return ServerNetwork{
+		Network: models.Network{
+			ID:       dbNetwork.ID,
+			Name:     dbNetwork.Name,
+			Password: dbNetwork.Password,
 		},
-		PublicKeyB64: dbRoom.PublicKey,
-		CreatedAt:    dbRoom.CreatedAt,
-		LastActive:   dbRoom.LastActive,
+		PublicKeyB64: dbNetwork.PublicKey,
+		CreatedAt:    dbNetwork.CreatedAt,
+		LastActive:   dbNetwork.LastActive,
 	}, nil
 }
 
-// GetStaleRooms fetches rooms that have not been active for a specified period
-func (sm *SupabaseManager) GetStaleRooms(expiryDays int) ([]SupabaseRoom, error) {
+// GetStaleNetworks fetches networks that have not been active for a specified period
+func (sm *SupabaseManager) GetStaleNetworks(expiryDays int) ([]SupabaseNetwork, error) {
 	expiryDuration := time.Hour * 24 * time.Duration(expiryDays)
 	cutoffTime := time.Now().Add(-expiryDuration)
 	cutoffTimeStr := cutoffTime.Format(time.RFC3339)
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Fetching stale rooms", "cutoffTime", cutoffTimeStr, "expiryDays", expiryDays)
+		logger.Debug("Fetching stale networks", "cutoffTime", cutoffTimeStr, "expiryDays", expiryDays)
 	}
 
-	var staleRooms []SupabaseRoom
-	data, _, err := sm.client.From(sm.roomsTable).Select("*", "", false).Lt("last_active", cutoffTimeStr).Execute()
+	var staleNetworks []SupabaseNetwork
+	data, _, err := sm.client.From(sm.networksTable).Select("*", "", false).Lt("last_active", cutoffTimeStr).Execute()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch stale rooms: %w", err)
+		return nil, fmt.Errorf("failed to fetch stale networks: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &staleRooms); err != nil {
-		return nil, fmt.Errorf("failed to parse stale rooms data: %w", err)
+	if err := json.Unmarshal(data, &staleNetworks); err != nil {
+		return nil, fmt.Errorf("failed to parse stale networks data: %w", err)
 	}
 
-	return staleRooms, nil
+	return staleNetworks, nil
 }
 
-// RoomExists checks if a room exists with the given ID
-func (sm *SupabaseManager) RoomExists(roomID string) (bool, error) {
-	var rooms []map[string]interface{}
-	data, _, err := sm.client.From(sm.roomsTable).Select("id", "", false).Eq("id", roomID).Execute()
+// NetworkExists checks if a network exists with the given ID
+func (sm *SupabaseManager) NetworkExists(networkID string) (bool, error) {
+	var networks []map[string]interface{}
+	data, _, err := sm.client.From(sm.networksTable).Select("id", "", false).Eq("id", networkID).Execute()
 	if err != nil {
-		return false, fmt.Errorf("failed to check if room exists: %w", err)
+		return false, fmt.Errorf("failed to check if network exists: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &rooms); err != nil {
-		return false, fmt.Errorf("failed to parse room data: %w", err)
+	if err := json.Unmarshal(data, &networks); err != nil {
+		return false, fmt.Errorf("failed to parse network data: %w", err)
 	}
 
-	return len(rooms) > 0, nil
+	return len(networks) > 0, nil
 }
 
-// PublicKeyHasRoom checks if a public key already has an associated room
-func (sm *SupabaseManager) PublicKeyHasRoom(publicKey string) (bool, string, error) {
-	var rooms []map[string]interface{}
-	data, _, err := sm.client.From(sm.roomsTable).Select("id", "", false).Eq("public_key", publicKey).Execute()
+// PublicKeyHasNetwork checks if a public key already has an associated network
+func (sm *SupabaseManager) PublicKeyHasNetwork(publicKey string) (bool, string, error) {
+	var networks []map[string]interface{}
+	data, _, err := sm.client.From(sm.networksTable).Select("id", "", false).Eq("public_key", publicKey).Execute()
 	if err != nil {
-		return false, "", fmt.Errorf("failed to check if public key has room: %w", err)
+		return false, "", fmt.Errorf("failed to check if public key has network: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &rooms); err != nil {
-		return false, "", fmt.Errorf("failed to parse room data: %w", err)
+	if err := json.Unmarshal(data, &networks); err != nil {
+		return false, "", fmt.Errorf("failed to parse network data: %w", err)
 	}
 
-	if len(rooms) > 0 {
-		return true, rooms[0]["id"].(string), nil
+	if len(networks) > 0 {
+		return true, networks[0]["id"].(string), nil
 	}
 	return false, "", nil
 }
 
-// UserRoom represents a record in the user_rooms table linking users to rooms
-type UserRoom struct {
+// ComputerNetwork represents a record in the computer_networks table linking computers to networks
+type ComputerNetwork struct {
 	ID            int       `json:"id"`
-	RoomID        string    `json:"room_id"`
+	NetworkID     string    `json:"network_id"`
 	PublicKey     string    `json:"public_key"`
-	Username      string    `json:"username"`
+	ComputerName  string    `json:"computername"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
 	IsConnected   bool      `json:"is_connected"`
 }
 
-// AddUserToRoom adds a user to a room in the user_rooms table
-func (sm *SupabaseManager) AddUserToRoom(roomID, publicKey, username string) error {
-	userRoomData := map[string]interface{}{
-		"room_id":        roomID,
+// AddComputerToNetwork adds a computer to a network in the computer_networks table
+func (sm *SupabaseManager) AddComputerToNetwork(networkID, publicKey, computerName string) error {
+	computerNetworkData := map[string]interface{}{
+		"network_id":     networkID,
 		"public_key":     publicKey,
-		"username":       username,
+		"computername":   computerName,
 		"joined_at":      time.Now().Format(time.RFC3339),
 		"last_connected": time.Now().Format(time.RFC3339),
 		"is_connected":   true,
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Adding user to room", "roomID", roomID, "publicKey", publicKey)
+		logger.Debug("Adding computer to network", "networkID", networkID, "publicKey", publicKey)
 	}
 
-	_, _, err := sm.client.From("user_rooms").Insert(userRoomData, false, "", "", "").Execute()
+	_, _, err := sm.client.From("computer_networks").Insert(computerNetworkData, false, "", "", "").Execute()
 	if err != nil {
-		return fmt.Errorf("failed to add user to room in Supabase: %w", err)
+		return fmt.Errorf("failed to add computer to network in Supabase: %w", err)
 	}
 
 	return nil
 }
 
-// UpdateUserRoomConnection updates the connection status and last_connected timestamp for a user in a room
-func (sm *SupabaseManager) UpdateUserRoomConnection(roomID, publicKey string, isConnected bool) error {
+// UpdateComputerNetworkConnection updates the connection status and last_connected timestamp for a computer in a network
+func (sm *SupabaseManager) UpdateComputerNetworkConnection(networkID, publicKey string, isConnected bool) error {
 	updateData := map[string]interface{}{
 		"last_connected": time.Now().Format(time.RFC3339),
 		"is_connected":   isConnected,
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Updating user room connection", "roomID", roomID, "publicKey", publicKey, "isConnected", isConnected)
+		logger.Debug("Updating computer network connection", "networkID", networkID, "publicKey", publicKey, "isConnected", isConnected)
 	}
 
-	_, _, err := sm.client.From("user_rooms").Update(updateData, "", "").Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+	_, _, err := sm.client.From("computer_networks").Update(updateData, "", "").Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
 	if err != nil {
-		return fmt.Errorf("failed to update user room connection: %w", err)
+		return fmt.Errorf("failed to update computer network connection: %w", err)
 	}
 
 	return nil
 }
 
-// RemoveUserFromRoom removes a user from a room
-func (sm *SupabaseManager) RemoveUserFromRoom(roomID, publicKey string) error {
+// RemoveComputerFromNetwork removes a computer from a network
+func (sm *SupabaseManager) RemoveComputerFromNetwork(networkID, publicKey string) error {
 	if sm.logLevel == "debug" {
-		logger.Debug("Removing user from room", "roomID", roomID, "publicKey", publicKey)
+		logger.Debug("Removing computer from network", "networkID", networkID, "publicKey", publicKey)
 	}
 
-	_, _, err := sm.client.From("user_rooms").Delete("", "").Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+	_, _, err := sm.client.From("computer_networks").Delete("", "").Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
 	if err != nil {
-		return fmt.Errorf("failed to remove user from room: %w", err)
+		return fmt.Errorf("failed to remove computer from network: %w", err)
 	}
 
 	return nil
 }
 
-// GetRoomUsers gets all users for a specific room
-func (sm *SupabaseManager) GetRoomUsers(roomID string) ([]UserRoom, error) {
-	var userRooms []UserRoom
-	data, _, err := sm.client.From("user_rooms").Select("*", "", false).Eq("room_id", roomID).Execute()
+// GetNetworkComputers gets all computers for a specific network
+func (sm *SupabaseManager) GetNetworkComputers(networkID string) ([]ComputerNetwork, error) {
+	var computerNetworks []ComputerNetwork
+	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("network_id", networkID).Execute()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get room users: %w", err)
+		return nil, fmt.Errorf("failed to get network computers: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &userRooms); err != nil {
-		return nil, fmt.Errorf("failed to parse user room data: %w", err)
+	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		return nil, fmt.Errorf("failed to parse computer network data: %w", err)
 	}
 
-	return userRooms, nil
+	return computerNetworks, nil
 }
 
-// GetUserRooms gets all rooms a user has joined
-func (sm *SupabaseManager) GetUserRooms(publicKey string) ([]UserRoom, error) {
-	var userRooms []UserRoom
-	data, _, err := sm.client.From("user_rooms").Select("*", "", false).Eq("public_key", publicKey).Execute()
+// GetComputerNetworks gets all networks a computer has joined
+func (sm *SupabaseManager) GetComputerNetworks(publicKey string) ([]ComputerNetwork, error) {
+	var computerNetworks []ComputerNetwork
+	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("public_key", publicKey).Execute()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user rooms: %w", err)
+		return nil, fmt.Errorf("failed to get computer networks: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &userRooms); err != nil {
-		return nil, fmt.Errorf("failed to parse user room data: %w", err)
+	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		return nil, fmt.Errorf("failed to parse computer network data: %w", err)
 	}
 
-	return userRooms, nil
+	return computerNetworks, nil
 }
 
-// IsUserInRoom checks if a user is already in a room
-func (sm *SupabaseManager) IsUserInRoom(roomID, publicKey string) (bool, error) {
-	var userRooms []UserRoom
-	data, _, err := sm.client.From("user_rooms").Select("id", "", false).Eq("room_id", roomID).Eq("public_key", publicKey).Execute()
+// IsComputerInNetwork checks if a computer is already in a network
+func (sm *SupabaseManager) IsComputerInNetwork(networkID, publicKey string) (bool, error) {
+	var computerNetworks []ComputerNetwork
+	data, _, err := sm.client.From("computer_networks").Select("id", "", false).Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
 	if err != nil {
-		return false, fmt.Errorf("failed to check if user is in room: %w", err)
+		return false, fmt.Errorf("failed to check if computer is in network: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &userRooms); err != nil {
-		return false, fmt.Errorf("failed to parse user room data: %w", err)
+	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		return false, fmt.Errorf("failed to parse computer network data: %w", err)
 	}
 
-	return len(userRooms) > 0, nil
+	return len(computerNetworks) > 0, nil
 }

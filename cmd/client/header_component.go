@@ -1,4 +1,4 @@
-// filepath: /Users/gustavotoledodesouza/Projects/fun/goVPN/cmd/client/header_component.go
+// filepath: /Computers/gustavotoledodesouza/Projects/fun/goVPN/cmd/client/header_component.go
 package main
 
 import (
@@ -17,9 +17,9 @@ import (
 type HeaderComponent struct {
 	UI                  *UIManager
 	PowerButton         *widget.Button
-	UserIPLabel         *widget.Label
-	UsernameLabel       *widget.Label
-	RoomLabel           *widget.Label
+	ComputerIPLabel     *widget.Label
+	ComputerNameLabel   *widget.Label
+	NetworkLabel        *widget.Label
 	defaultWebsocketURL string
 }
 
@@ -37,14 +37,14 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 	hc.PowerButton.Importance = widget.HighImportance // Make power button more prominent
 
 	// Criar label para IP do usuário
-	hc.UserIPLabel = widget.NewLabelWithData(hc.UI.RealtimeData.UserIP)
-	hc.UserIPLabel.TextStyle = fyne.TextStyle{Monospace: true} // Use monospace for IP
+	hc.ComputerIPLabel = widget.NewLabelWithData(hc.UI.RealtimeData.ComputerIP)
+	hc.ComputerIPLabel.TextStyle = fyne.TextStyle{Monospace: true} // Use monospace for IP
 
 	// Criar labels com dados em tempo real vinculados
-	hc.UsernameLabel = widget.NewLabelWithData(hc.UI.RealtimeData.Username)
-	hc.UsernameLabel.TextStyle = fyne.TextStyle{Bold: true} // Make username more prominent
+	hc.ComputerNameLabel = widget.NewLabelWithData(hc.UI.RealtimeData.ComputerName)
+	hc.ComputerNameLabel.TextStyle = fyne.TextStyle{Bold: true} // Make computername more prominent
 
-	hc.RoomLabel = widget.NewLabelWithData(hc.UI.RealtimeData.RoomName)
+	hc.NetworkLabel = widget.NewLabelWithData(hc.UI.RealtimeData.NetworkName)
 
 	// Configure listeners para atualização automática
 	hc.configureListeners()
@@ -61,18 +61,18 @@ func (hc *HeaderComponent) configureListeners() {
 	}))
 
 	// Listener para o nome da sala
-	hc.UI.RealtimeData.RoomName.AddListener(binding.NewDataListener(func() {
-		hc.updateRoomName()
+	hc.UI.RealtimeData.NetworkName.AddListener(binding.NewDataListener(func() {
+		hc.updateNetworkName()
 	}))
 
 	// Listener para o nome de usuário
-	hc.UI.RealtimeData.Username.AddListener(binding.NewDataListener(func() {
-		hc.updateUsername()
+	hc.UI.RealtimeData.ComputerName.AddListener(binding.NewDataListener(func() {
+		hc.updateComputerName()
 	}))
 
 	// Listener para o IP do usuário
-	hc.UI.RealtimeData.UserIP.AddListener(binding.NewDataListener(func() {
-		hc.updateUserIP()
+	hc.UI.RealtimeData.ComputerIP.AddListener(binding.NewDataListener(func() {
+		hc.updateComputerIP()
 	}))
 }
 
@@ -80,9 +80,9 @@ func (hc *HeaderComponent) configureListeners() {
 func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 
 	// Container para informações do usuário (IP e nome) - layout compacto
-	userInfoContainer := container.NewVBox(
-		hc.UserIPLabel,
-		hc.UsernameLabel,
+	computerInfoContainer := container.NewVBox(
+		hc.ComputerIPLabel,
+		hc.ComputerNameLabel,
 	)
 
 	// Container para o power button com tamanho fixo para garantir proporção 1:1
@@ -93,8 +93,8 @@ func (hc *HeaderComponent) CreateHeaderContainer() *fyne.Container {
 
 	// Container superior usando HBox com duas colunas
 	topContainer := container.NewHBox(
-		powerButtonContainer, // Primeira coluna: power button
-		userInfoContainer,    // Segunda coluna: informações do usuário (IP e nome)
+		powerButtonContainer,  // Primeira coluna: power button
+		computerInfoContainer, // Segunda coluna: informações do usuário (IP e nome)
 	)
 
 	// Container principal
@@ -148,20 +148,20 @@ func (hc *HeaderComponent) updatePowerButtonState() {
 	hc.PowerButton.Refresh()
 }
 
-// updateUsername atualiza o nome de usuário
-func (hc *HeaderComponent) updateUsername() {
+// updateComputerName atualiza o nome de usuário
+func (hc *HeaderComponent) updateComputerName() {
 	// O nome de usuário já está vinculado diretamente via binding
 	// Esta função é mantida para compatibilidade e possíveis futuras extensões
 }
 
-// updateUserIP atualiza o IP do usuário
-func (hc *HeaderComponent) updateUserIP() {
+// updateComputerIP atualiza o IP do usuário
+func (hc *HeaderComponent) updateComputerIP() {
 	// O IP do usuário já está vinculado diretamente via binding
 	// Esta função é mantida para compatibilidade e possíveis futuras extensões
 }
 
-// updateRoomName atualiza o nome da sala
-func (hc *HeaderComponent) updateRoomName() {
+// updateNetworkName atualiza o nome da sala
+func (hc *HeaderComponent) updateNetworkName() {
 	// O nome da sala já está vinculado diretamente via binding
 	// Esta função é mantida para compatibilidade e possíveis futuras extensões
 }

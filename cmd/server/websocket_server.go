@@ -1,4 +1,4 @@
-// filepath: /Users/gustavotoledodesouza/Projects/fun/goVPN/cmd/server/websocket_server.go
+// filepath: /Computers/gustavotoledodesouza/Projects/fun/goVPN/cmd/server/websocket_server.go
 package main
 
 import (
@@ -19,17 +19,17 @@ import (
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
-// ServerRoom extends the basic Room model with server-specific fields
-type ServerRoom struct {
-	models.Room                    // Embed the Room from models package
-	PublicKey    ed25519.PublicKey `json:"-"`          // Not stored in Supabase directly
-	PublicKeyB64 string            `json:"public_key"` // Stored as base64 string in Supabase
-	CreatedAt    time.Time         `json:"created_at"`
-	LastActive   time.Time         `json:"last_active"`
+// ServerNetwork extends the basic Network model with server-specific fields
+type ServerNetwork struct {
+	models.Network                   // Embed the Network from models package
+	PublicKey      ed25519.PublicKey `json:"-"`          // Not stored in Supabase directly
+	PublicKeyB64   string            `json:"public_key"` // Stored as base64 string in Supabase
+	CreatedAt      time.Time         `json:"created_at"`
+	LastActive     time.Time         `json:"last_active"`
 }
 
-// SupabaseRoom is a struct for room data stored in Supabase
-type SupabaseRoom struct {
+// SupabaseNetwork is a struct for network data stored in Supabase
+type SupabaseNetwork struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
 	Password   string    `json:"password"`
@@ -38,10 +38,10 @@ type SupabaseRoom struct {
 	LastActive time.Time `json:"last_active"`
 }
 
-// WebSocketServer manages the WebSocket connections and room handling
+// WebSocketServer manages the WebSocket connections and network handling
 type WebSocketServer struct {
-	clients           map[*websocket.Conn]string   // Maps connection to roomID
-	networks          map[string][]*websocket.Conn // Maps roomID to list of connections
+	clients           map[*websocket.Conn]string   // Maps connection to networkID
+	networks          map[string][]*websocket.Conn // Maps networkID to list of connections
 	clientToPublicKey map[*websocket.Conn]string   // Maps connection to public key
 	mu                sync.RWMutex
 	config            Config
@@ -64,7 +64,7 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		return nil, fmt.Errorf("failed to compile password pattern: %w", err)
 	}
 
-	supaMgr, err := NewSupabaseManager(cfg.SupabaseURL, cfg.SupabaseKey, cfg.SupabaseRoomsTable, cfg.LogLevel)
+	supaMgr, err := NewSupabaseManager(cfg.SupabaseURL, cfg.SupabaseKey, cfg.SupabaseNetworksTable, cfg.LogLevel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Supabase manager: %w", err)
 	}
@@ -111,13 +111,13 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 		msgID, _ := models.GenerateMessageID()
 
-		req := models.GetUserRoomsRequest{
+		req := models.GetComputerNetworksRequest{
 			BaseRequest: models.BaseRequest{
 				PublicKey: publicKeyHeader,
 			},
 		}
 
-		go s.handleGetUserRoomsWithIP(conn, req, msgID, r)
+		go s.handleGetComputerNetworksWithIP(conn, req, msgID, r)
 	}
 
 	for {
@@ -133,50 +133,50 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 		originalID := sigMsg.ID
 
 		switch sigMsg.Type {
-		case models.TypeCreateRoom:
-			var req models.CreateRoomRequest
+		case models.TypeCreateNetwork:
+			var req models.CreateNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
-				s.sendErrorSignal(conn, "Invalid create room request format", originalID)
+				s.sendErrorSignal(conn, "Invalid create network request format", originalID)
 				continue
 			}
 
-			s.handleCreateRoom(conn, req, originalID)
+			s.handleCreateNetwork(conn, req, originalID)
 
-		case models.TypeJoinRoom:
-			var req models.JoinRoomRequest
+		case models.TypeJoinNetwork:
+			var req models.JoinNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
-				s.sendErrorSignal(conn, "Invalid join room request format", originalID)
+				s.sendErrorSignal(conn, "Invalid join network request format", originalID)
 				continue
 			}
 
-			s.handleJoinRoom(conn, req, originalID)
+			s.handleJoinNetwork(conn, req, originalID)
 
-		case models.TypeConnectRoom:
-			var req models.ConnectRoomRequest
+		case models.TypeConnectNetwork:
+			var req models.ConnectNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
-				s.sendErrorSignal(conn, "Invalid connect room request format", originalID)
+				s.sendErrorSignal(conn, "Invalid connect network request format", originalID)
 				continue
 			}
 
-			s.handleConnectRoom(conn, req, originalID)
+			s.handleConnectNetwork(conn, req, originalID)
 
-		case models.TypeDisconnectRoom:
-			var req models.DisconnectRoomRequest
+		case models.TypeDisconnectNetwork:
+			var req models.DisconnectNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
-				s.sendErrorSignal(conn, "Invalid disconnect room request format", originalID)
+				s.sendErrorSignal(conn, "Invalid disconnect network request format", originalID)
 				continue
 			}
 
-			s.handleDisconnectRoom(conn, req, originalID)
+			s.handleDisconnectNetwork(conn, req, originalID)
 
-		case models.TypeLeaveRoom:
-			var req models.LeaveRoomRequest
+		case models.TypeLeaveNetwork:
+			var req models.LeaveNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
-				s.sendErrorSignal(conn, "Invalid leave room request format", originalID)
+				s.sendErrorSignal(conn, "Invalid leave network request format", originalID)
 				continue
 			}
 
-			s.handleLeaveRoom(conn, req, originalID)
+			s.handleLeaveNetwork(conn, req, originalID)
 
 		case models.TypeKick:
 			var req models.KickRequest
@@ -199,14 +199,14 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 		case models.TypePing:
 			s.handlePing(conn, sigMsg.Payload, originalID)
 
-		case models.TypeGetUserRooms:
-			var req models.GetUserRoomsRequest
+		case models.TypeGetComputerNetworks:
+			var req models.GetComputerNetworksRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
-				s.sendErrorSignal(conn, "Invalid get user rooms request format", originalID)
+				s.sendErrorSignal(conn, "Invalid get computer networks request format", originalID)
 				continue
 			}
 
-			s.handleGetUserRooms(conn, req, originalID)
+			s.handleGetComputerNetworks(conn, req, originalID)
 
 		default:
 			logger.Warn("Unknown message type", "type", sigMsg.Type)
@@ -240,12 +240,12 @@ func (s *WebSocketServer) sendSignal(conn *websocket.Conn, msgType models.Messag
 	})
 }
 
-func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.CreateRoomRequest, originalID string) {
+func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.CreateNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if req.RoomName == "" || req.Password == "" || req.PublicKey == "" {
-		s.sendErrorSignal(conn, "Room name, password, and public key are required", originalID)
+	if req.NetworkName == "" || req.Password == "" || req.PublicKey == "" {
+		s.sendErrorSignal(conn, "Network name, password, and public key are required", originalID)
 		return
 	}
 
@@ -254,21 +254,21 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 		return
 	}
 
-	hasRoom, existingRoomID, err := s.supabaseManager.PublicKeyHasRoom(req.PublicKey)
+	hasNetwork, existingNetworkID, err := s.supabaseManager.PublicKeyHasNetwork(req.PublicKey)
 	if err != nil {
-		logger.Error("Error checking if public key has a room", "error", err)
-	} else if hasRoom {
-		s.sendErrorSignal(conn, fmt.Sprintf("This public key has already created room: %s", existingRoomID), originalID)
+		logger.Error("Error checking if public key has a network", "error", err)
+	} else if hasNetwork {
+		s.sendErrorSignal(conn, fmt.Sprintf("This public key has already created network: %s", existingNetworkID), originalID)
 		return
 	}
 
-	roomID := models.GenerateRoomID()
+	networkID := models.GenerateNetworkID()
 
-	exists, err := s.supabaseManager.RoomExists(roomID)
+	exists, err := s.supabaseManager.NetworkExists(networkID)
 	if err != nil {
-		logger.Error("Error checking if room exists", "error", err)
+		logger.Error("Error checking if network exists", "error", err)
 	} else if exists {
-		s.sendErrorSignal(conn, "Room ID conflict, please try again", originalID)
+		s.sendErrorSignal(conn, "Network ID conflict, please try again", originalID)
 		return
 	}
 
@@ -278,10 +278,10 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 		return
 	}
 
-	room := ServerRoom{
-		Room: models.Room{
-			ID:       roomID,
-			Name:     req.RoomName,
+	network := ServerNetwork{
+		Network: models.Network{
+			ID:       networkID,
+			Name:     req.NetworkName,
 			Password: req.Password,
 		},
 		PublicKey:    pubKey,
@@ -290,57 +290,57 @@ func (s *WebSocketServer) handleCreateRoom(conn *websocket.Conn, req models.Crea
 		LastActive:   time.Now(),
 	}
 
-	err = s.supabaseManager.CreateRoom(room)
+	err = s.supabaseManager.CreateNetwork(network)
 	if err != nil {
-		logger.Error("Error creating room in Supabase", "error", err)
-		s.sendErrorSignal(conn, "Error creating room in database", originalID)
+		logger.Error("Error creating network in Supabase", "error", err)
+		s.sendErrorSignal(conn, "Error creating network in database", originalID)
 		return
 	}
 
-	err = s.supabaseManager.AddUserToRoom(roomID, req.PublicKey, "Owner")
+	err = s.supabaseManager.AddComputerToNetwork(networkID, req.PublicKey, "Owner")
 	if err != nil {
-		logger.Error("Error adding room owner to user_rooms", "error", err)
+		logger.Error("Error adding network owner to computer_networks", "error", err)
 	}
 
 	s.clientToPublicKey[conn] = req.PublicKey
 
-	s.clients[conn] = roomID
+	s.clients[conn] = networkID
 
-	if _, exists := s.networks[roomID]; !exists {
-		s.networks[roomID] = []*websocket.Conn{}
+	if _, exists := s.networks[networkID]; !exists {
+		s.networks[networkID] = []*websocket.Conn{}
 	}
-	s.networks[roomID] = append(s.networks[roomID], conn)
+	s.networks[networkID] = append(s.networks[networkID], conn)
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Room created",
-			"roomID", roomID,
-			"roomName", req.RoomName,
+		logger.Info("Network created",
+			"networkID", networkID,
+			"networkName", req.NetworkName,
 			"clientAddr", conn.RemoteAddr().String())
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 	responsePayload := map[string]interface{}{
-		"room_id":    roomID,
-		"room_name":  req.RoomName,
-		"password":   req.Password,
-		"public_key": req.PublicKey,
+		"network_id":   networkID,
+		"network_name": req.NetworkName,
+		"password":     req.Password,
+		"public_key":   req.PublicKey,
 	}
 
-	s.sendSignal(conn, models.TypeRoomCreated, responsePayload, originalID)
+	s.sendSignal(conn, models.TypeNetworkCreated, responsePayload, originalID)
 }
 
-func (s *WebSocketServer) handleJoinRoom(conn *websocket.Conn, req models.JoinRoomRequest, originalID string) {
+func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.JoinNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	room, err := s.supabaseManager.GetRoom(req.RoomID)
+	network, err := s.supabaseManager.GetNetwork(req.NetworkID)
 	if err != nil {
-		s.sendErrorSignal(conn, "Room does not exist", originalID)
+		s.sendErrorSignal(conn, "Network does not exist", originalID)
 		return
 	}
 
-	if req.Password != room.Password {
+	if req.Password != network.Password {
 		s.sendErrorSignal(conn, "Incorrect password", originalID)
 		return
 	}
@@ -350,88 +350,88 @@ func (s *WebSocketServer) handleJoinRoom(conn *websocket.Conn, req models.JoinRo
 		return
 	}
 
-	connections := s.networks[req.RoomID]
-	if len(connections) >= s.config.MaxClientsPerRoom {
-		s.sendErrorSignal(conn, "Room is full", originalID)
+	connections := s.networks[req.NetworkID]
+	if len(connections) >= s.config.MaxClientsPerNetwork {
+		s.sendErrorSignal(conn, "Network is full", originalID)
 		return
 	}
 
-	isInRoom, err := s.supabaseManager.IsUserInRoom(req.RoomID, req.PublicKey)
+	isInNetwork, err := s.supabaseManager.IsComputerInNetwork(req.NetworkID, req.PublicKey)
 	if err != nil {
-		logger.Error("Error checking if user is in room", "error", err)
+		logger.Error("Error checking if computer is in network", "error", err)
 	}
 
-	if !isInRoom {
-		err = s.supabaseManager.AddUserToRoom(req.RoomID, req.PublicKey, req.Username)
+	if !isInNetwork {
+		err = s.supabaseManager.AddComputerToNetwork(req.NetworkID, req.PublicKey, req.ComputerName)
 		if err != nil {
-			logger.Error("Error adding user to room", "error", err)
+			logger.Error("Error adding computer to network", "error", err)
 		}
 	} else {
-		err = s.supabaseManager.UpdateUserRoomConnection(req.RoomID, req.PublicKey, true)
+		err = s.supabaseManager.UpdateComputerNetworkConnection(req.NetworkID, req.PublicKey, true)
 		if err != nil {
-			logger.Error("Error updating user room connection", "error", err)
+			logger.Error("Error updating computer network connection", "error", err)
 		}
 	}
 
 	s.clientToPublicKey[conn] = req.PublicKey
 
-	s.clients[conn] = req.RoomID
-	if _, exists := s.networks[req.RoomID]; !exists {
-		s.networks[req.RoomID] = []*websocket.Conn{}
+	s.clients[conn] = req.NetworkID
+	if _, exists := s.networks[req.NetworkID]; !exists {
+		s.networks[req.NetworkID] = []*websocket.Conn{}
 	}
-	s.networks[req.RoomID] = append(s.networks[req.RoomID], conn)
+	s.networks[req.NetworkID] = append(s.networks[req.NetworkID], conn)
 
-	clientCount := len(s.networks[req.RoomID])
+	clientCount := len(s.networks[req.NetworkID])
 
-	err = s.supabaseManager.UpdateRoomActivity(req.RoomID)
+	err = s.supabaseManager.UpdateNetworkActivity(req.NetworkID)
 	if err != nil && (s.config.LogLevel == "debug") {
-		logger.Debug("Error updating room activity", "error", err)
+		logger.Debug("Error updating network activity", "error", err)
 	}
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Client joined room",
+		logger.Info("Client joined network",
 			"clientAddr", conn.RemoteAddr().String(),
-			"roomID", req.RoomID,
+			"networkID", req.NetworkID,
 			"activeClients", clientCount)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 	responsePayload := map[string]interface{}{
-		"room_id":   req.RoomID,
-		"room_name": room.Name,
+		"network_id":   req.NetworkID,
+		"network_name": network.Name,
 	}
-	s.sendSignal(conn, models.TypeRoomJoined, responsePayload, originalID)
+	s.sendSignal(conn, models.TypeNetworkJoined, responsePayload, originalID)
 
-	for _, peer := range s.networks[req.RoomID] {
-		if peer != conn {
-			peerJoinedPayload := map[string]interface{}{
-				"room_id":    req.RoomID,
-				"public_key": req.PublicKey,
-				"username":   req.Username,
+	for _, computer := range s.networks[req.NetworkID] {
+		if computer != conn {
+			computerJoinedPayload := map[string]interface{}{
+				"network_id":   req.NetworkID,
+				"public_key":   req.PublicKey,
+				"computername": req.ComputerName,
 			}
-			s.sendSignal(peer, models.TypePeerJoined, peerJoinedPayload, "")
+			s.sendSignal(computer, models.TypeComputerJoined, computerJoinedPayload, "")
 
-			peerPublicKey, hasPeerKey := s.clientToPublicKey[peer]
-			if hasPeerKey {
-				existingPeerPayload := map[string]interface{}{
-					"room_id":    req.RoomID,
-					"public_key": peerPublicKey,
-					"username":   "Peer",
+			computerPublicKey, hasComputerKey := s.clientToPublicKey[computer]
+			if hasComputerKey {
+				existingComputerPayload := map[string]interface{}{
+					"network_id":   req.NetworkID,
+					"public_key":   computerPublicKey,
+					"computername": "Computer",
 				}
-				s.sendSignal(conn, models.TypePeerJoined, existingPeerPayload, "")
+				s.sendSignal(conn, models.TypeComputerJoined, existingComputerPayload, "")
 			}
 		}
 	}
 }
 
-func (s *WebSocketServer) handleConnectRoom(conn *websocket.Conn, req models.ConnectRoomRequest, originalID string) {
+func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.ConnectNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	room, err := s.supabaseManager.GetRoom(req.RoomID)
+	network, err := s.supabaseManager.GetNetwork(req.NetworkID)
 	if err != nil {
-		s.sendErrorSignal(conn, "Room does not exist", originalID)
+		s.sendErrorSignal(conn, "Network does not exist", originalID)
 		return
 	}
 
@@ -440,95 +440,95 @@ func (s *WebSocketServer) handleConnectRoom(conn *websocket.Conn, req models.Con
 		return
 	}
 
-	isInRoom, err := s.supabaseManager.IsUserInRoom(req.RoomID, req.PublicKey)
+	isInNetwork, err := s.supabaseManager.IsComputerInNetwork(req.NetworkID, req.PublicKey)
 	if err != nil {
-		logger.Error("Error checking if user is in room", "error", err)
-		s.sendErrorSignal(conn, "Error verifying room membership", originalID)
+		logger.Error("Error checking if computer is in network", "error", err)
+		s.sendErrorSignal(conn, "Error verifying network membership", originalID)
 		return
 	}
 
-	if !isInRoom {
-		s.sendErrorSignal(conn, "You must join this room first", originalID)
+	if !isInNetwork {
+		s.sendErrorSignal(conn, "You must join this network first", originalID)
 		return
 	}
 
-	connections := s.networks[req.RoomID]
-	if len(connections) >= s.config.MaxClientsPerRoom {
-		s.sendErrorSignal(conn, "Room is full", originalID)
+	connections := s.networks[req.NetworkID]
+	if len(connections) >= s.config.MaxClientsPerNetwork {
+		s.sendErrorSignal(conn, "Network is full", originalID)
 		return
 	}
 
-	err = s.supabaseManager.UpdateUserRoomConnection(req.RoomID, req.PublicKey, true)
+	err = s.supabaseManager.UpdateComputerNetworkConnection(req.NetworkID, req.PublicKey, true)
 	if err != nil {
-		logger.Error("Error updating user room connection", "error", err)
+		logger.Error("Error updating computer network connection", "error", err)
 	}
 
 	s.clientToPublicKey[conn] = req.PublicKey
 
-	s.clients[conn] = req.RoomID
-	if _, exists := s.networks[req.RoomID]; !exists {
-		s.networks[req.RoomID] = []*websocket.Conn{}
+	s.clients[conn] = req.NetworkID
+	if _, exists := s.networks[req.NetworkID]; !exists {
+		s.networks[req.NetworkID] = []*websocket.Conn{}
 	}
-	s.networks[req.RoomID] = append(s.networks[req.RoomID], conn)
+	s.networks[req.NetworkID] = append(s.networks[req.NetworkID], conn)
 
-	err = s.supabaseManager.UpdateRoomActivity(req.RoomID)
+	err = s.supabaseManager.UpdateNetworkActivity(req.NetworkID)
 	if err != nil && (s.config.LogLevel == "debug") {
-		logger.Debug("Error updating room activity", "error", err)
+		logger.Debug("Error updating network activity", "error", err)
 	}
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Client connected to room (reconnect)",
+		logger.Info("Client connected to network (reconnect)",
 			"clientAddr", conn.RemoteAddr().String(),
-			"roomID", req.RoomID,
-			"activeClients", len(s.networks[req.RoomID]))
+			"networkID", req.NetworkID,
+			"activeClients", len(s.networks[req.NetworkID]))
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 	responsePayload := map[string]interface{}{
-		"room_id":   req.RoomID,
-		"room_name": room.Name,
+		"network_id":   req.NetworkID,
+		"network_name": network.Name,
 	}
-	s.sendSignal(conn, models.TypeRoomConnected, responsePayload, originalID)
+	s.sendSignal(conn, models.TypeNetworkConnected, responsePayload, originalID)
 
-	for _, peer := range s.networks[req.RoomID] {
-		if peer != conn {
-			peerConnectedPayload := map[string]interface{}{
-				"room_id":    req.RoomID,
-				"public_key": req.PublicKey,
-				"username":   req.Username,
+	for _, computer := range s.networks[req.NetworkID] {
+		if computer != conn {
+			computerConnectedPayload := map[string]interface{}{
+				"network_id":   req.NetworkID,
+				"public_key":   req.PublicKey,
+				"computername": req.ComputerName,
 			}
-			s.sendSignal(peer, models.TypePeerConnected, peerConnectedPayload, "")
+			s.sendSignal(computer, models.TypeComputerConnected, computerConnectedPayload, "")
 
-			peerPublicKey, hasPeerKey := s.clientToPublicKey[peer]
-			if hasPeerKey {
-				existingPeerPayload := map[string]interface{}{
-					"room_id":    req.RoomID,
-					"public_key": peerPublicKey,
-					"username":   "Peer",
+			computerPublicKey, hasComputerKey := s.clientToPublicKey[computer]
+			if hasComputerKey {
+				existingComputerPayload := map[string]interface{}{
+					"network_id":   req.NetworkID,
+					"public_key":   computerPublicKey,
+					"computername": "Computer",
 				}
-				s.sendSignal(conn, models.TypePeerConnected, existingPeerPayload, "")
+				s.sendSignal(conn, models.TypeComputerConnected, existingComputerPayload, "")
 			}
 		}
 	}
 }
 
-func (s *WebSocketServer) handleDisconnectRoom(conn *websocket.Conn, req models.DisconnectRoomRequest, originalID string) {
+func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req models.DisconnectNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	roomID := req.RoomID
+	networkID := req.NetworkID
 
-	if roomID == "" {
-		roomID = s.clients[conn]
-		if roomID == "" {
-			s.sendErrorSignal(conn, "Not connected to any room", originalID)
+	if networkID == "" {
+		networkID = s.clients[conn]
+		if networkID == "" {
+			s.sendErrorSignal(conn, "Not connected to any network", originalID)
 			return
 		}
 	}
 
-	if s.clients[conn] != roomID {
-		s.sendErrorSignal(conn, "Not connected to this room", originalID)
+	if s.clients[conn] != networkID {
+		s.sendErrorSignal(conn, "Not connected to this network", originalID)
 		return
 	}
 
@@ -538,72 +538,72 @@ func (s *WebSocketServer) handleDisconnectRoom(conn *websocket.Conn, req models.
 		return
 	}
 
-	room, err := s.supabaseManager.GetRoom(roomID)
+	network, err := s.supabaseManager.GetNetwork(networkID)
 	if err != nil {
-		s.sendErrorSignal(conn, "Room not found", originalID)
+		s.sendErrorSignal(conn, "Network not found", originalID)
 		return
 	}
 
-	isOwner := (publicKey == room.PublicKeyB64)
+	isOwner := (publicKey == network.PublicKeyB64)
 
 	if isOwner {
-		err = s.supabaseManager.UpdateRoomActivity(roomID)
+		err = s.supabaseManager.UpdateNetworkActivity(networkID)
 		if err != nil && (s.config.LogLevel == "debug") {
-			logger.Debug("Error updating room activity", "error", err)
+			logger.Debug("Error updating network activity", "error", err)
 		}
 	}
 
-	err = s.supabaseManager.UpdateUserRoomConnection(roomID, publicKey, false)
+	err = s.supabaseManager.UpdateComputerNetworkConnection(networkID, publicKey, false)
 	if err != nil {
-		logger.Error("Error updating user room connection status", "error", err)
+		logger.Error("Error updating computer network connection status", "error", err)
 	}
 
-	if networks, exists := s.networks[roomID]; exists {
-		for i, peer := range networks {
-			if peer == conn {
-				s.networks[roomID] = append(networks[:i], networks[i+1:]...)
+	if networks, exists := s.networks[networkID]; exists {
+		for i, computer := range networks {
+			if computer == conn {
+				s.networks[networkID] = append(networks[:i], networks[i+1:]...)
 				break
 			}
 		}
 
-		if len(s.networks[roomID]) == 0 {
-			delete(s.networks, roomID)
+		if len(s.networks[networkID]) == 0 {
+			delete(s.networks, networkID)
 		} else {
-			for _, peer := range s.networks[roomID] {
-				peerDisconnectedPayload := map[string]interface{}{
-					"room_id":    roomID,
+			for _, computer := range s.networks[networkID] {
+				computerDisconnectedPayload := map[string]interface{}{
+					"network_id": networkID,
 					"public_key": publicKey,
 				}
-				s.sendSignal(peer, models.TypePeerDisconnected, peerDisconnectedPayload, "")
+				s.sendSignal(computer, models.TypeComputerDisconnected, computerDisconnectedPayload, "")
 			}
 		}
 	}
 
 	disconnectResponse := map[string]interface{}{
-		"room_id": roomID,
+		"network_id": networkID,
 	}
-	s.sendSignal(conn, models.TypeRoomDisconnected, disconnectResponse, originalID)
+	s.sendSignal(conn, models.TypeNetworkDisconnected, disconnectResponse, originalID)
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Client disconnected from room (but still a member)",
+		logger.Info("Client disconnected from network (but still a member)",
 			"clientAddr", conn.RemoteAddr().String(),
-			"roomID", roomID,
+			"networkID", networkID,
 			"isOwner", isOwner)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 }
 
-func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.LeaveRoomRequest, originalID string) {
+func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req models.LeaveNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	roomID := req.RoomID
+	networkID := req.NetworkID
 
-	if roomID == "" {
-		roomID = s.clients[conn]
-		if roomID == "" {
-			s.sendErrorSignal(conn, "Not connected to any room", originalID)
+	if networkID == "" {
+		networkID = s.clients[conn]
+		if networkID == "" {
+			s.sendErrorSignal(conn, "Not connected to any network", originalID)
 			return
 		}
 	}
@@ -618,95 +618,95 @@ func (s *WebSocketServer) handleLeaveRoom(conn *websocket.Conn, req models.Leave
 		}
 	}
 
-	room, err := s.supabaseManager.GetRoom(roomID)
+	network, err := s.supabaseManager.GetNetwork(networkID)
 	if err != nil {
-		s.sendErrorSignal(conn, "Room not found", originalID)
+		s.sendErrorSignal(conn, "Network not found", originalID)
 		return
 	}
 
-	isCreator := (publicKey == room.PublicKeyB64)
+	isCreator := (publicKey == network.PublicKeyB64)
 
-	err = s.supabaseManager.RemoveUserFromRoom(roomID, publicKey)
+	err = s.supabaseManager.RemoveComputerFromNetwork(networkID, publicKey)
 	if err != nil {
-		logger.Error("Error removing user from user_rooms table", "error", err)
+		logger.Error("Error removing computer from computer_networks table", "error", err)
 	}
 
 	if isCreator {
-		logger.Info("Room owner leaving", "roomID", roomID, "intentionalDelete", true)
+		logger.Info("Network owner leaving", "networkID", networkID, "intentionalDelete", true)
 
-		for _, peer := range s.networks[roomID] {
-			if peer != conn {
-				deletedNotification := models.RoomDeletedNotification{
-					RoomID: roomID,
+		for _, computer := range s.networks[networkID] {
+			if computer != conn {
+				deletedNotification := models.NetworkDeletedNotification{
+					NetworkID: networkID,
 				}
-				s.sendSignal(peer, models.TypeRoomDeleted, deletedNotification, "")
+				s.sendSignal(computer, models.TypeNetworkDeleted, deletedNotification, "")
 			}
 		}
 
-		err := s.supabaseManager.DeleteRoom(roomID)
+		err := s.supabaseManager.DeleteNetwork(networkID)
 		if err != nil {
-			logger.Error("Error deleting room from Supabase", "error", err)
+			logger.Error("Error deleting network from Supabase", "error", err)
 		}
 
-		delete(s.networks, roomID)
-		for c, cRoomID := range s.clients {
-			if cRoomID == roomID {
+		delete(s.networks, networkID)
+		for c, cNetworkID := range s.clients {
+			if cNetworkID == networkID {
 				delete(s.clients, c)
 			}
 		}
 
-		logger.Info("Room deleted because owner left", "roomID", roomID)
+		logger.Info("Network deleted because owner left", "networkID", networkID)
 	} else {
-		s.removeClient(conn, roomID)
+		s.removeClient(conn, networkID)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 	leaveSuccessPayload := map[string]interface{}{
-		"room_id": roomID,
+		"network_id": networkID,
 	}
-	s.sendSignal(conn, models.TypeLeaveRoom, leaveSuccessPayload, originalID)
+	s.sendSignal(conn, models.TypeLeaveNetwork, leaveSuccessPayload, originalID)
 
-	logger.Info("Client left room via explicit leave",
+	logger.Info("Client left network via explicit leave",
 		"clientAddr", conn.RemoteAddr().String(),
-		"roomID", roomID,
+		"networkID", networkID,
 		"isCreator", isCreator)
 }
 
-// handleKick processes a request to kick a user from the room
+// handleKick processes a request to kick a computer from the network
 func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	room, err := s.supabaseManager.GetRoom(req.RoomID)
+	network, err := s.supabaseManager.GetNetwork(req.NetworkID)
 	if err != nil {
-		s.sendErrorSignal(conn, "Room does not exist", originalID)
+		s.sendErrorSignal(conn, "Network does not exist", originalID)
 		return
 	}
 
 	// Verifica se o cliente é o dono da sala
 	publicKey, hasPublicKey := s.clientToPublicKey[conn]
-	if !hasPublicKey || publicKey != room.PublicKeyB64 {
-		s.sendErrorSignal(conn, "Only room owner can kick users", originalID)
+	if !hasPublicKey || publicKey != network.PublicKeyB64 {
+		s.sendErrorSignal(conn, "Only network owner can kick computers", originalID)
 		return
 	}
 
-	for _, peer := range s.networks[req.RoomID] {
-		if peer.RemoteAddr().String() == req.TargetID {
+	for _, computer := range s.networks[req.NetworkID] {
+		if computer.RemoteAddr().String() == req.TargetID {
 			kickedPayload := map[string]interface{}{
-				"room_id": req.RoomID,
+				"network_id": req.NetworkID,
 			}
-			s.sendSignal(peer, models.TypeKicked, kickedPayload, "")
+			s.sendSignal(computer, models.TypeKicked, kickedPayload, "")
 
-			peer.Close()
-			s.removeClient(peer, req.RoomID)
-			logger.Info("Client kicked from room", "targetID", req.TargetID, "roomID", req.RoomID)
+			computer.Close()
+			s.removeClient(computer, req.NetworkID)
+			logger.Info("Client kicked from network", "targetID", req.TargetID, "networkID", req.NetworkID)
 
 			s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 			kickSuccessPayload := map[string]interface{}{
-				"room_id":   req.RoomID,
-				"target_id": req.TargetID,
+				"network_id": req.NetworkID,
+				"target_id":  req.TargetID,
 			}
 			s.sendSignal(conn, models.TypeKickSuccess, kickSuccessPayload, originalID)
 			return
@@ -716,41 +716,41 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 	s.sendErrorSignal(conn, "Target client not found", originalID)
 }
 
-// handleRename processes a request to rename a room
+// handleRename processes a request to rename a network
 func (s *WebSocketServer) handleRename(conn *websocket.Conn, req models.RenameRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	room, err := s.supabaseManager.GetRoom(req.RoomID)
+	network, err := s.supabaseManager.GetNetwork(req.NetworkID)
 	if err != nil {
-		s.sendErrorSignal(conn, "Room does not exist", originalID)
+		s.sendErrorSignal(conn, "Network does not exist", originalID)
 		return
 	}
 
 	// Verifica se o cliente é o dono da sala
 	publicKey, hasPublicKey := s.clientToPublicKey[conn]
-	if !hasPublicKey || publicKey != room.PublicKeyB64 {
-		s.sendErrorSignal(conn, "Only room owner can rename the room", originalID)
+	if !hasPublicKey || publicKey != network.PublicKeyB64 {
+		s.sendErrorSignal(conn, "Only network owner can rename the network", originalID)
 		return
 	}
 
-	err = s.supabaseManager.UpdateRoomName(req.RoomID, req.RoomName)
+	err = s.supabaseManager.UpdateNetworkName(req.NetworkID, req.NetworkName)
 	if err != nil {
-		logger.Error("Error updating room name", "error", err)
-		s.sendErrorSignal(conn, "Error updating room name in database", originalID)
+		logger.Error("Error updating network name", "error", err)
+		s.sendErrorSignal(conn, "Error updating network name in database", originalID)
 		return
 	}
 
-	logger.Info("Room renamed", "roomID", req.RoomID, "newName", req.RoomName)
+	logger.Info("Network renamed", "networkID", req.NetworkID, "newName", req.NetworkName)
 
-	// Notify all clients in the room about the rename
+	// Notify all clients in the network about the rename
 	renamePayload := map[string]interface{}{
-		"room_id":   req.RoomID,
-		"room_name": req.RoomName,
+		"network_id":   req.NetworkID,
+		"network_name": req.NetworkName,
 	}
 
-	for _, peer := range s.networks[req.RoomID] {
-		s.sendSignal(peer, models.TypeRoomRenamed, renamePayload, "")
+	for _, computer := range s.networks[req.NetworkID] {
+		s.sendSignal(computer, models.TypeNetworkRenamed, renamePayload, "")
 	}
 
 	// Additional successful rename notification to the requester
@@ -758,14 +758,14 @@ func (s *WebSocketServer) handleRename(conn *websocket.Conn, req models.RenameRe
 }
 
 // handleDisconnect manages cleanup when a client disconnects
-// Logic: Remove client from room tracking, update Supabase for room owners, clean up resources
+// Logic: Remove client from network tracking, update Supabase for network owners, clean up resources
 func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Quando ocorre uma desconexão (fechamento do app ou perda de conexão),
-	roomID := s.clients[conn]
-	if roomID != "" {
+	networkID := s.clients[conn]
+	if networkID != "" {
 		// Recupera a chave pública do cliente antes de removê-lo
 		publicKey, hasPublicKey := s.clientToPublicKey[conn]
 		isOwner := false
@@ -773,29 +773,29 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		// Verifica se o cliente que está saindo é o dono da sala com base na chave pública
 		if hasPublicKey {
 			// Busca a sala no banco de dados
-			room, err := s.supabaseManager.GetRoom(roomID)
-			if err == nil && publicKey == room.PublicKeyB64 {
+			network, err := s.supabaseManager.GetNetwork(networkID)
+			if err == nil && publicKey == network.PublicKeyB64 {
 				// A chave pública do cliente que está saindo coincide com a do criador da sala
 				isOwner = true
-				logger.Info("Room owner disconnected",
+				logger.Info("Network owner disconnected",
 					"keyPrefix", publicKey[:10]+"...")
 
-				// Update room activity to prevent it from being removed during cleanup
-				err := s.supabaseManager.UpdateRoomActivity(roomID)
+				// Update network activity to prevent it from being removed during cleanup
+				err := s.supabaseManager.UpdateNetworkActivity(networkID)
 				if err != nil {
-					logger.Error("Error updating room activity", "error", err)
+					logger.Error("Error updating network activity", "error", err)
 				}
 			}
 		}
 
 		// Notifica outros membros da sala sobre a saída deste cliente
-		for _, peer := range s.networks[roomID] {
-			if peer != conn {
-				peerLeftPayload := map[string]interface{}{
-					"room_id":    roomID,
+		for _, computer := range s.networks[networkID] {
+			if computer != conn {
+				computerLeftPayload := map[string]interface{}{
+					"network_id": networkID,
 					"public_key": publicKey,
 				}
-				s.sendSignal(peer, models.TypePeerLeft, peerLeftPayload, "")
+				s.sendSignal(computer, models.TypeComputerLeft, computerLeftPayload, "")
 			}
 		}
 
@@ -804,32 +804,32 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		delete(s.clientToPublicKey, conn)
 
 		// Se a sala não existe no networks, não há nada mais a fazer
-		network, exists := s.networks[roomID]
+		network, exists := s.networks[networkID]
 		if !exists {
 			return
 		}
 
 		// Remove o cliente da lista de conexões da sala
-		for i, peer := range network {
-			if peer == conn {
-				s.networks[roomID] = append(network[:i], network[i+1:]...)
+		for i, computer := range network {
+			if computer == conn {
+				s.networks[networkID] = append(network[:i], network[i+1:]...)
 				break
 			}
 		}
 
 		// Se não houver mais clientes na sala, remove apenas da memória mas mantém no banco
-		if len(s.networks[roomID]) == 0 {
-			delete(s.networks, roomID)
+		if len(s.networks[networkID]) == 0 {
+			delete(s.networks, networkID)
 		}
 
 		if isOwner {
-			logger.Info("Owner disconnected but room preserved",
+			logger.Info("Owner disconnected but network preserved",
 				"clientAddr", conn.RemoteAddr().String(),
-				"roomID", roomID)
+				"networkID", networkID)
 		} else {
-			logger.Info("Client disconnected from room",
+			logger.Info("Client disconnected from network",
 				"clientAddr", conn.RemoteAddr().String(),
-				"roomID", roomID)
+				"networkID", networkID)
 		}
 	} else {
 		// Cliente não estava em nenhuma sala
@@ -839,22 +839,22 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 }
 
-// DeleteStaleRooms removes rooms that have not been active for a specified period
-// Logic: Query for rooms that haven't been active past the expiry period and delete them
-func (s *WebSocketServer) DeleteStaleRooms() {
-	staleRooms, err := s.supabaseManager.GetStaleRooms(s.config.RoomExpiryDays)
+// DeleteStaleNetworks removes networks that have not been active for a specified period
+// Logic: Query for networks that haven't been active past the expiry period and delete them
+func (s *WebSocketServer) DeleteStaleNetworks() {
+	staleNetworks, err := s.supabaseManager.GetStaleNetworks(s.config.NetworkExpiryDays)
 	if err != nil {
-		logger.Error("Error fetching stale rooms", "error", err)
+		logger.Error("Error fetching stale networks", "error", err)
 		return
 	}
 
 	numRemoved := 0
-	for _, room := range staleRooms {
-		err := s.supabaseManager.DeleteRoom(room.ID)
+	for _, network := range staleNetworks {
+		err := s.supabaseManager.DeleteNetwork(network.ID)
 		if err != nil {
-			logger.Error("Error deleting stale room", "roomID", room.ID, "error", err)
+			logger.Error("Error deleting stale network", "networkID", network.ID, "error", err)
 		} else {
-			logger.Info("Deleted stale room", "roomID", room.ID)
+			logger.Info("Deleted stale network", "networkID", network.ID)
 			numRemoved++
 		}
 	}
@@ -863,7 +863,7 @@ func (s *WebSocketServer) DeleteStaleRooms() {
 }
 
 // Start initializes and starts the WebSocket server
-// Logic: Set up HTTP handlers, start room cleanup routine, and listen for incoming connections
+// Logic: Set up HTTP handlers, start network cleanup routine, and listen for incoming connections
 func (s *WebSocketServer) Start(port string) error {
 	mux := http.NewServeMux()
 
@@ -885,14 +885,14 @@ func (s *WebSocketServer) Start(port string) error {
 		Handler: mux,
 	}
 
-	// Periodically delete stale rooms
+	// Periodically delete stale networks
 	go func() {
 		ticker := time.NewTicker(s.config.CleanupInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				s.DeleteStaleRooms()
+				s.DeleteStaleNetworks()
 			case <-s.shutdownChan:
 				return // Stop cleanup goroutine when server shuts down
 			}
@@ -940,10 +940,10 @@ func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, origi
 }
 
 // removeClient remove um cliente da sala e, se necessário, a sala do Supabase
-// Logic: Clean up client references and potentially delete room if owner leaves
-func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
-	// Se o roomID não foi fornecido, não há nada a fazer
-	if roomID == "" {
+// Logic: Clean up client references and potentially delete network if owner leaves
+func (s *WebSocketServer) removeClient(conn *websocket.Conn, networkID string) {
+	// Se o networkID não foi fornecido, não há nada a fazer
+	if networkID == "" {
 		// Limpa a chave pública do cliente
 		delete(s.clientToPublicKey, conn)
 		return
@@ -957,15 +957,15 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 	delete(s.clientToPublicKey, conn)
 
 	// Se a sala não existe no networks, não há nada mais a fazer
-	network, exists := s.networks[roomID]
+	network, exists := s.networks[networkID]
 	if !exists {
 		return
 	}
 
 	// Remove o cliente da lista de conexões da sala
-	for i, peer := range network {
-		if peer == conn {
-			s.networks[roomID] = append(network[:i], network[i+1:]...)
+	for i, computer := range network {
+		if computer == conn {
+			s.networks[networkID] = append(network[:i], network[i+1:]...)
 			break
 		}
 	}
@@ -974,48 +974,48 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, roomID string) {
 	isCreator := false
 	if hasPublicKey {
 		// Busca a sala no banco de dados
-		room, err := s.supabaseManager.GetRoom(roomID)
-		if err == nil && publicKey == room.PublicKeyB64 {
+		network, err := s.supabaseManager.GetNetwork(networkID)
+		if err == nil && publicKey == network.PublicKeyB64 {
 			// A chave pública do cliente que está saindo coincide com a do criador da sala
 			isCreator = true
-			logger.Info("Room creator disconnected", "publicKey", publicKey)
+			logger.Info("Network creator disconnected", "publicKey", publicKey)
 		}
 	}
 
 	// Se for o criador, deleta a sala do banco de dados
 	if isCreator {
-		err := s.supabaseManager.DeleteRoom(roomID)
+		err := s.supabaseManager.DeleteNetwork(networkID)
 		if err != nil && (s.config.LogLevel == "debug") {
-			logger.Debug("Error deleting room from Supabase on creator disconnect", "error", err)
+			logger.Debug("Error deleting network from Supabase on creator disconnect", "error", err)
 		}
 
 		// Notifica todos os outros participantes da sala que ela foi excluída
-		for _, peer := range s.networks[roomID] {
-			if peer != conn {
-				// Usando o struct correto do models para TypeRoomDeleted
-				deletedNotification := models.RoomDeletedNotification{
-					RoomID: roomID,
+		for _, computer := range s.networks[networkID] {
+			if computer != conn {
+				// Usando o struct correto do models para TypeNetworkDeleted
+				deletedNotification := models.NetworkDeletedNotification{
+					NetworkID: networkID,
 				}
-				s.sendSignal(peer, models.TypeRoomDeleted, deletedNotification, "")
+				s.sendSignal(computer, models.TypeNetworkDeleted, deletedNotification, "")
 			}
 		}
 
 		// Remove completamente a sala e seus clientes
-		delete(s.networks, roomID)
-		for c, cRoomID := range s.clients {
-			if cRoomID == roomID {
+		delete(s.networks, networkID)
+		for c, cNetworkID := range s.clients {
+			if cNetworkID == networkID {
 				delete(s.clients, c)
 			}
 		}
-		logger.Info("Room deleted because owner disconnected", "roomID", roomID)
-	} else if len(s.networks[roomID]) == 0 {
+		logger.Info("Network deleted because owner disconnected", "networkID", networkID)
+	} else if len(s.networks[networkID]) == 0 {
 		// Se não houver mais clientes na sala, remove a referência da sala
-		delete(s.networks, roomID)
+		delete(s.networks, networkID)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
-	logger.Info("Client left room", "clientAddr", conn.RemoteAddr().String(), "roomID", roomID)
+	logger.Info("Client left network", "clientAddr", conn.RemoteAddr().String(), "networkID", networkID)
 }
 
 // handleStatsEndpoint is the HTTP handler for the /stats endpoint
@@ -1028,10 +1028,10 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 	statsResponse := map[string]interface{}{
 		"server_stats": s.statsManager.GetStats(),
 		"config": map[string]interface{}{
-			"max_clients_per_room": s.config.MaxClientsPerRoom,
-			"room_expiry_days":     s.config.RoomExpiryDays,
-			"cleanup_interval":     s.config.CleanupInterval.String(),
-			"allow_all_origins":    s.config.AllowAllOrigins,
+			"max_clients_per_network": s.config.MaxClientsPerNetwork,
+			"network_expiry_days":     s.config.NetworkExpiryDays,
+			"cleanup_interval":        s.config.CleanupInterval.String(),
+			"allow_all_origins":       s.config.AllowAllOrigins,
 		},
 	}
 
@@ -1047,13 +1047,13 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 	w.Write(jsonBytes)
 }
 
-// handleGetUserRooms processes a request to get all rooms a user has joined
-func (s *WebSocketServer) handleGetUserRooms(conn *websocket.Conn, req models.GetUserRoomsRequest, originalID string) {
-	s.handleGetUserRoomsWithIP(conn, req, originalID, nil)
+// handleGetComputerNetworks processes a request to get all networks a computer has joined
+func (s *WebSocketServer) handleGetComputerNetworks(conn *websocket.Conn, req models.GetComputerNetworksRequest, originalID string) {
+	s.handleGetComputerNetworksWithIP(conn, req, originalID, nil)
 }
 
-// handleGetUserRoomsWithIP processes a request to get all rooms a user has joined and optionally sends IP info
-func (s *WebSocketServer) handleGetUserRoomsWithIP(conn *websocket.Conn, req models.GetUserRoomsRequest, originalID string, httpReq *http.Request) {
+// handleGetComputerNetworksWithIP processes a request to get all networks a computer has joined and optionally sends IP info
+func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req models.GetComputerNetworksRequest, originalID string, httpReq *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1062,46 +1062,46 @@ func (s *WebSocketServer) handleGetUserRoomsWithIP(conn *websocket.Conn, req mod
 		return
 	}
 
-	// Get all rooms for this user
-	userRooms, err := s.supabaseManager.GetUserRooms(req.PublicKey)
+	// Get all networks for this computer
+	computerNetworks, err := s.supabaseManager.GetComputerNetworks(req.PublicKey)
 	if err != nil {
-		logger.Error("Error fetching user rooms", "error", err, "publicKey", req.PublicKey)
-		s.sendErrorSignal(conn, "Error fetching user rooms", originalID)
+		logger.Error("Error fetching computer networks", "error", err, "publicKey", req.PublicKey)
+		s.sendErrorSignal(conn, "Error fetching computer networks", originalID)
 		return
 	}
 
-	// Build response with room details
-	response := models.UserRoomsResponse{
-		Rooms: make([]models.UserRoomInfo, 0, len(userRooms)),
+	// Build response with network details
+	response := models.ComputerNetworksResponse{
+		Networks: make([]models.ComputerNetworkInfo, 0, len(computerNetworks)),
 	}
 
-	for _, userRoom := range userRooms {
-		// Get room details
-		room, err := s.supabaseManager.GetRoom(userRoom.RoomID)
+	for _, computerNetwork := range computerNetworks {
+		// Get network details
+		network, err := s.supabaseManager.GetNetwork(computerNetwork.NetworkID)
 		if err != nil {
-			// Skip rooms that no longer exist
-			logger.Debug("Room no longer exists", "roomID", userRoom.RoomID)
+			// Skip networks that no longer exist
+			logger.Debug("Network no longer exists", "networkID", computerNetwork.NetworkID)
 			continue
 		}
 
-		roomInfo := models.UserRoomInfo{
-			RoomID:        userRoom.RoomID,
-			RoomName:      room.Name,
-			IsConnected:   userRoom.IsConnected,
-			JoinedAt:      userRoom.JoinedAt,
-			LastConnected: userRoom.LastConnected,
+		networkInfo := models.ComputerNetworkInfo{
+			NetworkID:     computerNetwork.NetworkID,
+			NetworkName:   network.Name,
+			IsConnected:   computerNetwork.IsConnected,
+			JoinedAt:      computerNetwork.JoinedAt,
+			LastConnected: computerNetwork.LastConnected,
 		}
-		response.Rooms = append(response.Rooms, roomInfo)
+		response.Networks = append(response.Networks, networkInfo)
 	}
 
 	if s.config.LogLevel == "debug" {
-		logger.Debug("Sending user rooms",
+		logger.Debug("Sending computer networks",
 			"publicKey", req.PublicKey,
-			"roomCount", len(response.Rooms))
+			"networkCount", len(response.Networks))
 	}
 
-	// Send rooms response
-	s.sendSignal(conn, models.TypeUserRooms, response, originalID)
+	// Send networks response
+	s.sendSignal(conn, models.TypeComputerNetworks, response, originalID)
 
 	// If HTTP request is provided, also send client IP information
 	if httpReq != nil {
@@ -1185,14 +1185,14 @@ func (s *WebSocketServer) persistStateForRestart() {
 
 	logger.Info("Persisting state for potential server restart")
 
-	// Update all active room timestamps in the database
-	for roomID := range s.networks {
-		// Ensure this room's activity is updated to prevent cleanup
-		err := s.supabaseManager.UpdateRoomActivity(roomID)
+	// Update all active network timestamps in the database
+	for networkID := range s.networks {
+		// Ensure this network's activity is updated to prevent cleanup
+		err := s.supabaseManager.UpdateNetworkActivity(networkID)
 		if err != nil {
-			logger.Error("Error updating room activity", "roomID", roomID, "error", err)
+			logger.Error("Error updating network activity", "networkID", networkID, "error", err)
 		} else {
-			logger.Info("Room state persisted", "roomID", roomID)
+			logger.Info("Network state persisted", "networkID", networkID)
 		}
 	}
 

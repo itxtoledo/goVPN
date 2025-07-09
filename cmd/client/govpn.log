@@ -1,8 +1,8 @@
 2025/04/25 17:29:27 Fyne error:  Attempt to access current Fyne app when none is started
-2025/04/25 17:29:27   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/app.go:102
+2025/04/25 17:29:27   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/app.go:102
 2025/04/25 17:31:55 Ed25519 keys successfully loaded.
 2025/04/25 17:31:55 Ed25519 keys successfully loaded: public key available
-2025/04/25 17:32:04 Create room button clicked
+2025/04/25 17:32:04 Create network button clicked
 2025/04/25 17:32:29 Connecting to VPN network...
 2025/04/25 17:32:29 Starting goVPN client
 2025/04/25 17:32:29 Attempting to connect to backend server...
@@ -10,67 +10,67 @@
 2025/04/25 17:32:30 Successfully connected to backend server in background
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:32:55 Fyne error:  Failed to load image
 2025/04/25 17:32:55   Cause: image: unknown format
-2025/04/25 17:32:55   At: /Users/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
+2025/04/25 17:32:55   At: /Computers/gustavotoledodesouza/go/1.21.13/pkg/mod/fyne.io/fyne/v2@v2.6.0/canvas/image.go:130
 2025/04/25 17:34:04 Disconnecting from VPN network...
 2025/04/25 17:34:06 Connecting to VPN network...
 2025/04/25 17:34:06 Starting goVPN client
@@ -80,15 +80,15 @@
 2025/04/25 17:34:32 Quitting app...
 2025/04/25 17:34:48 Ed25519 keys successfully loaded.
 2025/04/25 17:34:48 Ed25519 keys successfully loaded: public key available
-2025/04/25 17:35:07 Create room button clicked
-2025/04/25 17:35:12 Create room button clicked
+2025/04/25 17:35:07 Create network button clicked
+2025/04/25 17:35:12 Create network button clicked
 2025/04/25 17:35:22 Connecting to VPN network...
 2025/04/25 17:35:22 Starting goVPN client
 2025/04/25 17:35:22 Attempting to connect to backend server...
 2025/04/25 17:35:22 Connecting to WebSocket server at ws://localhost:8080
 2025/04/25 17:35:23 Successfully connected to backend server in background
 2025/04/25 17:35:36 Quitting app...
-2025/04/25 17:35:36 Leaving room: 
+2025/04/25 17:35:36 Leaving network: 
 2025/04/25 17:41:23 Ed25519 keys successfully loaded.
 2025/04/25 17:41:23 Ed25519 keys successfully loaded: public key available
 2025/04/25 17:41:25 Connecting to VPN network...
@@ -97,7 +97,7 @@
 2025/04/25 17:41:25 Connecting to WebSocket server at ws://localhost:8080
 2025/04/25 17:41:26 Successfully connected to backend server in background
 2025/04/25 17:41:42 Quitting app...
-2025/04/25 17:41:42 Leaving room: 
+2025/04/25 17:41:42 Leaving network: 
 2025/04/26 01:43:13 Client identifier successfully loaded.
 2025/04/26 01:43:13 Client identifier successfully loaded
 2025/04/26 01:43:32 Quitting app...
@@ -109,36 +109,36 @@
 2025/04/26 01:43:47 Quitting app...
 2025/04/26 01:46:47 Client identifier successfully loaded.
 2025/04/26 01:46:47 Client identifier successfully loaded
-2025/04/26 01:46:47 Settings loaded: Username=User1, Theme=light, Language=en, Server=ws://localhost:8080
+2025/04/26 01:46:47 Settings loaded: ComputerName=Computer1, Theme=light, Language=en, Server=ws://localhost:8080
 2025/04/26 01:46:55 Quitting app...
 2025/04/26 01:46:58 Client identifier successfully loaded.
 2025/04/26 01:46:58 Client identifier successfully loaded
-2025/04/26 01:46:58 Settings loaded: Username=User1, Theme=dark, Language=en, Server=ws://localhost:8080
+2025/04/26 01:46:58 Settings loaded: ComputerName=Computer1, Theme=dark, Language=en, Server=ws://localhost:8080
 2025/04/26 01:47:04 Quitting app...
 2025/04/26 01:47:07 Client identifier successfully loaded.
 2025/04/26 01:47:07 Client identifier successfully loaded
-2025/04/26 01:47:07 Settings loaded: Username=User1, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 01:47:07 Settings loaded: ComputerName=Computer1, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 01:47:07 Iniciando GoVPN Client
-2025/04/26 01:47:07 Settings loaded: Username=User1, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 01:47:07 Settings loaded: ComputerName=Computer1, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 01:47:07 Applying theme: system
 2025/04/26 01:47:16 Quitting app...
 2025/04/26 01:52:57 Client identifier successfully loaded.
 2025/04/26 01:52:57 Client identifier successfully loaded
-2025/04/26 01:52:57 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 01:52:57 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 01:52:57 Iniciando GoVPN Client
-2025/04/26 01:52:57 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 01:52:57 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 01:52:57 Applying theme: system
-2025/04/26 01:53:08 Create room button clicked
+2025/04/26 01:53:08 Create network button clicked
 2025/04/26 01:53:18 Quitting app...
 2025/04/26 01:58:29 Client identifier successfully loaded.
 2025/04/26 01:58:29 Client identifier successfully loaded
-2025/04/26 01:58:29 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 01:58:29 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 01:58:29 Iniciando GoVPN Client
-2025/04/26 01:58:29 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 01:58:29 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 01:58:29 Applying theme: system
-2025/04/26 01:58:31 Create room button clicked
-2025/04/26 01:58:31 Create room button clicked
-2025/04/26 01:58:31 Create room button clicked
+2025/04/26 01:58:31 Create network button clicked
+2025/04/26 01:58:31 Create network button clicked
+2025/04/26 01:58:31 Create network button clicked
 2025/04/26 01:58:34 Connecting to VPN network...
 2025/04/26 01:58:34 Starting goVPN client
 2025/04/26 01:58:34 Attempting to connect to backend server: ws://localhost:8080
@@ -149,9 +149,9 @@
 2025/04/26 01:58:35 Quitting app...
 2025/04/26 02:01:49 Client identifier successfully loaded.
 2025/04/26 02:01:49 Client identifier successfully loaded
-2025/04/26 02:01:49 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:01:49 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:01:49 Iniciando GoVPN Client
-2025/04/26 02:01:49 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:01:49 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:01:49 Applying theme: system
 2025/04/26 02:01:52 Connecting to VPN network...
 2025/04/26 02:01:52 Starting goVPN client
@@ -181,20 +181,20 @@
 2025/04/26 02:01:55 Error connecting to WebSocket server: websocket: bad handshake
 2025/04/26 02:01:55 Background connection attempt failed: failed to connect to signaling server: websocket: bad handshake
 2025/04/26 02:01:55 Error event: Connection failed: failed to connect to signaling server: websocket: bad handshake
-2025/04/26 02:01:56 Create room button clicked
-2025/04/26 02:01:56 Create room button clicked
+2025/04/26 02:01:56 Create network button clicked
+2025/04/26 02:01:56 Create network button clicked
 2025/04/26 02:02:16 Quitting app...
 2025/04/26 02:03:57 Client identifier successfully loaded.
 2025/04/26 02:03:57 Client identifier successfully loaded
-2025/04/26 02:03:57 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:03:57 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:03:57 Iniciando GoVPN Client
-2025/04/26 02:03:57 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:03:57 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:03:57 Applying theme: system
 2025/04/26 02:05:58 Client identifier successfully loaded.
 2025/04/26 02:05:58 Client identifier successfully loaded
-2025/04/26 02:05:58 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:05:58 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:05:58 Iniciando GoVPN Client
-2025/04/26 02:05:58 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:05:58 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:05:58 Applying theme: system
 2025/04/26 02:05:59 Iniciando conexão automática com o servidor de sinalização
 2025/04/26 02:05:59 Starting goVPN client
@@ -217,14 +217,14 @@
 2025/04/26 02:06:09 Error connecting to WebSocket server: websocket: bad handshake
 2025/04/26 02:06:09 Background connection attempt failed: failed to connect to signaling server: websocket: bad handshake
 2025/04/26 02:06:09 Error event: Connection failed: failed to connect to signaling server: websocket: bad handshake
-2025/04/26 02:06:10 Create room button clicked
-2025/04/26 02:06:10 Create room button clicked
+2025/04/26 02:06:10 Create network button clicked
+2025/04/26 02:06:10 Create network button clicked
 2025/04/26 02:06:12 Quitting app...
 2025/04/26 02:07:05 Client identifier successfully loaded.
 2025/04/26 02:07:05 Client identifier successfully loaded
-2025/04/26 02:07:05 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:07:05 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:07:05 Iniciando GoVPN Client
-2025/04/26 02:07:05 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:07:05 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:07:05 Applying theme: system
 2025/04/26 02:07:06 Iniciando conexão automática com o servidor de sinalização
 2025/04/26 02:07:06 Starting goVPN client
@@ -236,9 +236,9 @@
 2025/04/26 02:07:09 Quitting app...
 2025/04/26 02:07:38 Client identifier successfully loaded.
 2025/04/26 02:07:38 Client identifier successfully loaded
-2025/04/26 02:07:38 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:07:38 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:07:38 Iniciando GoVPN Client
-2025/04/26 02:07:38 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:07:38 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:07:38 Applying theme: system
 2025/04/26 02:07:39 Iniciando conexão automática com o servidor de sinalização
 2025/04/26 02:07:39 Starting goVPN client
@@ -257,9 +257,9 @@
 2025/04/26 02:07:48 Quitting app...
 2025/04/26 02:08:13 Client identifier successfully loaded.
 2025/04/26 02:08:13 Client identifier successfully loaded
-2025/04/26 02:08:13 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:08:13 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:08:13 Iniciando GoVPN Client
-2025/04/26 02:08:13 Settings loaded: Username=User, Theme=system, Language=en, Server=ws://localhost:8080
+2025/04/26 02:08:13 Settings loaded: ComputerName=Computer, Theme=system, Language=en, Server=ws://localhost:8080
 2025/04/26 02:08:13 Applying theme: system
 2025/04/26 02:08:14 Iniciando conexão automática com o servidor de sinalização
 2025/04/26 02:08:14 Starting goVPN client

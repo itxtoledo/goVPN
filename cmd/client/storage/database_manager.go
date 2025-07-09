@@ -6,8 +6,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Room represents a VPN room
-type Room struct {
+// Network represents a VPN network
+type Network struct {
 	ID            string
 	Name          string
 	LastConnected time.Time

@@ -17,16 +17,16 @@ type VPNClient struct {
 	PrivateKey     interface{}
 	PublicKey      interface{}
 	PublicKeyStr   string // Identificador principal do cliente
-	Username       string
+	ComputerName   string
 	Computers      []Computer
-	CurrentRoom    string
+	CurrentNetwork string
 	IsConnected    bool
 	NetworkManager *NetworkManager
 	ConfigManager  *ConfigManager
 }
 
 // NewVPNClient creates a new VPN client
-func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, username string) *VPNClient {
+func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
 	var privateKey ed25519.PrivateKey
 	var publicKey ed25519.PublicKey
 	var publicKeyStr string
@@ -63,7 +63,7 @@ func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, user
 		PrivateKey:    privateKey,
 		PublicKey:     publicKey,
 		PublicKeyStr:  publicKeyStr,
-		Username:      username,
+		ComputerName:  computername,
 		Computers:     make([]Computer, 0),
 		ConfigManager: configManager,
 	}
@@ -92,7 +92,7 @@ func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer, app fyne.
 	config := v.ConfigManager.GetConfig()
 
 	// Atualiza o nome de usuário na camada de dados em tempo real
-	realtimeData.SetUsername(config.Username)
+	realtimeData.SetComputerName(config.ComputerName)
 
 	// Atualiza o endereço do servidor na camada de dados em tempo real
 	realtimeData.SetServerAddress(config.ServerAddress)
@@ -119,8 +119,8 @@ func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer, app fyne.
 		realtimeData.SetLanguage(config.Language)
 	}
 
-	log.Printf("Settings loaded: Username=%s, Theme=%s, Language=%s, Server=%s",
-		config.Username, config.Theme, config.Language, config.ServerAddress)
+	log.Printf("Settings loaded: ComputerName=%s, Theme=%s, Language=%s, Server=%s",
+		config.ComputerName, config.Theme, config.Language, config.ServerAddress)
 }
 
 // Run inicia o cliente VPN

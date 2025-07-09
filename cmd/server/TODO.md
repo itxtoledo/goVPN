@@ -63,7 +63,7 @@ Este documento detalha as funcionalidades já implementadas e as pendentes no se
   - [x] Busca de salas expiradas
 
 ### Manutenção
-- [x] **DeleteStaleRooms**: Limpeza de salas inativas
+- [x] **DeleteStaleNetworks**: Limpeza de salas inativas
   - [x] Busca periódica de salas expiradas
   - [x] Exclusão automática das salas
   - [x] Configuração de período de limpeza

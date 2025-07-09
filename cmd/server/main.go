@@ -14,18 +14,18 @@ import (
 
 // Config holds the configuration for the WebSocket server
 type Config struct {
-	Port               string        // Port to listen on
-	SupabaseURL        string        // URL of the Supabase instance
-	SupabaseKey        string        // API key for Supabase
-	SupabaseRoomsTable string        // Name of the rooms table in Supabase
-	ReadBufferSize     int           // Size of the read buffer for WebSocket connections
-	WriteBufferSize    int           // Size of the write buffer for WebSocket connections
-	MaxClientsPerRoom  int           // Maximum number of clients allowed in a room
-	RoomExpiryDays     int           // Number of days after which inactive rooms are deleted
-	AllowAllOrigins    bool          // Whether to allow all origins for WebSocket connections
-	CleanupInterval    time.Duration // Interval at which to clean up stale rooms
-	LogLevel           string        // Log level (debug, info, warn, error)
-	ShutdownTimeout    time.Duration // Timeout for graceful shutdown
+	Port                  string        // Port to listen on
+	SupabaseURL           string        // URL of the Supabase instance
+	SupabaseKey           string        // API key for Supabase
+	SupabaseNetworksTable string        // Name of the networks table in Supabase
+	ReadBufferSize        int           // Size of the read buffer for WebSocket connections
+	WriteBufferSize       int           // Size of the write buffer for WebSocket connections
+	MaxClientsPerNetwork  int           // Maximum number of clients allowed in a network
+	NetworkExpiryDays     int           // Number of days after which inactive networks are deleted
+	AllowAllOrigins       bool          // Whether to allow all origins for WebSocket connections
+	CleanupInterval       time.Duration // Interval at which to clean up stale networks
+	LogLevel              string        // Log level (debug, info, warn, error)
+	ShutdownTimeout       time.Duration // Timeout for graceful shutdown
 }
 
 // getEnv retrieves the value of an environment variable, prioritizing the .env file
@@ -49,18 +49,18 @@ func main() {
 
 	// Default configuration
 	cfg := Config{
-		Port:               getEnv("PORT", "8080"),
-		SupabaseURL:        getEnv("SUPABASE_URL", ""),
-		SupabaseKey:        getEnv("SUPABASE_KEY", ""),
-		SupabaseRoomsTable: getEnv("SUPABASE_ROOMS_TABLE", "rooms"),
-		ReadBufferSize:     1024,
-		WriteBufferSize:    1024,
-		MaxClientsPerRoom:  50,
-		RoomExpiryDays:     7,
-		AllowAllOrigins:    true,
-		CleanupInterval:    24 * time.Hour, // Run cleanup once a day
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
-		ShutdownTimeout:    15 * time.Second, // Default timeout for graceful shutdown
+		Port:                  getEnv("PORT", "8080"),
+		SupabaseURL:           getEnv("SUPABASE_URL", ""),
+		SupabaseKey:           getEnv("SUPABASE_KEY", ""),
+		SupabaseNetworksTable: getEnv("SUPABASE_NETWORKS_TABLE", "networks"),
+		ReadBufferSize:        1024,
+		WriteBufferSize:       1024,
+		MaxClientsPerNetwork:  50,
+		NetworkExpiryDays:     7,
+		AllowAllOrigins:       true,
+		CleanupInterval:       24 * time.Hour, // Run cleanup once a day
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		ShutdownTimeout:       15 * time.Second, // Default timeout for graceful shutdown
 	}
 
 	// Initialize logger with configured log level
@@ -79,15 +79,15 @@ func main() {
 		}
 	}
 
-	if maxClients := getEnv("MAX_CLIENTS_PER_ROOM", ""); maxClients != "" {
+	if maxClients := getEnv("MAX_CLIENTS_PER_NETWORK", ""); maxClients != "" {
 		if max, err := strconv.Atoi(maxClients); err == nil {
-			cfg.MaxClientsPerRoom = max
+			cfg.MaxClientsPerNetwork = max
 		}
 	}
 
-	if expiryDays := getEnv("ROOM_EXPIRY_DAYS", ""); expiryDays != "" {
+	if expiryDays := getEnv("NETWORK_EXPIRY_DAYS", ""); expiryDays != "" {
 		if days, err := strconv.Atoi(expiryDays); err == nil {
-			cfg.RoomExpiryDays = days
+			cfg.NetworkExpiryDays = days
 		}
 	}
 

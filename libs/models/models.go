@@ -14,35 +14,35 @@ type MessageType string
 // Message type constants
 const (
 	// Client to server message types
-	TypeCreateRoom     MessageType = "CreateRoom"
-	TypeJoinRoom       MessageType = "JoinRoom"
-	TypeConnectRoom    MessageType = "ConnectRoom"
-	TypeDisconnectRoom MessageType = "DisconnectRoom"
-	TypeLeaveRoom      MessageType = "LeaveRoom"
-	TypeKick           MessageType = "Kick"
-	TypeRename         MessageType = "Rename"
-	TypePing           MessageType = "Ping"
-	TypeGetUserRooms   MessageType = "GetUserRooms"
+	TypeCreateNetwork       MessageType = "CreateNetwork"
+	TypeJoinNetwork         MessageType = "JoinNetwork"
+	TypeConnectNetwork      MessageType = "ConnectNetwork"
+	TypeDisconnectNetwork   MessageType = "DisconnectNetwork"
+	TypeLeaveNetwork        MessageType = "LeaveNetwork"
+	TypeKick                MessageType = "Kick"
+	TypeRename              MessageType = "Rename"
+	TypePing                MessageType = "Ping"
+	TypeGetComputerNetworks MessageType = "GetComputerNetworks"
 
 	// Server to client message types
-	TypeError            MessageType = "Error"
-	TypeRoomCreated      MessageType = "RoomCreated"
-	TypeRoomJoined       MessageType = "RoomJoined"
-	TypeRoomConnected    MessageType = "RoomConnected"
-	TypeRoomDisconnected MessageType = "RoomDisconnected"
-	TypeRoomDeleted      MessageType = "RoomDeleted"
-	TypeRoomRenamed      MessageType = "RoomRenamed"
-	TypePeerJoined       MessageType = "PeerJoined"
-	TypePeerLeft         MessageType = "PeerLeft"
-	TypePeerConnected    MessageType = "PeerConnected"
-	TypePeerDisconnected MessageType = "PeerDisconnected"
-	TypeKicked           MessageType = "Kicked"
-	TypeKickSuccess      MessageType = "KickSuccess"
-	TypeRenameSuccess    MessageType = "RenameSuccess"
-	TypeDeleteSuccess    MessageType = "DeleteSuccess"
-	TypeServerShutdown   MessageType = "ServerShutdown"
-	TypeUserRooms        MessageType = "UserRooms"
-	TypeClientIPInfo     MessageType = "ClientIPInfo"
+	TypeError                MessageType = "Error"
+	TypeNetworkCreated       MessageType = "NetworkCreated"
+	TypeNetworkJoined        MessageType = "NetworkJoined"
+	TypeNetworkConnected     MessageType = "NetworkConnected"
+	TypeNetworkDisconnected  MessageType = "NetworkDisconnected"
+	TypeNetworkDeleted       MessageType = "NetworkDeleted"
+	TypeNetworkRenamed       MessageType = "NetworkRenamed"
+	TypeComputerJoined       MessageType = "ComputerJoined"
+	TypeComputerLeft         MessageType = "ComputerLeft"
+	TypeComputerConnected    MessageType = "ComputerConnected"
+	TypeComputerDisconnected MessageType = "ComputerDisconnected"
+	TypeKicked               MessageType = "Kicked"
+	TypeKickSuccess          MessageType = "KickSuccess"
+	TypeRenameSuccess        MessageType = "RenameSuccess"
+	TypeDeleteSuccess        MessageType = "DeleteSuccess"
+	TypeServerShutdown       MessageType = "ServerShutdown"
+	TypeComputerNetworks     MessageType = "ComputerNetworks"
+	TypeClientIPInfo         MessageType = "ClientIPInfo"
 )
 
 // Password validation constants
@@ -68,8 +68,8 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// Room represents a network or room
-type Room struct {
+// Network represents a network or network
+type Network struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Password    string `json:"password,omitempty"`
@@ -78,135 +78,135 @@ type Room struct {
 
 // Event-specific request structs
 
-// CreateRoomRequest represents a request to create a new room
-type CreateRoomRequest struct {
+// CreateNetworkRequest represents a request to create a new network
+type CreateNetworkRequest struct {
 	BaseRequest
-	RoomName string `json:"room_name"`
-	Password string `json:"password"`
+	NetworkName string `json:"network_name"`
+	Password    string `json:"password"`
 }
 
-// CreateRoomResponse represents a response to a room creation request
-type CreateRoomResponse struct {
-	RoomID    string `json:"room_id"`
-	RoomName  string `json:"room_name"`
-	Password  string `json:"password"`
-	PublicKey string `json:"public_key"`
+// CreateNetworkResponse represents a response to a network creation request
+type CreateNetworkResponse struct {
+	NetworkID   string `json:"network_id"`
+	NetworkName string `json:"network_name"`
+	Password    string `json:"password"`
+	PublicKey   string `json:"public_key"`
 }
 
-// JoinRoomRequest represents a request to join an existing room
-type JoinRoomRequest struct {
+// JoinNetworkRequest represents a request to join an existing network
+type JoinNetworkRequest struct {
 	BaseRequest
-	RoomID   string `json:"room_id"`
-	Password string `json:"password"`
-	Username string `json:"username,omitempty"`
+	NetworkID    string `json:"network_id"`
+	Password     string `json:"password"`
+	ComputerName string `json:"computername,omitempty"`
 }
 
-// JoinRoomResponse represents a response to a room join request
-type JoinRoomResponse struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
+// JoinNetworkResponse represents a response to a network join request
+type JoinNetworkResponse struct {
+	NetworkID   string `json:"network_id"`
+	NetworkName string `json:"network_name"`
 }
 
-// ConnectRoomRequest represents a request to connect to a previously joined room
-type ConnectRoomRequest struct {
+// ConnectNetworkRequest represents a request to connect to a previously joined network
+type ConnectNetworkRequest struct {
 	BaseRequest
-	RoomID   string `json:"room_id"`
-	Username string `json:"username,omitempty"`
+	NetworkID    string `json:"network_id"`
+	ComputerName string `json:"computername,omitempty"`
 }
 
-// ConnectRoomResponse represents a response to a room connection request
-type ConnectRoomResponse struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
+// ConnectNetworkResponse represents a response to a network connection request
+type ConnectNetworkResponse struct {
+	NetworkID   string `json:"network_id"`
+	NetworkName string `json:"network_name"`
 }
 
-// DisconnectRoomRequest represents a request to disconnect from a room (but stay joined)
-type DisconnectRoomRequest struct {
+// DisconnectNetworkRequest represents a request to disconnect from a network (but stay joined)
+type DisconnectNetworkRequest struct {
 	BaseRequest
-	RoomID string `json:"room_id"`
+	NetworkID string `json:"network_id"`
 }
 
-// DisconnectRoomResponse represents a response to a room disconnect request
-type DisconnectRoomResponse struct {
-	RoomID string `json:"room_id"`
+// DisconnectNetworkResponse represents a response to a network disconnect request
+type DisconnectNetworkResponse struct {
+	NetworkID string `json:"network_id"`
 }
 
-// LeaveRoomRequest represents a request to leave a room
-type LeaveRoomRequest struct {
+// LeaveNetworkRequest represents a request to leave a network
+type LeaveNetworkRequest struct {
 	BaseRequest
-	RoomID string `json:"room_id"`
+	NetworkID string `json:"network_id"`
 }
 
-// LeaveRoomResponse confirms a client has left a room
-type LeaveRoomResponse struct {
-	RoomID string `json:"room_id"`
+// LeaveNetworkResponse confirms a client has left a network
+type LeaveNetworkResponse struct {
+	NetworkID string `json:"network_id"`
 }
 
-// Room management structs
+// Network management structs
 
-// KickRequest represents a request to kick a user from a room
+// KickRequest represents a request to kick a computer from a network
 type KickRequest struct {
 	BaseRequest
-	RoomID   string `json:"room_id"`
-	TargetID string `json:"target_id"`
+	NetworkID string `json:"network_id"`
+	TargetID  string `json:"target_id"`
 }
 
-// KickResponse confirms a user has been kicked
+// KickResponse confirms a computer has been kicked
 type KickResponse struct {
-	RoomID   string `json:"room_id"`
-	TargetID string `json:"target_id"`
+	NetworkID string `json:"network_id"`
+	TargetID  string `json:"target_id"`
 }
 
-// RenameRequest represents a request to rename a room
+// RenameRequest represents a request to rename a network
 type RenameRequest struct {
 	BaseRequest
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
+	NetworkID   string `json:"network_id"`
+	NetworkName string `json:"network_name"`
 }
 
-// RenameResponse confirms a room has been renamed
+// RenameResponse confirms a network has been renamed
 type RenameResponse struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
+	NetworkID   string `json:"network_id"`
+	NetworkName string `json:"network_name"`
 }
 
-// Peer notification structs
+// Computer notification structs
 
-// PeerJoinedNotification notifies that a peer has joined the room
-type PeerJoinedNotification struct {
-	RoomID    string `json:"room_id"`
-	PublicKey string `json:"public_key"`
-	Username  string `json:"username,omitempty"`
+// ComputerJoinedNotification notifies that a computer has joined the network
+type ComputerJoinedNotification struct {
+	NetworkID    string `json:"network_id"`
+	PublicKey    string `json:"public_key"`
+	ComputerName string `json:"computername,omitempty"`
 }
 
-// PeerLeftNotification notifies that a peer has left the room
-type PeerLeftNotification struct {
-	RoomID    string `json:"room_id"`
-	PublicKey string `json:"public_key"`
-}
-
-// PeerConnectedNotification notifies that a peer has connected to the room
-type PeerConnectedNotification struct {
-	RoomID    string `json:"room_id"`
-	PublicKey string `json:"public_key"`
-	Username  string `json:"username,omitempty"`
-}
-
-// PeerDisconnectedNotification notifies that a peer has disconnected from the room (but not left)
-type PeerDisconnectedNotification struct {
-	RoomID    string `json:"room_id"`
+// ComputerLeftNotification notifies that a computer has left the network
+type ComputerLeftNotification struct {
+	NetworkID string `json:"network_id"`
 	PublicKey string `json:"public_key"`
 }
 
-// RoomDeletedNotification notifies that a room has been deleted
-type RoomDeletedNotification struct {
-	RoomID string `json:"room_id"`
+// ComputerConnectedNotification notifies that a computer has connected to the network
+type ComputerConnectedNotification struct {
+	NetworkID    string `json:"network_id"`
+	PublicKey    string `json:"public_key"`
+	ComputerName string `json:"computername,omitempty"`
 }
 
-// KickedNotification notifies a user they've been kicked
+// ComputerDisconnectedNotification notifies that a computer has disconnected from the network (but not left)
+type ComputerDisconnectedNotification struct {
+	NetworkID string `json:"network_id"`
+	PublicKey string `json:"public_key"`
+}
+
+// NetworkDeletedNotification notifies that a network has been deleted
+type NetworkDeletedNotification struct {
+	NetworkID string `json:"network_id"`
+}
+
+// KickedNotification notifies a computer they've been kicked
 type KickedNotification struct {
-	RoomID string `json:"room_id"`
-	Reason string `json:"reason,omitempty"`
+	NetworkID string `json:"network_id"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // ServerShutdownNotification notifies clients that the server is shutting down
@@ -216,23 +216,23 @@ type ServerShutdownNotification struct {
 	RestartInfo string `json:"restart_info,omitempty"`
 }
 
-// GetUserRoomsRequest represents a request to get all rooms a user has joined
-type GetUserRoomsRequest struct {
+// GetComputerNetworksRequest represents a request to get all networks a computer has joined
+type GetComputerNetworksRequest struct {
 	BaseRequest
 }
 
-// UserRoomInfo represents information about a room a user has joined
-type UserRoomInfo struct {
-	RoomID        string    `json:"room_id"`
-	RoomName      string    `json:"room_name"`
+// ComputerNetworkInfo represents information about a network a computer has joined
+type ComputerNetworkInfo struct {
+	NetworkID     string    `json:"network_id"`
+	NetworkName   string    `json:"network_name"`
 	IsConnected   bool      `json:"is_connected"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
 }
 
-// UserRoomsResponse represents a response containing all rooms a user has joined
-type UserRoomsResponse struct {
-	Rooms []UserRoomInfo `json:"rooms"`
+// ComputerNetworksResponse represents a response containing all networks a computer has joined
+type ComputerNetworksResponse struct {
+	Networks []ComputerNetworkInfo `json:"networks"`
 }
 
 // ClientIPInfoResponse represents client IP address information
@@ -248,7 +248,7 @@ func GenerateMessageID() (string, error) {
 	return GenerateRandomID(8)
 }
 
-func GenerateRoomID() string {
+func GenerateNetworkID() string {
 	id, err := GenerateRandomID(16)
 
 	if err != nil {

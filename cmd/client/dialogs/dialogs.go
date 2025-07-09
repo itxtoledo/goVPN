@@ -2,17 +2,18 @@ package dialogs
 
 import (
 	"errors"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
 
-// ShowMessage displays a simple message dialog to the user
+// ShowMessage displays a simple message dialog to the computer
 func ShowMessage(title, message string, window fyne.Window) {
 	dialog.ShowInformation(title, message, window)
 }
 
-// ShowError displays an error message dialog to the user
+// ShowError displays an error message dialog to the computer
 func ShowError(err error, window fyne.Window) {
 	dialog.ShowError(err, window)
 }

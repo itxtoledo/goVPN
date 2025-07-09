@@ -1,4 +1,4 @@
-// filepath: /Users/gustavotoledodesouza/Projects/fun/goVPN/cmd/client/home_tab_component.go
+// filepath: /Computers/gustavotoledodesouza/Projects/fun/goVPN/cmd/client/home_tab_component.go
 package main
 
 import (
@@ -22,40 +22,40 @@ type NetworkManagerAdapter struct {
 	*NetworkManager
 }
 
-// CreateRoom adapts the NetworkManager CreateRoom method to match the interface
-func (nma *NetworkManagerAdapter) CreateRoom(name, password string) (*models.CreateRoomResponse, error) {
-	// Call the original CreateRoom method
-	err := nma.NetworkManager.CreateRoom(name, password)
+// CreateNetwork adapts the NetworkManager CreateNetwork method to match the interface
+func (nma *NetworkManagerAdapter) CreateNetwork(name, password string) (*models.CreateNetworkResponse, error) {
+	// Call the original CreateNetwork method
+	err := nma.NetworkManager.CreateNetwork(name, password)
 	if err != nil {
 		return nil, err
 	}
 
-	// Return a response with the current room info
-	return &models.CreateRoomResponse{
-		RoomID:   nma.NetworkManager.RoomID,
-		RoomName: name,
-		Password: password,
+	// Return a response with the current network info
+	return &models.CreateNetworkResponse{
+		NetworkID:   nma.NetworkManager.NetworkID,
+		NetworkName: name,
+		Password:    password,
 	}, nil
 }
 
-// JoinRoom adapts the NetworkManager JoinRoom method to match the interface
-func (nma *NetworkManagerAdapter) JoinRoom(roomID, password, username string) (*models.JoinRoomResponse, error) {
-	// Call the original JoinRoom method
-	err := nma.NetworkManager.JoinRoom(roomID, password, username)
+// JoinNetwork adapts the NetworkManager JoinNetwork method to match the interface
+func (nma *NetworkManagerAdapter) JoinNetwork(networkID, password, computername string) (*models.JoinNetworkResponse, error) {
+	// Call the original JoinNetwork method
+	err := nma.NetworkManager.JoinNetwork(networkID, password, computername)
 	if err != nil {
 		return nil, err
 	}
 
-	// Return a response with the current room info
-	return &models.JoinRoomResponse{
-		RoomID:   roomID,
-		RoomName: roomID, // We don't have room name in the NetworkManager
+	// Return a response with the current network info
+	return &models.JoinNetworkResponse{
+		NetworkID:   networkID,
+		NetworkName: networkID, // We don't have network name in the NetworkManager
 	}, nil
 }
 
-// GetRoomID returns the current room ID
-func (nma *NetworkManagerAdapter) GetRoomID() string {
-	return nma.NetworkManager.RoomID
+// GetNetworkID returns the current network ID
+func (nma *NetworkManagerAdapter) GetNetworkID() string {
+	return nma.NetworkManager.NetworkID
 }
 
 // GetRealtimeData returns the RealtimeDataLayer
@@ -98,12 +98,12 @@ func NewHomeTabComponent(configManager *ConfigManager, realtimeData *data.Realti
 // CreateHomeTabContainer cria o container principal da aba inicial
 func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	// Criar o container de salas disponíveis
-	roomsContainer := htc.NetworkListComp.GetContainer()
-	htc.NetworksContainer = roomsContainer
+	networksContainer := htc.NetworkListComp.GetContainer()
+	htc.NetworksContainer = networksContainer
 
 	// Criar um botão para criar uma nova sala
-	createRoomButton := widget.NewButtonWithIcon("Create Room", theme.ContentAddIcon(), func() {
-		log.Println("Create room button clicked")
+	createNetworkButton := widget.NewButtonWithIcon("Create Network", theme.ContentAddIcon(), func() {
+		log.Println("Create network button clicked")
 
 		// Check network connection status
 		isConnected, _ := htc.RealtimeData.IsConnected.Get()
@@ -112,45 +112,46 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			return
 		}
 
-		// Get username, handling the multiple return values
-		username, err := htc.UI.RealtimeData.Username.Get()
+		// Get computername, handling the multiple return values
+		computername, err := htc.UI.RealtimeData.ComputerName.Get()
 		if err != nil {
-			log.Printf("Error getting username: %v", err)
-			username = "User" // Default fallback
+			log.Printf("Error getting computername: %v", err)
+			computername = "Computer" // Default fallback
 		}
 
-		// Create and show the room creation window (singleton pattern)
-		if globalRoomWindow != nil && globalRoomWindow.isOpen && globalRoomWindow.Window != nil {
+		// Create and show the network creation window (singleton pattern)
+		if globalNetworkWindow != nil && globalNetworkWindow.BaseWindow.Window != nil {
 			// Focus on existing window if already open
-			globalRoomWindow.Window.RequestFocus()
+			globalNetworkWindow.BaseWindow.Window.RequestFocus()
 			return
 		}
 
 		adapter := &NetworkManagerAdapter{htc.UI.VPN.NetworkManager}
-		globalRoomWindow = NewRoomWindow(
-			htc.UI.App,
-			htc.UI.MainWindow,
-			adapter.CreateRoom,
-			func(roomID, name, password string) error {
-				// This is where you'd save the room to local storage if needed
+		globalNetworkWindow = NewNetworkWindow(
+			htc.UI,
+			adapter.CreateNetwork,
+			func(networkID, name, password string) error {
+				// This is where you'd save the network to local storage if needed
 				// For now, we'll just add it to the RealtimeDataLayer
-				room := &storage.Room{
-					ID:            roomID,
+				network := &storage.Network{
+					ID:            networkID,
 					Name:          name,
 					LastConnected: time.Now(),
 				}
-				adapter.GetRealtimeData().AddRoom(room)
+				adapter.GetRealtimeData().AddNetwork(network)
 				return nil
 			},
-			adapter.GetRoomID,
-			username,
+			adapter.GetNetworkID,
+			computername,
+			ValidatePassword,
+			ConfigurePasswordEntry,
 		)
-		globalRoomWindow.Show(ValidatePassword, ConfigurePasswordEntry)
+		globalNetworkWindow.Show()
 	})
 
 	// Criar um botão para entrar em uma sala
-	joinRoomButton := widget.NewButtonWithIcon("Join Room", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "mail-reply"), func() {
-		log.Println("Join room button clicked")
+	joinNetworkButton := widget.NewButtonWithIcon("Join Network", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "mail-reply"), func() {
+		log.Println("Join network button clicked")
 
 		// Check network connection status
 		isConnected, _ := htc.RealtimeData.IsConnected.Get()
@@ -159,41 +160,42 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			return
 		}
 
-		// Get username, handling the multiple return values
-		username, err := htc.UI.RealtimeData.Username.Get()
+		// Get computername, handling the multiple return values
+		computername, err := htc.UI.RealtimeData.ComputerName.Get()
 		if err != nil {
-			log.Printf("Error getting username: %v", err)
-			username = "User" // Default fallback
+			log.Printf("Error getting computername: %v", err)
+			computername = "Computer" // Default fallback
 		}
 
-		// Create and show the room joining window (singleton pattern)
-		if globalJoinWindow != nil && globalJoinWindow.isOpen && globalJoinWindow.Window != nil {
+		// Create and show the network joining window (singleton pattern)
+		if globalJoinWindow != nil && globalJoinWindow.BaseWindow.Window != nil {
 			// Focus on existing window if already open
-			globalJoinWindow.Window.RequestFocus()
+			globalJoinWindow.BaseWindow.Window.RequestFocus()
 			return
 		}
 
 		adapter := &NetworkManagerAdapter{htc.UI.VPN.NetworkManager}
 		globalJoinWindow = NewJoinWindow(
-			htc.UI.App,
-			htc.UI.MainWindow,
-			adapter.JoinRoom,
-			func(roomID, name, password string) error {
-				// Save room logic if needed
+			htc.UI,
+			adapter.JoinNetwork,
+			func(networkID, name, password string) error {
+				// Save network logic if needed
 				return nil
 			},
-			username,
+			computername,
+			ValidatePassword,
+			ConfigurePasswordEntry,
 		)
-		globalJoinWindow.Show(ValidatePassword, ConfigurePasswordEntry)
+		globalJoinWindow.Show()
 	})
 
 	// Criar o container da aba de salas
 	networksTabContent := container.NewBorder(
 		nil,
-		container.NewHBox(layout.NewSpacer(), joinRoomButton, createRoomButton),
+		container.NewHBox(layout.NewSpacer(), joinNetworkButton, createNetworkButton),
 		nil,
 		nil,
-		roomsContainer,
+		networksContainer,
 	)
 
 	// Criar o container da aba de configurações

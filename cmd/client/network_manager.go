@@ -14,7 +14,7 @@ import (
 // NetworkInterface define a interface mínima para a rede virtual
 type NetworkInterface interface {
 	GetLocalIP() string
-	GetPeerCount() int
+	GetComputerCount() int
 }
 
 // Computer represents a computer in the VPN network
@@ -38,7 +38,7 @@ const (
 type NetworkManager struct {
 	VirtualNetwork    NetworkInterface
 	SignalingServer   *SignalingClient
-	RoomID            string
+	NetworkID         string
 	Computers         []Computer
 	connectionState   ConnectionState
 	ReconnectAttempts int
@@ -92,40 +92,40 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 					nm.RealtimeData.EmitEvent(data.EventError, errorMsg, nil)
 				}
 			}
-		case models.TypeRoomDisconnected:
+		case models.TypeNetworkDisconnected:
 			nm.refreshNetworkList()
-		case models.TypeRoomJoined:
+		case models.TypeNetworkJoined:
 			nm.refreshNetworkList()
-		case models.TypeRoomCreated:
+		case models.TypeNetworkCreated:
 			nm.refreshNetworkList()
-		case models.TypeLeaveRoom:
+		case models.TypeLeaveNetwork:
 			nm.refreshNetworkList()
 		case models.TypeKicked:
 			nm.refreshNetworkList()
-		case models.TypePeerJoined:
+		case models.TypeComputerJoined:
 			nm.refreshNetworkList()
-		case models.TypePeerLeft:
+		case models.TypeComputerLeft:
 			nm.refreshNetworkList()
-		case models.TypeUserRooms:
-			// For TypeUserRooms, we need to unmarshal the payload to update the rooms list
-			var userRoomsResponse models.UserRoomsResponse
-			if err := json.Unmarshal(payload, &userRoomsResponse); err != nil {
-				log.Printf("Failed to unmarshal user rooms response in handler: %v", err)
+		case models.TypeComputerNetworks:
+			// For TypeComputerNetworks, we need to unmarshal the payload to update the networks list
+			var computerNetworksResponse models.ComputerNetworksResponse
+			if err := json.Unmarshal(payload, &computerNetworksResponse); err != nil {
+				log.Printf("Failed to unmarshal computer networks response in handler: %v", err)
 				return
 			}
 
-			// Convert models.Room to storage.Room
-			updatedRooms := make([]*storage.Room, 0, len(userRoomsResponse.Rooms))
-			for _, room := range userRoomsResponse.Rooms {
-				storageRoom := &storage.Room{
-					ID:            room.RoomID,
-					Name:          room.RoomName,
-					LastConnected: room.LastConnected,
+			// Convert models.Network to storage.Network
+			updatedNetworks := make([]*storage.Network, 0, len(computerNetworksResponse.Networks))
+			for _, network := range computerNetworksResponse.Networks {
+				storageNetwork := &storage.Network{
+					ID:            network.NetworkID,
+					Name:          network.NetworkName,
+					LastConnected: network.LastConnected,
 				}
-				updatedRooms = append(updatedRooms, storageRoom)
+				updatedNetworks = append(updatedNetworks, storageNetwork)
 			}
-			// Update the RealtimeDataLayer with the new rooms list
-			nm.RealtimeData.SetRooms(updatedRooms)
+			// Update the RealtimeDataLayer with the new networks list
+			nm.RealtimeData.SetNetworks(updatedNetworks)
 			nm.refreshNetworkList()
 		case models.TypeClientIPInfo:
 			// Handle client IP information
@@ -151,8 +151,8 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				ipDisplay = "N/A"
 			}
 
-			// Update the user IP in the realtime data
-			nm.RealtimeData.SetUserIP(ipDisplay)
+			// Update the computer IP in the realtime data
+			nm.RealtimeData.SetComputerIP(ipDisplay)
 		}
 	}
 	nm.SignalingServer = NewSignalingClient(publicKey, signalingHandler)
@@ -172,10 +172,10 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	nm.RealtimeData.SetStatusMessage("Connected")
 
 	// O servidor já envia automaticamente a lista de salas do usuário ao conectar,
-	// então não precisamos chamar GetUserRooms explicitamente
+	// então não precisamos chamar GetComputerNetworks explicitamente
 	log.Println("Aguardando lista de salas do servidor...")
 
-	// Get room list
+	// Get network list
 	nm.refreshNetworkList()
 
 	return nil
@@ -223,43 +223,43 @@ func (nm *NetworkManager) GetConnectionState() ConnectionState {
 	return nm.connectionState
 }
 
-// CreateRoom creates a new room
-func (nm *NetworkManager) CreateRoom(name string, password string) error {
+// CreateNetwork creates a new network
+func (nm *NetworkManager) CreateNetwork(name string, password string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
-	// Create room
-	res, err := nm.SignalingServer.CreateRoom(name, password)
+	// Create network
+	res, err := nm.SignalingServer.CreateNetwork(name, password)
 	if err != nil {
-		return fmt.Errorf("failed to create room: %v", err)
+		return fmt.Errorf("failed to create network: %v", err)
 	}
 
-	// Check if the room was successfully created and has a valid ID
-	if res == nil || res.RoomID == "" {
-		return fmt.Errorf("failed to create room: invalid server response")
+	// Check if the network was successfully created and has a valid ID
+	if res == nil || res.NetworkID == "" {
+		return fmt.Errorf("failed to create network: invalid server response")
 	}
 
-	log.Printf("Room created: ID=%s, Name=%s", res.RoomID, name)
+	log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
 
-	// Store room information in memory
-	room := &storage.Room{
-		ID:            res.RoomID,
+	// Store network information in memory
+	network := &storage.Network{
+		ID:            res.NetworkID,
 		Name:          name,
 		LastConnected: time.Now(),
 	}
 
-	// Add the room to the RealtimeDataLayer's in-memory room list
-	nm.RealtimeData.AddRoom(room)
+	// Add the network to the RealtimeDataLayer's in-memory network list
+	nm.RealtimeData.AddNetwork(network)
 
-	// Store room information for current connection
-	nm.RoomID = res.RoomID
+	// Store network information for current connection
+	nm.NetworkID = res.NetworkID
 
 	// Update data layer
-	nm.RealtimeData.SetRoomInfo(res.RoomID)
-	nm.RealtimeData.EmitEvent(data.EventRoomJoined, res.RoomID, nil)
+	nm.RealtimeData.SetNetworkInfo(res.NetworkID)
+	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, res.NetworkID, nil)
 
-	// Refresh network list now that we have added the room to memory
+	// Refresh network list now that we have added the network to memory
 	nm.refreshNetworkList()
 
 	// Update UI
@@ -268,54 +268,54 @@ func (nm *NetworkManager) CreateRoom(name string, password string) error {
 	return nil
 }
 
-// JoinRoom joins a room
-func (nm *NetworkManager) JoinRoom(roomID string, password string, username string) error {
+// JoinNetwork joins a network
+func (nm *NetworkManager) JoinNetwork(networkID string, password string, computername string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
-	// Join room
-	res, err := nm.SignalingServer.JoinRoom(roomID, password, username)
+	// Join network
+	res, err := nm.SignalingServer.JoinNetwork(networkID, password, computername)
 	if err != nil {
-		return fmt.Errorf("failed to join room: %v", err)
+		return fmt.Errorf("failed to join network: %v", err)
 	}
 
-	// Use roomName from the response
-	roomName := res.RoomName
+	// Use networkName from the response
+	networkName := res.NetworkName
 
-	// Store room information in memory
-	room := &storage.Room{
-		ID:            roomID,
-		Name:          roomName,
+	// Store network information in memory
+	network := &storage.Network{
+		ID:            networkID,
+		Name:          networkName,
 		LastConnected: time.Now(),
 	}
 
-	// Check if the room already exists in memory
-	roomExists := false
-	for i, existingRoom := range nm.RealtimeData.GetRooms() {
-		if existingRoom.ID == roomID {
-			// Update existing room
-			nm.RealtimeData.UpdateRoom(i, room)
-			roomExists = true
+	// Check if the network already exists in memory
+	networkExists := false
+	for i, existingNetwork := range nm.RealtimeData.GetNetworks() {
+		if existingNetwork.ID == networkID {
+			// Update existing network
+			nm.RealtimeData.UpdateNetwork(i, network)
+			networkExists = true
 			break
 		}
 	}
 
-	// If room doesn't exist, add it
-	if !roomExists {
-		nm.RealtimeData.AddRoom(room)
+	// If network doesn't exist, add it
+	if !networkExists {
+		nm.RealtimeData.AddNetwork(network)
 	}
 
-	log.Printf("Room joined: ID=%s, Name=%s", roomID, roomName)
+	log.Printf("Network joined: ID=%s, Name=%s", networkID, networkName)
 
-	// Store room information for current connection
-	nm.RoomID = roomID
+	// Store network information for current connection
+	nm.NetworkID = networkID
 
 	// Update data layer
-	nm.RealtimeData.SetRoomInfo(roomID)
-	nm.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+	nm.RealtimeData.SetNetworkInfo(networkID)
+	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
 
-	// Refresh network list now that we have added the room to memory
+	// Refresh network list now that we have added the network to memory
 	nm.refreshNetworkList()
 
 	// Update UI
@@ -324,48 +324,48 @@ func (nm *NetworkManager) JoinRoom(roomID string, password string, username stri
 	return nil
 }
 
-// ConnectRoom connects to a previously joined room
-func (nm *NetworkManager) ConnectRoom(roomID string) error {
+// ConnectNetwork connects to a previously joined network
+func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
-	// Connect to room
-	res, err := nm.SignalingServer.ConnectRoom(roomID, "User")
+	// Connect to network
+	res, err := nm.SignalingServer.ConnectNetwork(networkID, "Computer")
 	if err != nil {
-		return fmt.Errorf("failed to connect to room: %v", err)
+		return fmt.Errorf("failed to connect to network: %v", err)
 	}
 
-	// Use roomName from the response
-	roomName := res.RoomName
+	// Use networkName from the response
+	networkName := res.NetworkName
 
-	// Find the room in memory to update lastConnected time
-	roomExists := false
-	for i, existingRoom := range nm.RealtimeData.GetRooms() {
-		if existingRoom.ID == roomID {
-			roomExists = true
+	// Find the network in memory to update lastConnected time
+	networkExists := false
+	for i, existingNetwork := range nm.RealtimeData.GetNetworks() {
+		if existingNetwork.ID == networkID {
+			networkExists = true
 
 			// Update lastConnected time
-			existingRoom.LastConnected = time.Now()
-			nm.RealtimeData.UpdateRoom(i, existingRoom)
+			existingNetwork.LastConnected = time.Now()
+			nm.RealtimeData.UpdateNetwork(i, existingNetwork)
 			break
 		}
 	}
 
-	if !roomExists {
-		return fmt.Errorf("room not found in local storage")
+	if !networkExists {
+		return fmt.Errorf("network not found in local storage")
 	}
 
-	log.Printf("Room connected: ID=%s, Name=%s", roomID, roomName)
+	log.Printf("Network connected: ID=%s, Name=%s", networkID, networkName)
 
-	// Store room information for current connection
-	nm.RoomID = roomID
+	// Store network information for current connection
+	nm.NetworkID = networkID
 
 	// Update data layer (without password since we don't store it)
-	nm.RealtimeData.SetRoomInfo(roomID)
-	nm.RealtimeData.EmitEvent(data.EventRoomJoined, roomID, nil)
+	nm.RealtimeData.SetNetworkInfo(networkID)
+	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
 
-	// Refresh network list now that we have re-connected to the room
+	// Refresh network list now that we have re-connected to the network
 	nm.refreshNetworkList()
 
 	// Update UI
@@ -374,28 +374,28 @@ func (nm *NetworkManager) ConnectRoom(roomID string) error {
 	return nil
 }
 
-// DisconnectRoom disconnects from a room without leaving it
-func (nm *NetworkManager) DisconnectRoom(roomID string) error {
+// DisconnectNetwork disconnects from a network without leaving it
+func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
-	log.Printf("Disconnecting from room with ID: %s", roomID)
+	log.Printf("Disconnecting from network with ID: %s", networkID)
 
-	// Disconnect from room
-	_, err := nm.SignalingServer.DisconnectRoom(roomID)
+	// Disconnect from network
+	_, err := nm.SignalingServer.DisconnectNetwork(networkID)
 	if err != nil {
-		log.Printf("Error from SignalingClient when disconnecting from room: %v", err)
-		return fmt.Errorf("failed to disconnect from room: %v", err)
+		log.Printf("Error from SignalingClient when disconnecting from network: %v", err)
+		return fmt.Errorf("failed to disconnect from network: %v", err)
 	}
 
-	// If we're disconnecting from the current room, clear our room information
-	if nm.RoomID == roomID {
-		nm.RoomID = ""
+	// If we're disconnecting from the current network, clear our network information
+	if nm.NetworkID == networkID {
+		nm.NetworkID = ""
 
 		// Update data layer
-		nm.RealtimeData.SetRoomInfo("Not connected")
-		nm.RealtimeData.EmitEvent(data.EventRoomDisconnected, roomID, nil)
+		nm.RealtimeData.SetNetworkInfo("Not connected")
+		nm.RealtimeData.EmitEvent(data.EventNetworkDisconnected, networkID, nil)
 	}
 
 	// Clear the computers list
@@ -410,33 +410,33 @@ func (nm *NetworkManager) DisconnectRoom(roomID string) error {
 	return nil
 }
 
-// LeaveRoom leaves the current room
-func (nm *NetworkManager) LeaveRoom() error {
+// LeaveNetwork leaves the current network
+func (nm *NetworkManager) LeaveNetwork() error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
-	log.Printf("Leaving room with ID: %s", nm.RoomID)
+	log.Printf("Leaving network with ID: %s", nm.NetworkID)
 
-	// Store room ID before clearing
-	roomID := nm.RoomID
+	// Store network ID before clearing
+	networkID := nm.NetworkID
 
-	// Leave room
-	_, err := nm.SignalingServer.LeaveRoom(roomID)
+	// Leave network
+	_, err := nm.SignalingServer.LeaveNetwork(networkID)
 	if err != nil {
-		log.Printf("Error from SignalingClient when leaving room: %v", err)
-		return fmt.Errorf("failed to leave room: %v", err)
+		log.Printf("Error from SignalingClient when leaving network: %v", err)
+		return fmt.Errorf("failed to leave network: %v", err)
 	}
 
-	// Remove the room from memory
-	nm.RealtimeData.RemoveRoom(roomID)
+	// Remove the network from memory
+	nm.RealtimeData.RemoveNetwork(networkID)
 
-	// Clear room information
-	nm.RoomID = ""
+	// Clear network information
+	nm.NetworkID = ""
 
 	// Update data layer
-	nm.RealtimeData.SetRoomInfo("Not connected")
-	nm.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+	nm.RealtimeData.SetNetworkInfo("Not connected")
+	nm.RealtimeData.EmitEvent(data.EventNetworkLeft, networkID, nil)
 
 	// Refresh the network list UI
 	nm.refreshNetworkList()
@@ -447,34 +447,34 @@ func (nm *NetworkManager) LeaveRoom() error {
 	return nil
 }
 
-// LeaveRoomById leaves a specific room by ID
-func (nm *NetworkManager) LeaveRoomById(roomID string) error {
+// LeaveNetworkById leaves a specific network by ID
+func (nm *NetworkManager) LeaveNetworkById(networkID string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
-	log.Printf("Leaving room with ID: %s", roomID)
+	log.Printf("Leaving network with ID: %s", networkID)
 
-	// Leave room
-	_, err := nm.SignalingServer.LeaveRoom(roomID)
+	// Leave network
+	_, err := nm.SignalingServer.LeaveNetwork(networkID)
 	if err != nil {
-		log.Printf("Error from SignalingClient when leaving room: %v", err)
-		return fmt.Errorf("failed to leave room: %v", err)
+		log.Printf("Error from SignalingClient when leaving network: %v", err)
+		return fmt.Errorf("failed to leave network: %v", err)
 	}
 
-	// Remove room from memory
-	nm.RealtimeData.RemoveRoom(roomID)
+	// Remove network from memory
+	nm.RealtimeData.RemoveNetwork(networkID)
 
-	// If we're leaving the current room, clear our room information
-	if nm.RoomID == roomID {
-		nm.RoomID = ""
+	// If we're leaving the current network, clear our network information
+	if nm.NetworkID == networkID {
+		nm.NetworkID = ""
 
 		// Update data layer
-		nm.RealtimeData.SetRoomInfo("Not connected")
+		nm.RealtimeData.SetNetworkInfo("Not connected")
 	}
 
-	// Emit the room left event regardless
-	nm.RealtimeData.EmitEvent(data.EventRoomLeft, roomID, nil)
+	// Emit the network left event regardless
+	nm.RealtimeData.EmitEvent(data.EventNetworkLeft, networkID, nil)
 
 	// Refresh the network list UI
 	nm.refreshNetworkList()
@@ -485,23 +485,23 @@ func (nm *NetworkManager) LeaveRoomById(roomID string) error {
 	return nil
 }
 
-// HandleRoomDeleted handles when a room has been deleted
-func (nm *NetworkManager) HandleRoomDeleted(roomID string) error {
-	log.Printf("Handling room deletion for ID: %s", roomID)
+// HandleNetworkDeleted handles when a network has been deleted
+func (nm *NetworkManager) HandleNetworkDeleted(networkID string) error {
+	log.Printf("Handling network deletion for ID: %s", networkID)
 
-	// If we're in this room, clear our room data
-	if nm.RoomID == roomID {
-		nm.RoomID = ""
+	// If we're in this network, clear our network data
+	if nm.NetworkID == networkID {
+		nm.NetworkID = ""
 
 		// Update data layer
-		nm.RealtimeData.SetRoomInfo("Not connected")
+		nm.RealtimeData.SetNetworkInfo("Not connected")
 	}
 
-	// Remove room from memory
-	nm.RealtimeData.RemoveRoom(roomID)
+	// Remove network from memory
+	nm.RealtimeData.RemoveNetwork(networkID)
 
 	// Emit the event
-	nm.RealtimeData.EmitEvent(data.EventRoomDeleted, roomID, nil)
+	nm.RealtimeData.EmitEvent(data.EventNetworkDeleted, networkID, nil)
 
 	// Refresh the network list UI
 	nm.refreshNetworkList()

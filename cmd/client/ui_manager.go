@@ -24,7 +24,7 @@ type UIManager struct {
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
 	ComputerList        []Computer
-	SelectedRoom        *storage.Room
+	SelectedNetwork     *storage.Network
 	defaultWebsocketURL string
 
 	// Nova camada de dados em tempo real
@@ -32,7 +32,7 @@ type UIManager struct {
 }
 
 // NewUIManager creates a new instance of UIManager
-func NewUIManager(websocketURL string, username string) *UIManager {
+func NewUIManager(websocketURL string, computername string) *UIManager {
 	ui := &UIManager{
 		defaultWebsocketURL: websocketURL,
 	}
@@ -52,7 +52,7 @@ func NewUIManager(websocketURL string, username string) *UIManager {
 	ui.MainWindow.SetMaster()
 
 	// Create VPN client - note the order change to avoid circular reference
-	ui.VPN = NewVPNClient(ui.ConfigManager, websocketURL, username)
+	ui.VPN = NewVPNClient(ui.ConfigManager, websocketURL, computername)
 
 	// Initialize default values AFTER all components are created
 	ui.RealtimeData.InitDefaults()
@@ -96,13 +96,13 @@ func (ui *UIManager) listenForDataEvents() {
 		case data.EventConnectionStateChanged:
 			// Atualizar a UI quando o estado da conexão mudar
 			ui.refreshUI()
-		case data.EventRoomJoined:
+		case data.EventNetworkJoined:
 			// Atualizar a UI quando entrar em uma sala
 			ui.refreshNetworkList()
-		case data.EventRoomLeft:
+		case data.EventNetworkLeft:
 			// Atualizar a UI quando sair de uma sala
 			ui.refreshNetworkList()
-		case data.EventRoomDeleted:
+		case data.EventNetworkDeleted:
 			// Atualizar a UI quando uma sala for excluída
 			ui.refreshNetworkList()
 		case data.EventSettingsChanged:
@@ -154,8 +154,8 @@ func (ui *UIManager) refreshUI() {
 
 	// Update header components
 	ui.HeaderComponent.updatePowerButtonState()
-	ui.HeaderComponent.updateUsername()
-	ui.HeaderComponent.updateRoomName()
+	ui.HeaderComponent.updateComputerName()
+	ui.HeaderComponent.updateNetworkName()
 	ui.HeaderComponent.updateBackendStatus()
 
 	// Force refresh widgets
@@ -164,43 +164,43 @@ func (ui *UIManager) refreshUI() {
 	}
 }
 
-// GetSelectedRoom implementa a interface ConnectDialogManager
-func (ui *UIManager) GetSelectedRoom() *storage.Room {
-	return ui.SelectedRoom
+// GetSelectedNetwork implementa a interface ConnectDialogManager
+func (ui *UIManager) GetSelectedNetwork() *storage.Network {
+	return ui.SelectedNetwork
 }
 
-// ConnectToRoom implementa a interface ConnectDialogManager
-func (ui *UIManager) ConnectToRoom(roomID, username string) error {
+// ConnectToNetwork implementa a interface ConnectDialogManager
+func (ui *UIManager) ConnectToNetwork(networkID, computername string) error {
 	// Ensure NetworkManager is initialized
 	if ui.VPN == nil || ui.VPN.NetworkManager == nil {
 		return fmt.Errorf("network manager not initialized")
 	}
 
-	currentRoomID := ui.VPN.NetworkManager.RoomID
+	currentNetworkID := ui.VPN.NetworkManager.NetworkID
 
-	// If already connected to the selected room, disconnect
-	if currentRoomID == roomID {
-		log.Printf("Attempting to disconnect from room %s", roomID)
-		return ui.VPN.NetworkManager.DisconnectRoom(roomID)
+	// If already connected to the selected network, disconnect
+	if currentNetworkID == networkID {
+		log.Printf("Attempting to disconnect from network %s", networkID)
+		return ui.VPN.NetworkManager.DisconnectNetwork(networkID)
 	}
 
-	// If connected to a different room, disconnect first
-	if currentRoomID != "" {
-		log.Printf("Already connected to room %s, disconnecting before connecting to %s", currentRoomID, roomID)
-		err := ui.VPN.NetworkManager.DisconnectRoom(currentRoomID)
+	// If connected to a different network, disconnect first
+	if currentNetworkID != "" {
+		log.Printf("Already connected to network %s, disconnecting before connecting to %s", currentNetworkID, networkID)
+		err := ui.VPN.NetworkManager.DisconnectNetwork(currentNetworkID)
 		if err != nil {
-			return fmt.Errorf("failed to disconnect from current room: %v", err)
+			return fmt.Errorf("failed to disconnect from current network: %v", err)
 		}
 	}
 
-	// Connect to the selected room
-	log.Printf("Attempting to connect to room %s", roomID)
-	return ui.VPN.NetworkManager.ConnectRoom(roomID)
+	// Connect to the selected network
+	log.Printf("Attempting to connect to network %s", networkID)
+	return ui.VPN.NetworkManager.ConnectNetwork(networkID)
 }
 
 // refreshNetworkList refreshes the network tree
 func (ui *UIManager) refreshNetworkList() {
-	// No need to load from database anymore, UI.Rooms is maintained in memory
+	// No need to load from database anymore, UI.Networks is maintained in memory
 
 	// Update network tree component
 	if ui.NetworkListComp != nil {
@@ -215,7 +215,7 @@ func (ui *UIManager) refreshNetworkList() {
 func (ui *UIManager) Run(defaultWebsocketURL string) {
 	log.Println("Iniciando GoVPN Client")
 
-	// Rooms are now managed by RealtimeDataLayer
+	// Networks are now managed by RealtimeDataLayer
 
 	// Garantir que as configurações sejam aplicadas antes de exibir a janela
 	if ui.VPN != nil {

@@ -13,7 +13,7 @@ import (
 
 // Config representa as configurações da aplicação
 type Config struct {
-	Username      string `json:"username"`
+	ComputerName  string `json:"computername"`
 	ServerAddress string `json:"server_address"`
 	Theme         string `json:"theme"`
 	Language      string `json:"language"`
@@ -42,7 +42,7 @@ func NewConfigManager() *ConfigManager {
 	cm := &ConfigManager{
 		configPath: configPath,
 		config: Config{
-			Username:      "User",
+			ComputerName:  "Computer",
 			ServerAddress: "wss://govpn-k6ql.onrender.com/ws",
 			Theme:         "system",
 			Language:      "en",
@@ -78,12 +78,12 @@ func (cm *ConfigManager) UpdateConfig(config Config) error {
 	return cm.SaveConfig()
 }
 
-// UpdateUsername atualiza o nome de usuário
-func (cm *ConfigManager) UpdateUsername(username string) error {
+// UpdateComputerName atualiza o nome de usuário
+func (cm *ConfigManager) UpdateComputerName(computername string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	cm.config.Username = username
+	cm.config.ComputerName = computername
 	return cm.SaveConfig()
 }
 
@@ -147,8 +147,8 @@ func (cm *ConfigManager) LoadConfig() {
 	}
 
 	// Log config details
-	log.Printf("Config loaded successfully - Username: %s, Theme: %s, Language: %s",
-		cm.config.Username, cm.config.Theme, cm.config.Language)
+	log.Printf("Config loaded successfully - ComputerName: %s, Theme: %s, Language: %s",
+		cm.config.ComputerName, cm.config.Theme, cm.config.Language)
 
 	// Check for public/private keys
 	if cm.config.PublicKey != "" && cm.config.PrivateKey != "" {

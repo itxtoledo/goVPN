@@ -6,7 +6,7 @@ services:
   repo: https://github.com/itxtoledo/goVPN
   plan: free
   envVars:
-  - key: ROOM_EXPIRY_DAYS
+  - key: NETWORK_EXPIRY_DAYS
     sync: false
   - key: CLEANUP_INTERVAL_HOURS
     sync: false
@@ -24,7 +24,7 @@ services:
     sync: false
   - key: LOG_LEVEL
     sync: false
-  - key: MAX_CLIENTS_PER_ROOM
+  - key: MAX_CLIENTS_PER_NETWORK
     sync: false
   - key: ALLOW_ALL_ORIGINS
     sync: false

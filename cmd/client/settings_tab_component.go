@@ -13,7 +13,7 @@ import (
 
 // SettingsTabComponent representa o componente da aba de configurações
 type SettingsTabComponent struct {
-	UsernameEntry      *widget.Entry
+	ComputerNameEntry  *widget.Entry
 	ServerAddressEntry *widget.Entry
 	ThemeSelect        *widget.Select
 	SaveButton         *widget.Button
@@ -42,9 +42,9 @@ func (stc *SettingsTabComponent) CreateSettingsContainer() *fyne.Container {
 	config := stc.ConfigManager.GetConfig()
 
 	// Campo de entrada para o nome de usuário
-	stc.UsernameEntry = widget.NewEntry()
-	stc.UsernameEntry.SetText(config.Username)
-	stc.UsernameEntry.SetPlaceHolder("Enter your username")
+	stc.ComputerNameEntry = widget.NewEntry()
+	stc.ComputerNameEntry.SetText(config.ComputerName)
+	stc.ComputerNameEntry.SetPlaceHolder("Enter your computername")
 
 	// Campo de entrada para o endereço do servidor
 	stc.ServerAddressEntry = widget.NewEntry()
@@ -75,7 +75,7 @@ func (stc *SettingsTabComponent) CreateSettingsContainer() *fyne.Container {
 	// Formulário de configurações
 	form := &widget.Form{
 		Items: []*widget.FormItem{
-			{Text: "Username", Widget: stc.UsernameEntry, HintText: "Your display name in the VPN"},
+			{Text: "ComputerName", Widget: stc.ComputerNameEntry, HintText: "Your display name in the VPN"},
 			{Text: "Server", Widget: stc.ServerAddressEntry, HintText: "Address of the signaling server"},
 			{Text: "Theme", Widget: stc.ThemeSelect, HintText: "Application theme"},
 		},
@@ -105,7 +105,7 @@ func (stc *SettingsTabComponent) saveSettings() {
 	config := stc.ConfigManager.GetConfig()
 
 	// Atualizar com os novos valores
-	config.Username = stc.UsernameEntry.Text
+	config.ComputerName = stc.ComputerNameEntry.Text
 	config.ServerAddress = stc.ServerAddressEntry.Text
 
 	// Atualizar o tema
@@ -147,7 +147,7 @@ func (stc *SettingsTabComponent) applySettings(config Config) {
 	}
 
 	// Atualizar o nome de usuário na camada de dados em tempo real
-	stc.RealtimeData.SetUsername(config.Username)
+	stc.RealtimeData.SetComputerName(config.ComputerName)
 
 	// Atualizar o endereço do servidor
 	stc.RealtimeData.SetServerAddress(config.ServerAddress)

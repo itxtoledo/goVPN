@@ -14,7 +14,7 @@ The GoVPN client follows a modular architecture with the following main componen
 
 2. **NetworkManager**: Responsible for managing network connections.
    - Establishes connections with the signaling server
-   - Manages room creation and joining
+   - Manages network creation and joining
    - Coordinates P2P connection with other clients
 
 3. **SignalingClient**: Manages WebSocket communication with the server.
@@ -25,11 +25,11 @@ The GoVPN client follows a modular architecture with the following main componen
 ### Data Storage
 
 1. **DatabaseManager**: Manages the local SQLite database.
-   - Stores information about saved rooms
+   - Stores information about saved networks
    - Keeps a record of previous connections
    - Stores cryptographic keys
 
-2. **ConfigManager**: Manages user settings.
+2. **ConfigManager**: Manages computer settings.
    - Stores preferences like language and theme
    - Handles server address and other configurations
 
@@ -38,22 +38,38 @@ The GoVPN client follows a modular architecture with the following main componen
    - Implements the Observer pattern for change notification
    - Centralizes application state
 
-### User Interface
+### Computer Interface
 
-1. **UIManager**: Manages the graphical user interface.
+1. **UIManager**: Manages the graphical computer interface.
    - Coordinates navigation between screens
    - Integrates UI components
    - Manages the UI lifecycle
 
 2. **UI Components**:
    - **HeaderComponent**: Displays the header with connection status
-   - **HomeTabComponent**: Main screen with room list and options
+   - **HomeTabComponent**: Main screen with network list and options
    - **SettingsTabComponent**: Application settings
-   - **NetworkListComponent**: List of available rooms
+   - **NetworkListComponent**: List of available networks
 
 3. **Dialogs**:
-   - **ConnectDialog**: Dialog to connect to a room
-   - **RoomDialog**: Dialog to create/join rooms
+   - **ConnectDialog**: Dialog to connect to a network
+   - **NetworkDialog**: Dialog to create/join networks
+
+## Client-Server Architecture
+
+```mermaid
+sequenceDiagram
+    participant Client as GoVPN Client
+    participant SignalingClient as SignalingClient (WebSocket)
+    participant Server as WebSocket Server
+
+    Client->>SignalingClient: Initialize connection
+    SignalingClient->>Server: WebSocket Connect
+    Server-->>SignalingClient: Connection Acknowledged
+    SignalingClient->>Server: Send Signaling Message
+    Server-->>SignalingClient: Relay Signaling Message
+    SignalingClient->>Client: Process Server Response
+```
 
 ## Data Flow
 
@@ -96,10 +112,10 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
 - **network_list_component.go**: Network list UI component
 - **network_manager.go**: Network connection management
 - **password_validator.go**: Password validation logic
-- **room_item_component.go**: Room item UI component
+- **network_item_component.go**: Network item UI component
 - **settings_tab_component.go**: Settings tab UI component
 - **signaling_client.go**: WebSocket signaling client
-- **ui_manager.go**: User interface management
+- **ui_manager.go**: Computer interface management
 - **vpn_client.go**: VPN logic coordination
 - **data/**: Real-time data layer components
   - **realtime_data.go**: Real-time data implementation
@@ -108,7 +124,7 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
   - **dialogs_factory.go**: Dialogs factory
   - **dialogs.go**: Dialogs main file
   - **join_dialog.go**: Join dialog
-  - **room_dialog.go**: Room dialog
+  - **network_dialog.go**: Network dialog
 - **icon/**: Visual resources and icons
   - **icon.go**: Icon definitions
   - **assets/**: Icon assets (e.g., `app.png`, `link_off.svg`)

@@ -1,4 +1,4 @@
-// filepath: /Users/gustavotoledodesouza/Projects/fun/goVPN/cmd/server/stats_manager.go
+// filepath: /Computers/gustavotoledodesouza/Projects/fun/goVPN/cmd/server/stats_manager.go
 package main
 
 import (
@@ -20,17 +20,17 @@ type StatsManager struct {
 
 // ServerStats armazena várias métricas do servidor WebSocket
 type ServerStats struct {
-	StartTime         time.Time `json:"start_time"`          // Quando o servidor foi iniciado
-	Uptime            string    `json:"uptime"`              // Tempo de atividade legível
-	ConnectionsTotal  int       `json:"connections_total"`   // Total de conexões desde o início
-	ActiveConnections int       `json:"active_connections"`  // Número atual de conexões ativas
-	ActiveRooms       int       `json:"active_rooms"`        // Número de salas ativas
-	PeakConnections   int       `json:"peak_connections"`    // Número máximo de conexões simultâneas
-	PeakRooms         int       `json:"peak_rooms"`          // Número máximo de salas simultâneas
-	MessagesProcessed int64     `json:"messages_processed"`  // Número de mensagens processadas
-	Version           string    `json:"version"`             // Versão do servidor
-	LastCleanupTime   time.Time `json:"last_cleanup_time"`   // Quando a última limpeza foi executada
-	StaleRoomsRemoved int       `json:"stale_rooms_removed"` // Número de salas obsoletas removidas
+	StartTime            time.Time `json:"start_time"`             // Quando o servidor foi iniciado
+	Uptime               string    `json:"uptime"`                 // Tempo de atividade legível
+	ConnectionsTotal     int       `json:"connections_total"`      // Total de conexões desde o início
+	ActiveConnections    int       `json:"active_connections"`     // Número atual de conexões ativas
+	ActiveNetworks       int       `json:"active_networks"`        // Número de salas ativas
+	PeakConnections      int       `json:"peak_connections"`       // Número máximo de conexões simultâneas
+	PeakNetworks         int       `json:"peak_networks"`          // Número máximo de salas simultâneas
+	MessagesProcessed    int64     `json:"messages_processed"`     // Número de mensagens processadas
+	Version              string    `json:"version"`                // Versão do servidor
+	LastCleanupTime      time.Time `json:"last_cleanup_time"`      // Quando a última limpeza foi executada
+	StaleNetworksRemoved int       `json:"stale_networks_removed"` // Número de salas obsoletas removidas
 }
 
 // NewStatsManager cria uma nova instância do gerenciador de estatísticas
@@ -38,27 +38,27 @@ func NewStatsManager(cfg Config) *StatsManager {
 	logger.Debug("Initializing stats manager")
 	return &StatsManager{
 		stats: ServerStats{
-			StartTime:         time.Now(),
-			Version:           "1.0.0", // Versão hardcoded do servidor
-			LastCleanupTime:   time.Time{},
-			StaleRoomsRemoved: 0,
+			StartTime:            time.Now(),
+			Version:              "1.0.0", // Versão hardcoded do servidor
+			LastCleanupTime:      time.Time{},
+			StaleNetworksRemoved: 0,
 		},
 		config: cfg,
 	}
 }
 
 // UpdateStats atualiza as estatísticas com base nos dados atuais do servidor
-func (sm *StatsManager) UpdateStats(activeConnections, activeRooms int) {
+func (sm *StatsManager) UpdateStats(activeConnections, activeNetworks int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	// Track if we hit a new peak for logging
 	connectionPeak := false
-	roomsPeak := false
+	networksPeak := false
 
 	// Atualiza estatísticas
 	sm.stats.ActiveConnections = activeConnections
-	sm.stats.ActiveRooms = activeRooms
+	sm.stats.ActiveNetworks = activeNetworks
 
 	// Atualiza valores de pico se os contadores atuais forem mais altos
 	if activeConnections > sm.stats.PeakConnections {
@@ -66,9 +66,9 @@ func (sm *StatsManager) UpdateStats(activeConnections, activeRooms int) {
 		connectionPeak = true
 	}
 
-	if activeRooms > sm.stats.PeakRooms {
-		sm.stats.PeakRooms = activeRooms
-		roomsPeak = true
+	if activeNetworks > sm.stats.PeakNetworks {
+		sm.stats.PeakNetworks = activeNetworks
+		networksPeak = true
 	}
 
 	// Log new peaks when they happen
@@ -77,9 +77,9 @@ func (sm *StatsManager) UpdateStats(activeConnections, activeRooms int) {
 			"connections", activeConnections)
 	}
 
-	if roomsPeak && sm.config.LogLevel == "debug" {
-		logger.Debug("New peak rooms count reached",
-			"rooms", activeRooms)
+	if networksPeak && sm.config.LogLevel == "debug" {
+		logger.Debug("New peak networks count reached",
+			"networks", activeNetworks)
 	}
 
 	// Atualiza a string de tempo de atividade
@@ -123,11 +123,11 @@ func (sm *StatsManager) UpdateCleanupStats(numRemoved int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.LastCleanupTime = time.Now()
-	sm.stats.StaleRoomsRemoved += numRemoved
+	sm.stats.StaleNetworksRemoved += numRemoved
 
-	logger.Info("Room cleanup completed",
-		"roomsRemoved", numRemoved,
-		"totalRoomsRemovedSinceStart", sm.stats.StaleRoomsRemoved,
+	logger.Info("Network cleanup completed",
+		"networksRemoved", numRemoved,
+		"totalNetworksRemovedSinceStart", sm.stats.StaleNetworksRemoved,
 		"timestamp", sm.stats.LastCleanupTime.Format(time.RFC3339))
 }
 
@@ -154,10 +154,10 @@ func (sm *StatsManager) HandleStatsEndpoint(w http.ResponseWriter, r *http.Reque
 	statsResponse := map[string]interface{}{
 		"server_stats": stats,
 		"config": map[string]interface{}{
-			"max_clients_per_room": sm.config.MaxClientsPerRoom,
-			"room_expiry_days":     sm.config.RoomExpiryDays,
-			"cleanup_interval":     sm.config.CleanupInterval.String(),
-			"allow_all_origins":    sm.config.AllowAllOrigins,
+			"max_clients_per_network": sm.config.MaxClientsPerNetwork,
+			"network_expiry_days":     sm.config.NetworkExpiryDays,
+			"cleanup_interval":        sm.config.CleanupInterval.String(),
+			"allow_all_origins":       sm.config.AllowAllOrigins,
 		},
 	}
 
