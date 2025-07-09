@@ -100,18 +100,11 @@ func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer, app fyne.
 	// Aplicar o tema
 	switch config.Theme {
 	case "light":
-		lightTheme := theme.LightTheme()
-		customTheme := NewCustomTheme(lightTheme)
-		app.Settings().SetTheme(customTheme)
+		app.Settings().SetTheme(theme.LightTheme())
 	case "dark":
-		darkTheme := theme.DarkTheme()
-		customTheme := NewCustomTheme(darkTheme)
-		app.Settings().SetTheme(customTheme)
+		app.Settings().SetTheme(theme.DarkTheme())
 	default:
-		// Tema do sistema com melhorias de contraste
-		currentTheme := app.Settings().Theme()
-		customTheme := NewCustomTheme(currentTheme)
-		app.Settings().SetTheme(customTheme)
+		app.Settings().SetTheme(app.Settings().Theme())
 	}
 
 	// Configura o idioma (se implementado)
