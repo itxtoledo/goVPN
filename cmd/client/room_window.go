@@ -74,12 +74,20 @@ func (rw *NetworkWindow) Show() {
 	passwordEntry.PlaceHolder = "4-digit PIN"
 	rw.ConfigurePasswordEntry(passwordEntry)
 
+	confirmPasswordEntry := widget.NewPasswordEntry()
+	confirmPasswordEntry.PlaceHolder = "Repeat 4-digit PIN"
+	rw.ConfigurePasswordEntry(confirmPasswordEntry)
+
 	// Add keyboard shortcuts
 	nameEntry.OnSubmitted = func(text string) {
 		passwordEntry.FocusGained()
 	}
 
 	passwordEntry.OnSubmitted = func(text string) {
+		confirmPasswordEntry.FocusGained()
+	}
+
+	confirmPasswordEntry.OnSubmitted = func(text string) {
 		// Trigger create button when Enter is pressed on password field
 		if nameEntry.Text != "" && rw.ValidatePassword(text) {
 			// Will be triggered by the create button logic
@@ -92,6 +100,8 @@ func (rw *NetworkWindow) Show() {
 		container.NewPadded(nameEntry),
 		widget.NewLabel("Password:"),
 		container.NewPadded(passwordEntry),
+		widget.NewLabel("Repeat Password:"),
+		container.NewPadded(confirmPasswordEntry),
 	)
 
 	// Create buttons
@@ -99,6 +109,7 @@ func (rw *NetworkWindow) Show() {
 	createButton = widget.NewButtonWithIcon("Create Network", theme.ConfirmIcon(), func() {
 		name := nameEntry.Text
 		password := passwordEntry.Text
+		confirmPassword := confirmPasswordEntry.Text
 
 		// Validate name
 		if name == "" {
@@ -109,6 +120,12 @@ func (rw *NetworkWindow) Show() {
 		// Validate password using the abstract function
 		if !rw.ValidatePassword(password) {
 			dialog.ShowError(errors.New("password must be exactly 4 digits"), rw.BaseWindow.Window)
+			return
+		}
+
+		// Validate password confirmation
+		if password != confirmPassword {
+			dialog.ShowError(errors.New("passwords do not match"), rw.BaseWindow.Window)
 			return
 		}
 
