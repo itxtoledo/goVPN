@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Config representa as configurações da aplicação
@@ -19,7 +20,16 @@ type Config struct {
 	Language      string `json:"language"`
 	PublicKey     string `json:"public_key"`
 	PrivateKey    string `json:"private_key"`
+	Networks      []Network `json:"networks"`
 }
+
+// Network represents a VPN network
+type Network struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	LastConnected time.Time `json:"last_connected"`
+}
+
 
 // ConfigManager gerencia as configurações da aplicação
 type ConfigManager struct {
@@ -120,6 +130,49 @@ func (cm *ConfigManager) GetKeyPair() (string, string) {
 	defer cm.mutex.Unlock()
 
 	return cm.config.PublicKey, cm.config.PrivateKey
+}
+
+func (cm *ConfigManager) SaveNetwork(network Network) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	found := false
+	for i, n := range cm.config.Networks {
+		if n.ID == network.ID {
+			cm.config.Networks[i] = network
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		cm.config.Networks = append(cm.config.Networks, network)
+	}
+
+	return cm.SaveConfig()
+}
+
+// GetNetworks carrega todas as redes do banco de dados
+func (cm *ConfigManager) GetNetworks() []Network {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	return cm.config.Networks
+}
+
+// DeleteNetwork exclui uma rede do banco de dados
+func (cm *ConfigManager) DeleteNetwork(networkID string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	for i, n := range cm.config.Networks {
+		if n.ID == networkID {
+			cm.config.Networks = append(cm.config.Networks[:i], cm.config.Networks[i+1:]...)
+			break
+		}
+	}
+
+	return cm.SaveConfig()
 }
 
 // LoadConfig carrega as configurações do arquivo

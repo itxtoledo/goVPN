@@ -7,9 +7,8 @@ import (
 	"log"
 	"os"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
+	st "github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // VPNClient é a estrutura principal do cliente VPN
@@ -22,11 +21,11 @@ type VPNClient struct {
 	CurrentNetwork string
 	IsConnected    bool
 	NetworkManager *NetworkManager
-	ConfigManager  *ConfigManager
+	ConfigManager  *st.ConfigManager
 }
 
 // NewVPNClient creates a new VPN client
-func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
+func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
 	var privateKey ed25519.PrivateKey
 	var publicKey ed25519.PublicKey
 	var publicKeyStr string
@@ -87,7 +86,7 @@ func (v *VPNClient) SetupNetworkManager(realtimeData *data.RealtimeDataLayer, re
 }
 
 // loadSettings carrega as configurações salvas do banco de dados
-func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer, app fyne.App) {
+func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer) {
 	// Carrega as configurações de usuário do config manager
 	config := v.ConfigManager.GetConfig()
 
@@ -96,16 +95,6 @@ func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer, app fyne.
 
 	// Atualiza o endereço do servidor na camada de dados em tempo real
 	realtimeData.SetServerAddress(config.ServerAddress)
-
-	// Aplicar o tema
-	switch config.Theme {
-	case "light":
-		app.Settings().SetTheme(theme.LightTheme())
-	case "dark":
-		app.Settings().SetTheme(theme.DarkTheme())
-	default:
-		app.Settings().SetTheme(app.Settings().Theme())
-	}
 
 	// Configura o idioma (se implementado)
 	if config.Language != "" {

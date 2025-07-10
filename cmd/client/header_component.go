@@ -43,8 +43,7 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 	// New Settings Button
 	hc.SettingsButton = widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
 		// Open the settings window
-		settingsWin := NewSettingsWindow(hc.UI, hc.UI.ConfigManager, hc.UI.RealtimeData, hc.UI.App, hc.UI.refreshUI)
-		settingsWin.Show()
+		hc.UI.ShowSettingsWindow()
 	})
 
 	// Configure listeners para atualização automática
@@ -57,23 +56,8 @@ func NewHeaderComponent(ui *UIManager, defaultWebsocketURL string) *HeaderCompon
 func (hc *HeaderComponent) configureListeners() {
 	// Listener para o estado da conexão
 	hc.UI.RealtimeData.ConnectionState.AddListener(binding.NewDataListener(func() {
-		hc.updateBackendStatus()
+
 		hc.updatePowerButtonState()
-	}))
-
-	// Listener para o nome da sala
-	hc.UI.RealtimeData.NetworkName.AddListener(binding.NewDataListener(func() {
-		hc.updateNetworkName()
-	}))
-
-	// Listener para o nome de usuário
-	hc.UI.RealtimeData.ComputerName.AddListener(binding.NewDataListener(func() {
-		hc.updateComputerName()
-	}))
-
-	// Listener para o IP do usuário
-	hc.UI.RealtimeData.ComputerIP.AddListener(binding.NewDataListener(func() {
-		hc.updateComputerIP()
 	}))
 }
 
@@ -174,37 +158,4 @@ func (hc *HeaderComponent) updatePowerButtonState() {
 
 	// Atualizar o botão
 	hc.PowerButton.Refresh()
-}
-
-// updateComputerName atualiza o nome de usuário
-func (hc *HeaderComponent) updateComputerName() {
-	// O nome de usuário já está vinculado diretamente via binding
-	// Esta função é mantida para compatibilidade e possíveis futuras extensões
-}
-
-// updateComputerIP atualiza o IP do usuário
-func (hc *HeaderComponent) updateComputerIP() {
-	// O IP do usuário já está vinculado diretamente via binding
-	// Esta função é mantida para compatibilidade e possíveis futuras extensões
-}
-
-// updateNetworkName atualiza o nome da sala
-func (hc *HeaderComponent) updateNetworkName() {
-	// O nome da sala já está vinculado diretamente via binding
-	// Esta função é mantida para compatibilidade e possíveis futuras extensões
-}
-
-// updateBackendStatus atualiza o status do backend
-func (hc *HeaderComponent) updateBackendStatus() {
-	// state, _ := hc.UI.RealtimeData.ConnectionState.Get()
-	// connectionState := data.ConnectionState(state)
-
-	// switch connectionState {
-	// case data.StateDisconnected:
-	// 	hc.BackendActivity.Stop() // Para a animação quando desconectado
-	// case data.StateConnecting:
-	// 	hc.BackendActivity.Start() // Inicia a animação ao conectar
-	// case data.StateConnected:
-	// 	hc.BackendActivity.Start() // Mantém a animação enquanto conectado
-	// }
 }

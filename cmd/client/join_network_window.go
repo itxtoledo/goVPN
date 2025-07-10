@@ -19,28 +19,28 @@ var globalJoinWindow *JoinWindow
 type JoinWindow struct {
 	*BaseWindow
 	JoinNetwork            func(string, string, string) (*models.JoinNetworkResponse, error)
-	SaveNetwork            func(string, string, string) error
 	ComputerName           string
 	ValidatePassword       func(string) bool
 	ConfigurePasswordEntry func(*widget.Entry)
+	OnNetworkJoined        func(networkID, password string)
 }
 
 // NewJoinWindow creates a new network joining window
 func NewJoinWindow(
-	ui *UIManager,
+	app fyne.App,
 	joinNetwork func(string, string, string) (*models.JoinNetworkResponse, error),
-	saveNetwork func(string, string, string) error,
 	computername string,
 	validatePassword func(string) bool,
 	configurePasswordEntry func(*widget.Entry),
+	onNetworkJoined func(networkID, password string),
 ) *JoinWindow {
 	jw := &JoinWindow{
-		BaseWindow:             NewBaseWindow(ui.createWindow, "Join Network", 320, 260),
+		BaseWindow:             NewBaseWindow(app, "Join Network", 320, 260),
 		JoinNetwork:            joinNetwork,
-		SaveNetwork:            saveNetwork,
 		ComputerName:           computername,
 		ValidatePassword:       validatePassword,
 		ConfigurePasswordEntry: configurePasswordEntry,
+		OnNetworkJoined:        onNetworkJoined,
 	}
 
 	// Set close callback to reset the global instance when window closes
@@ -122,7 +122,10 @@ func (jw *JoinWindow) Show() {
 					return
 				}
 
-				dialog.ShowInformation("Success!", "Successfully joined the network!", jw.BaseWindow.Window)
+				// Invoke the callback with the network details
+				jw.OnNetworkJoined(networkID, password)
+
+				// Close the join window after invoking the callback
 				jw.BaseWindow.Close()
 			}()
 		}()

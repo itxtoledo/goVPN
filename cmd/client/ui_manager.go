@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
+	st "github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // UIManager represents the UI manager for the VPN client app
@@ -17,14 +20,14 @@ type UIManager struct {
 	App                 fyne.App
 	MainWindow          fyne.Window
 	VPN                 *VPNClient
-	ConfigManager       *ConfigManager
+	ConfigManager       *st.ConfigManager
 	NetworkListComp     *NetworkListComponent
 	HomeTabComponent    *HomeTabComponent
 	HeaderComponent     *HeaderComponent
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
 	ComputerList        []Computer
-	SelectedNetwork     *storage.Network
+	SelectedNetwork     *st.Network
 	defaultWebsocketURL string
 
 	// Nova camada de dados em tempo real
@@ -44,7 +47,7 @@ func NewUIManager(websocketURL string, computername string) *UIManager {
 	ui.App = app.NewWithID("com.itxtoledo.govpn")
 
 	// Initialize configuration manager
-	ui.ConfigManager = NewConfigManager()
+	ui.ConfigManager = st.NewConfigManager()
 
 	// Create main window
 	ui.MainWindow = ui.App.NewWindow("GoVPN")
@@ -75,18 +78,6 @@ func NewUIManager(websocketURL string, computername string) *UIManager {
 	ui.refreshUI()
 
 	return ui
-}
-
-// createWindow cria uma nova janela usando o app da UI principal
-func (ui *UIManager) createWindow(title string, width, height float32) fyne.Window {
-	window := ui.App.NewWindow(title)
-	window.Resize(fyne.NewSize(width, height))
-	window.SetFixedSize(true)
-
-	// Ensure this window isn't modal which could block the main UI
-	window.CenterOnScreen()
-
-	return window
 }
 
 // listenForDataEvents escuta eventos da camada de dados em tempo real
@@ -120,7 +111,7 @@ func (ui *UIManager) setupComponents() {
 	// Create components
 	ui.HeaderComponent = NewHeaderComponent(ui, ui.defaultWebsocketURL)
 	ui.NetworkListComp = NewNetworkListComponent(ui)
-	ui.HomeTabComponent = NewHomeTabComponent(ui.ConfigManager, ui.RealtimeData, ui.App, ui.refreshUI, ui.NetworkListComp, ui)
+	ui.HomeTabComponent = NewHomeTabComponent(ui.ConfigManager, ui.RealtimeData, ui.NetworkListComp, ui)
 
 	// Create main container
 	headerContainer := ui.HeaderComponent.CreateHeaderContainer()
@@ -139,6 +130,42 @@ func (ui *UIManager) setupComponents() {
 	ui.MainWindow.SetContent(container.NewPadded(mainContainer))
 }
 
+// ShowSettingsWindow creates and shows the settings window
+func (ui *UIManager) ShowAboutWindow() {
+	// Create and show the about window (singleton pattern)
+	if ui.AboutWindow != nil && ui.AboutWindow.BaseWindow.Window != nil {
+		// Focus on existing window if already open
+		ui.AboutWindow.BaseWindow.Window.RequestFocus()
+		return
+	}
+
+	publicKey, _ := ui.ConfigManager.GetKeyPair()
+
+	ui.AboutWindow = NewAboutWindow(
+		ui.App,
+		publicKey,
+	)
+	ui.AboutWindow.Show()
+}
+
+func (ui *UIManager) ShowSettingsWindow() {
+	var config st.Config = ui.ConfigManager.GetConfig()
+
+	// Create and show the settings window (singleton pattern)
+	if globalSettingsWindow != nil && globalSettingsWindow.BaseWindow.Window != nil {
+		// Focus on existing window if already open
+		globalSettingsWindow.BaseWindow.Window.RequestFocus()
+		return
+	}
+
+	globalSettingsWindow = NewSettingsWindow(
+		ui.App,
+		config,
+		ui.HandleSettingsSaved,
+	)
+	globalSettingsWindow.Show()
+}
+
 // handleAppQuit handles application quit
 func (ui *UIManager) handleAppQuit() {
 	log.Println("Quitting app...")
@@ -154,9 +181,6 @@ func (ui *UIManager) refreshUI() {
 
 	// Update header components
 	ui.HeaderComponent.updatePowerButtonState()
-	ui.HeaderComponent.updateComputerName()
-	ui.HeaderComponent.updateNetworkName()
-	ui.HeaderComponent.updateBackendStatus()
 
 	// Force refresh widgets
 	if ui.MainWindow.Content() != nil {
@@ -165,7 +189,7 @@ func (ui *UIManager) refreshUI() {
 }
 
 // GetSelectedNetwork implementa a interface ConnectDialogManager
-func (ui *UIManager) GetSelectedNetwork() *storage.Network {
+func (ui *UIManager) GetSelectedNetwork() *st.Network {
 	return ui.SelectedNetwork
 }
 
@@ -211,7 +235,80 @@ func (ui *UIManager) refreshNetworkList() {
 	ui.refreshUI()
 }
 
+// HandleNetworkCreated is the callback for when a network is created
+func (ui *UIManager) HandleNetworkCreated(networkID, networkName, password string) {
+	// Save network to database
+	network := st.Network{
+		ID:            networkID,
+		Name:          networkName,
+		LastConnected: time.Now(),
+	}
+	err := ui.ConfigManager.SaveNetwork(network)
+	if err != nil {
+		log.Printf("Error saving network to database: %v", err)
+	}
+
+	// Add to RealtimeDataLayer
+	ui.RealtimeData.AddNetwork(&network)
+
+	dialog.ShowInformation("Success", "Network created and saved!", ui.MainWindow)
+}
+
+// HandleNetworkJoined is the callback for when a network is joined
+func (ui *UIManager) HandleNetworkJoined(networkID, password string) {
+	// Save network to database (if not already saved)
+	network := st.Network{
+		ID:            networkID,
+		Name:          networkID, // Name is the ID for joined networks
+		LastConnected: time.Now(),
+	}
+	err := ui.ConfigManager.SaveNetwork(network)
+	if err != nil {
+		log.Printf("Error saving network to database: %v", err)
+	}
+
+	ui.RealtimeData.AddNetwork(&network)
+
+	dialog.ShowInformation("Success!", "Successfully joined the network!", ui.MainWindow)
+}
+
 // Run runs the application
+func (ui *UIManager) HandleSettingsSaved(config st.Config) {
+	// Save new settings
+	err := ui.ConfigManager.UpdateConfig(config)
+	if err != nil {
+		log.Printf("Error saving settings: %v", err)
+	}
+
+	// Apply settings
+	ui.applySettings(config)
+}
+
+// applySettings applies the settings
+func (ui *UIManager) applySettings(config st.Config) {
+	// Update theme
+	switch config.Theme {
+	case "light":
+		ui.App.Settings().SetTheme(theme.LightTheme())
+	case "dark":
+		ui.App.Settings().SetTheme(theme.DarkTheme())
+	default:
+		ui.App.Settings().SetTheme(ui.App.Settings().Theme())
+	}
+
+	// Update computer name in realtime data layer
+	ui.RealtimeData.SetComputerName(config.ComputerName)
+
+	// Update server address
+	ui.RealtimeData.SetServerAddress(config.ServerAddress)
+
+	// Emit settings changed event
+	ui.RealtimeData.EmitEvent(data.EventSettingsChanged, "Settings updated", nil)
+
+	// Refresh UI
+	ui.refreshUI()
+}
+
 func (ui *UIManager) Run(defaultWebsocketURL string) {
 	log.Println("Iniciando GoVPN Client")
 
@@ -220,7 +317,7 @@ func (ui *UIManager) Run(defaultWebsocketURL string) {
 	// Garantir que as configurações sejam aplicadas antes de exibir a janela
 	if ui.VPN != nil {
 		// Carrega as configurações do ConfigManager para a camada de dados
-		ui.VPN.loadSettings(ui.RealtimeData, ui.App)
+		ui.VPN.loadSettings(ui.RealtimeData)
 	}
 
 	// Verificar o tamanho da janela principal - fixar em 300x600 conforme requisitos

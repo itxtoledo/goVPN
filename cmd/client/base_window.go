@@ -6,25 +6,28 @@ import (
 
 // BaseWindow representa uma janela base para outras janelas do aplicativo
 type BaseWindow struct {
+	App          fyne.App
 	Window       fyne.Window
 	Content      *fyne.Container
 	Title        string
-	createWindow func(title string, width, height float32) fyne.Window
 	width        float32
 	height       float32
 }
 
 // NewBaseWindow cria uma nova janela base
-func NewBaseWindow(createWindow func(title string, width, height float32) fyne.Window, title string, width, height float32) *BaseWindow {
+func NewBaseWindow(app fyne.App, title string, width, height float32) *BaseWindow {
 	bw := &BaseWindow{
-		Title:        title,
-		createWindow: createWindow,
-		width:        width,
-		height:       height,
+		App:    app,
+		Title:  title,
+		width:  width,
+		height: height,
 	}
 
 	// Criar a janela
-	bw.Window = createWindow(title, width, height)
+	bw.Window = app.NewWindow(title)
+	bw.Window.Resize(fyne.NewSize(width, height))
+	bw.Window.SetFixedSize(true)
+	bw.Window.CenterOnScreen()
 
 	// Configurar callback de fechamento
 	bw.Window.SetOnClosed(func() {
@@ -39,7 +42,10 @@ func NewBaseWindow(createWindow func(title string, width, height float32) fyne.W
 func (bw *BaseWindow) Show() {
 	if bw.Window == nil {
 		// Recriar a janela se ela foi fechada
-		bw.Window = bw.createWindow(bw.Title, bw.width, bw.height)
+		bw.Window = bw.App.NewWindow(bw.Title)
+		bw.Window.Resize(fyne.NewSize(bw.width, bw.height))
+		bw.Window.SetFixedSize(true)
+		bw.Window.CenterOnScreen()
 
 		// Reconfigurar o callback de fechamento
 		bw.Window.SetOnClosed(func() {

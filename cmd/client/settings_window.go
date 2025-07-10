@@ -1,14 +1,12 @@
 package main
 
 import (
-	"log"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/itxtoledo/govpn/cmd/client/data"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // Global variable to ensure only one settings window can be open
@@ -22,25 +20,19 @@ type SettingsWindow struct {
 	ThemeSelect        *widget.Select
 	SaveButton         *widget.Button
 
-	// Dependencies
-	ConfigManager *ConfigManager
-	RealtimeData  *data.RealtimeDataLayer
-	App           fyne.App
-	refreshUI     func()
+	// Callback
+	OnSettingsSaved func(config storage.Config)
 }
 
 // NewSettingsWindow creates a new settings window
-func NewSettingsWindow(ui *UIManager, configManager *ConfigManager, realtimeData *data.RealtimeDataLayer, app fyne.App, refreshUI func()) *SettingsWindow {
+func NewSettingsWindow(app fyne.App, currentConfig storage.Config, onSettingsSaved func(config storage.Config)) *SettingsWindow {
 	if globalSettingsWindow != nil {
 		return globalSettingsWindow
 	}
 
 	sw := &SettingsWindow{
-		BaseWindow:    NewBaseWindow(ui.createWindow, "Settings", 600, 400),
-		ConfigManager: configManager,
-		RealtimeData:  realtimeData,
-		App:           app,
-		refreshUI:     refreshUI,
+		BaseWindow:      NewBaseWindow(app, "Settings", 320, 260),
+		OnSettingsSaved: onSettingsSaved,
 	}
 
 	// Set close callback to reset the global instance when window closes
@@ -50,17 +42,14 @@ func NewSettingsWindow(ui *UIManager, configManager *ConfigManager, realtimeData
 
 	globalSettingsWindow = sw
 
-	// Get current settings
-	config := sw.ConfigManager.GetConfig()
-
 	// Computer Name Entry
 	sw.ComputerNameEntry = widget.NewEntry()
-	sw.ComputerNameEntry.SetText(config.ComputerName)
+	sw.ComputerNameEntry.SetText(currentConfig.ComputerName)
 	sw.ComputerNameEntry.SetPlaceHolder("Enter your computername")
 
 	// Server Address Entry
 	sw.ServerAddressEntry = widget.NewEntry()
-	sw.ServerAddressEntry.SetText(config.ServerAddress)
+	sw.ServerAddressEntry.SetText(currentConfig.ServerAddress)
 	sw.ServerAddressEntry.SetPlaceHolder("Enter server address (ws://host:port)")
 
 	// Theme Selector
@@ -71,7 +60,7 @@ func NewSettingsWindow(ui *UIManager, configManager *ConfigManager, realtimeData
 
 	// Select current theme
 	themeIndex := 0 // System by default
-	switch config.Theme {
+	switch currentConfig.Theme {
 	case "light":
 		themeIndex = 1
 	case "dark":
@@ -83,6 +72,39 @@ func NewSettingsWindow(ui *UIManager, configManager *ConfigManager, realtimeData
 	sw.SaveButton = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
 		sw.saveSettings()
 	})
+
+	return sw
+}
+
+// saveSettings saves the settings
+func (sw *SettingsWindow) saveSettings() {
+	// Create a new config object with updated values
+	newConfig := storage.Config{
+		ComputerName:  sw.ComputerNameEntry.Text,
+		ServerAddress: sw.ServerAddressEntry.Text,
+	}
+
+	// Update theme
+	switch sw.ThemeSelect.SelectedIndex() {
+	case 0:
+		newConfig.Theme = "system"
+	case 1:
+		newConfig.Theme = "light"
+	case 2:
+		newConfig.Theme = "dark"
+	}
+
+	// Invoke the callback with the new config
+	sw.OnSettingsSaved(newConfig)
+}
+
+// Show displays the settings window
+func (sw *SettingsWindow) Show() {
+	// Create title with icon
+	titleIcon := widget.NewIcon(theme.SettingsIcon())
+	titleLabel := widget.NewLabel("Settings")
+	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
+	titleContainer := container.NewHBox(titleIcon, titleLabel)
 
 	// Settings Form
 	form := &widget.Form{
@@ -100,73 +122,14 @@ func NewSettingsWindow(ui *UIManager, configManager *ConfigManager, realtimeData
 	)
 
 	// Main Container
-	content := container.NewBorder(
-		nil,
-		buttonContainer,
-		nil,
-		nil,
-		form,
+	content := container.NewVBox(
+		container.NewPadded(titleContainer),
+		widget.NewSeparator(),
+		container.NewPadded(form),
+		widget.NewSeparator(),
+		container.NewPadded(buttonContainer),
 	)
 
-	// Add padding
-	paddedContent := container.NewPadded(content)
-
-	// Set window content
-	sw.SetContent(paddedContent)
-
-	return sw
-}
-
-// saveSettings saves the settings
-func (sw *SettingsWindow) saveSettings() {
-	// Get current settings
-	config := sw.ConfigManager.GetConfig()
-
-	// Update with new values
-	config.ComputerName = sw.ComputerNameEntry.Text
-	config.ServerAddress = sw.ServerAddressEntry.Text
-
-	// Update theme
-	switch sw.ThemeSelect.SelectedIndex() {
-	case 0:
-		config.Theme = "system"
-	case 1:
-		config.Theme = "light"
-	case 2:
-		config.Theme = "dark"
-	}
-
-	// Save new settings
-	err := sw.ConfigManager.UpdateConfig(config)
-	if err != nil {
-		log.Printf("Error saving settings: %v", err)
-	}
-
-	// Apply settings
-	sw.applySettings(config)
-}
-
-// applySettings applies the settings
-func (sw *SettingsWindow) applySettings(config Config) {
-	// Update theme
-	switch config.Theme {
-	case "light":
-		sw.App.Settings().SetTheme(theme.LightTheme())
-	case "dark":
-		sw.App.Settings().SetTheme(theme.DarkTheme())
-	default:
-		sw.App.Settings().SetTheme(sw.App.Settings().Theme())
-	}
-
-	// Update computer name in realtime data layer
-	sw.RealtimeData.SetComputerName(config.ComputerName)
-
-	// Update server address
-	sw.RealtimeData.SetServerAddress(config.ServerAddress)
-
-	// Emit settings changed event
-	sw.RealtimeData.EmitEvent(data.EventSettingsChanged, "Settings updated", nil)
-
-	// Refresh UI
-	sw.refreshUI()
+	sw.SetContent(content)
+	sw.BaseWindow.Show()
 }

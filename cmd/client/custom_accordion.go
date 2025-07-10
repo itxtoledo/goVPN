@@ -7,7 +7,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// TappableContainer é um container que aceita eventos de tap
+// TappableContainer is a container that accepts tap events
 type TappableContainer struct {
 	widget.BaseWidget
 	content        fyne.CanvasObject
@@ -15,7 +15,7 @@ type TappableContainer struct {
 	onTapSecondary func(pe *fyne.PointEvent)
 }
 
-// NewTappableContainer cria um novo container clicável
+// NewTappableContainer creates a new tappable container
 func NewTappableContainer(content fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *TappableContainer {
 	tc := &TappableContainer{
 		content:        content,
@@ -26,43 +26,43 @@ func NewTappableContainer(content fyne.CanvasObject, onTap func(), onTapSecondar
 	return tc
 }
 
-// CreateRenderer implementa o WidgetRenderer
+// CreateRenderer implements the WidgetRenderer
 func (tc *TappableContainer) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(tc.content)
 }
 
-// Tapped implementa o evento de clique
+// Tapped implements the tap event
 func (tc *TappableContainer) Tapped(pe *fyne.PointEvent) {
 	if tc.onTap != nil {
 		tc.onTap()
 	}
 }
 
-// TappedSecondary implementa o evento de clique secundário (direito)
+// TappedSecondary implements the secondary tap event (right click)
 func (tc *TappableContainer) TappedSecondary(pe *fyne.PointEvent) {
 	if tc.onTapSecondary != nil {
 		tc.onTapSecondary(pe)
 	}
 }
 
-// CustomAccordionItem representa um item do accordion personalizado que aceita qualquer widget como título
+// CustomAccordionItem represents a custom accordion item that accepts any widget as title
 type CustomAccordionItem struct {
-	Title          fyne.CanvasObject // Pode ser qualquer widget
+	Title          fyne.CanvasObject // Can be any widget
 	Content        fyne.CanvasObject
-	EndContent     fyne.CanvasObject // Conteúdo que fica no final da linha (ex: contador de usuários)
+	EndContent     fyne.CanvasObject // Content that stays at the end of the line (e.g., user counter)
 	IsOpen         bool
 	container      *fyne.Container
 	expandLabel    *widget.Label
-	OnTap          func()                       // Callback opcional para clique no título
-	OnTapSecondary func(pe *fyne.PointEvent) // Callback para clique secundário
+	OnTap          func()                    // Optional callback for title tap
+	OnTapSecondary func(pe *fyne.PointEvent) // Callback for secondary tap
 }
 
-// NewCustomAccordionItem cria um novo item do accordion personalizado
+// NewCustomAccordionItem creates a new custom accordion item
 func NewCustomAccordionItem(title, content fyne.CanvasObject) *CustomAccordionItem {
 	return NewCustomAccordionItemWithEndContent(title, content, nil)
 }
 
-// NewCustomAccordionItemWithEndContent cria um novo item do accordion personalizado com conteúdo no final
+// NewCustomAccordionItemWithEndContent creates a new custom accordion item with end content
 func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.CanvasObject) *CustomAccordionItem {
 	item := &CustomAccordionItem{
 		Title:      title,
@@ -71,7 +71,7 @@ func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.Canvas
 		IsOpen:     false,
 	}
 
-	// Criar label para o indicador de expansão
+	// Create label for expansion indicator
 	item.expandLabel = widget.NewLabel("▶")
 	item.expandLabel.TextStyle = fyne.TextStyle{Monospace: true}
 
@@ -79,12 +79,12 @@ func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.Canvas
 	return item
 }
 
-// NewCustomAccordionItemWithCallbacks cria um novo item do accordion personalizado com callbacks
+// NewCustomAccordionItemWithCallbacks creates a new custom accordion item with callbacks
 func NewCustomAccordionItemWithCallbacks(title, content fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *CustomAccordionItem {
 	return NewCustomAccordionItemWithEndContentAndCallbacks(title, content, nil, onTap, onTapSecondary)
 }
 
-// NewCustomAccordionItemWithEndContentAndCallbacks cria um novo item do accordion personalizado com conteúdo no final e callbacks
+// NewCustomAccordionItemWithEndContentAndCallbacks creates a new custom accordion item with end content and callbacks
 func NewCustomAccordionItemWithEndContentAndCallbacks(title, content, endContent fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *CustomAccordionItem {
 	item := NewCustomAccordionItemWithEndContent(title, content, endContent)
 	item.OnTap = onTap
@@ -92,19 +92,19 @@ func NewCustomAccordionItemWithEndContentAndCallbacks(title, content, endContent
 	return item
 }
 
-// Toggle alterna o estado de expansão do item
+// Toggle toggles the expansion state of the item
 func (item *CustomAccordionItem) Toggle() {
 	item.IsOpen = !item.IsOpen
 	item.updateContainer()
 	item.container.Refresh()
 }
 
-// toggleState alterna apenas o estado sem chamar updateContainer (para evitar recursão)
+// toggleState toggles only the state without calling updateContainer (to avoid recursion)
 func (item *CustomAccordionItem) toggleState() {
 	item.IsOpen = !item.IsOpen
 }
 
-// Open abre o item
+// Open opens the item
 func (item *CustomAccordionItem) Open() {
 	if !item.IsOpen {
 		item.IsOpen = true
@@ -113,7 +113,7 @@ func (item *CustomAccordionItem) Open() {
 	}
 }
 
-// Close fecha o item
+// Close closes the item
 func (item *CustomAccordionItem) Close() {
 	if item.IsOpen {
 		item.IsOpen = false
@@ -122,7 +122,7 @@ func (item *CustomAccordionItem) Close() {
 	}
 }
 
-// updateContainer atualiza o container baseado no estado atual
+// updateContainer updates the container based on current state
 func (item *CustomAccordionItem) updateContainer() {
 	// Update expand label icon
 	if item.IsOpen {
@@ -183,19 +183,19 @@ func (item *CustomAccordionItem) updateContainer() {
 	}
 }
 
-// GetContainer retorna o container do item
+// GetContainer returns the item's container
 func (item *CustomAccordionItem) GetContainer() *fyne.Container {
 	return item.container
 }
 
-// CustomAccordion representa um accordion personalizado que aceita widgets como título
+// CustomAccordion represents a custom accordion that accepts widgets as titles
 type CustomAccordion struct {
 	widget.BaseWidget
 	Items     []*CustomAccordionItem
 	container *fyne.Container
 }
 
-// NewCustomAccordion cria um novo accordion personalizado
+// NewCustomAccordion creates a new custom accordion
 func NewCustomAccordion() *CustomAccordion {
 	accordion := &CustomAccordion{
 		Items:     make([]*CustomAccordionItem, 0),
@@ -205,13 +205,13 @@ func NewCustomAccordion() *CustomAccordion {
 	return accordion
 }
 
-// AddItem adiciona um item ao accordion
+// AddItem adds an item to the accordion
 func (accordion *CustomAccordion) AddItem(item *CustomAccordionItem) {
 	accordion.Items = append(accordion.Items, item)
 	accordion.updateContainer()
 }
 
-// RemoveItem remove um item do accordion
+// RemoveItem removes an item from the accordion
 func (accordion *CustomAccordion) RemoveItem(item *CustomAccordionItem) {
 	for i, existingItem := range accordion.Items {
 		if existingItem == item {
@@ -222,27 +222,27 @@ func (accordion *CustomAccordion) RemoveItem(item *CustomAccordionItem) {
 	accordion.updateContainer()
 }
 
-// RemoveAll remove todos os itens do accordion
+// RemoveAll removes all items from the accordion
 func (accordion *CustomAccordion) RemoveAll() {
 	accordion.Items = make([]*CustomAccordionItem, 0)
 	accordion.updateContainer()
 }
 
-// OpenAll abre todos os itens
+// OpenAll opens all items
 func (accordion *CustomAccordion) OpenAll() {
 	for _, item := range accordion.Items {
 		item.Open()
 	}
 }
 
-// CloseAll fecha todos os itens
+// CloseAll closes all items
 func (accordion *CustomAccordion) CloseAll() {
 	for _, item := range accordion.Items {
 		item.Close()
 	}
 }
 
-// updateContainer atualiza o container principal do accordion
+// updateContainer updates the main accordion container
 func (accordion *CustomAccordion) updateContainer() {
 	accordion.container.RemoveAll()
 
@@ -258,12 +258,12 @@ func (accordion *CustomAccordion) updateContainer() {
 	accordion.container.Refresh()
 }
 
-// CreateRenderer implementa o WidgetRenderer
+// CreateRenderer implements the WidgetRenderer
 func (accordion *CustomAccordion) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(accordion.container)
 }
 
-// GetContainer retorna o container principal
+// GetContainer returns the main container
 func (accordion *CustomAccordion) GetContainer() *fyne.Container {
 	return accordion.container
 }

@@ -14,7 +14,7 @@ func ConfigurePasswordEntry(passwordEntry *widget.Entry) {
 	// Define o validador para verificar a senha usando o validador do pacote models
 	passwordEntry.Validator = func(s string) error {
 		if !models.ValidatePassword(s) {
-			return errors.New("Password must be exactly 4 digits")
+			return errors.New("password must be exactly 4 digits")
 		}
 		return nil
 	}

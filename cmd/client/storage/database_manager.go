@@ -1,14 +1,10 @@
 package storage
 
 import (
-	"time"
-
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Network represents a VPN network
-type Network struct {
-	ID            string
-	Name          string
-	LastConnected time.Time
+// DatabaseManager gerencia as operações do banco de dados SQLite
+type DatabaseManager struct {
+	dbPath string
 }

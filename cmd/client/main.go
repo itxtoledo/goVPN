@@ -14,8 +14,6 @@ import (
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
-var websocketURL = "wss://govpn-k6ql.onrender.com/ws"
-
 func main() {
 	logFile, _ := os.OpenFile("govpn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if logFile != nil {
@@ -26,7 +24,7 @@ func main() {
 
 	configManager := storage.NewConfigManager()
 	computername := configManager.GetConfig().ComputerName
-	ui := NewUIManager(websocketURL, computername)
+	ui := NewUIManager(DefaultServerAddress, computername)
 
 	// Set up system tray
 	if desk, ok := ui.App.(desktop.App); ok {
@@ -39,7 +37,8 @@ func main() {
 
 		aboutItem := fyne.NewMenuItem("About", func() {
 			// Always create a new About window to ensure content is properly initialized
-			ui.AboutWindow = NewAboutWindow(ui)
+			publicKey, _ := configManager.GetKeyPair()
+			ui.AboutWindow = NewAboutWindow(ui.App, publicKey)
 			ui.AboutWindow.Show()
 		})
 
@@ -50,7 +49,7 @@ func main() {
 		connectItem := fyne.NewMenuItem("Connect", func() {
 			if ui.VPN != nil {
 				// The Run method handles the connection logic
-				go ui.VPN.Run(websocketURL, ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI)
+				go ui.VPN.Run(DefaultServerAddress, ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI)
 			}
 		})
 
@@ -61,7 +60,7 @@ func main() {
 		})
 
 		// Create the menu with separators for better organization
-		menu := fyne.NewMenu("GoVPN",
+		menu := fyne.NewMenu(AppName,
 			showItem,
 			fyne.NewMenuItemSeparator(),
 			connectItem,
@@ -95,7 +94,7 @@ func main() {
 		ui.MainWindow.Hide()
 	})
 
-	ui.Run(websocketURL)
+	ui.Run(DefaultServerAddress)
 	tidyUp()
 }
 

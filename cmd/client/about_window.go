@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
-)
+	)
 
 // AboutWindow representa a janela de informações sobre o aplicativo
 type AboutWindow struct {
@@ -17,9 +17,9 @@ type AboutWindow struct {
 }
 
 // NewAboutWindow cria uma nova janela de informações sobre o aplicativo
-func NewAboutWindow(ui *UIManager) *AboutWindow {
+func NewAboutWindow(app fyne.App, publicKey string) *AboutWindow {
 	aw := &AboutWindow{
-		BaseWindow: NewBaseWindow(ui.createWindow, "About "+AppTitleName, 400, 400),
+		BaseWindow: NewBaseWindow(app, "About "+AppName, 400, 400),
 	}
 
 	// Configurar o conteúdo da janela
@@ -27,7 +27,7 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 	logo.SetMinSize(fyne.NewSize(128, 128))
 
 	titleLabel := widget.NewLabelWithStyle(
-		AppTitleName,
+		AppName,
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)
@@ -49,9 +49,6 @@ func NewAboutWindow(ui *UIManager) *AboutWindow {
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Italic: true},
 	)
-
-	// Obter a chave pública
-	publicKey, _ := ui.ConfigManager.GetKeyPair()
 
 	// Criar um label para exibir a chave pública
 	publicKeyLabel := widget.NewLabelWithStyle(

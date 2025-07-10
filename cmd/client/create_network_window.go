@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -20,31 +19,31 @@ var globalNetworkWindow *NetworkWindow
 type NetworkWindow struct {
 	*BaseWindow
 	CreateNetwork          func(string, string) (*models.CreateNetworkResponse, error)
-	SaveNetwork            func(string, string, string) error
 	GetNetworkID           func() string
 	ComputerName           string
 	ValidatePassword       func(string) bool
 	ConfigurePasswordEntry func(*widget.Entry)
+	OnNetworkCreated       func(networkID, networkName, password string)
 }
 
 // NewNetworkWindow creates a new network creation window
 func NewNetworkWindow(
-	ui *UIManager,
+	app fyne.App,
 	createNetwork func(string, string) (*models.CreateNetworkResponse, error),
-	saveNetwork func(string, string, string) error,
 	getNetworkID func() string,
 	computername string,
 	validatePassword func(string) bool,
 	configurePasswordEntry func(*widget.Entry),
+	onNetworkCreated func(networkID, networkName, password string),
 ) *NetworkWindow {
 	rw := &NetworkWindow{
-		BaseWindow:             NewBaseWindow(ui.createWindow, "Create Network", 320, 260),
+		BaseWindow:             NewBaseWindow(app, "Create Network", 320, 260),
 		CreateNetwork:          createNetwork,
-		SaveNetwork:            saveNetwork,
 		GetNetworkID:           getNetworkID,
 		ComputerName:           computername,
 		ValidatePassword:       validatePassword,
 		ConfigurePasswordEntry: configurePasswordEntry,
+		OnNetworkCreated:       onNetworkCreated,
 	}
 
 	// Set close callback to reset the global instance when window closes
@@ -152,32 +151,10 @@ func (rw *NetworkWindow) Show() {
 				networkID := res.NetworkID
 
 				if networkID != "" {
-					// Save network to database
-					err := rw.SaveNetwork(networkID, name, password)
-					if err != nil {
-						log.Printf("Error saving network to database: %v", err)
-					}
+					// Invoke the callback with the network details
+					rw.OnNetworkCreated(networkID, name, password)
 
-					// Show success dialog with network ID
-					networkIDEntry := widget.NewEntry()
-					networkIDEntry.Text = networkID
-					networkIDEntry.Disable()
-
-					content := container.NewVBox(
-						widget.NewLabel("Network created successfully!"),
-						widget.NewLabel(""),
-						widget.NewLabel("Network ID (share this with friends):"),
-						networkIDEntry,
-						widget.NewButton("Copy to Clipboard", func() {
-							rw.BaseWindow.Window.Clipboard().SetContent(networkID)
-							dialog.ShowInformation("Copied", "Network ID copied to clipboard", rw.Window)
-						}),
-					)
-
-					successDialog := dialog.NewCustom("Success", "Close", content, rw.BaseWindow.Window)
-					successDialog.Show()
-
-					// Close the create window after showing success
+					// Close the create window after invoking the callback
 					rw.BaseWindow.Close()
 				} else {
 					// If networkID is empty, it's likely an error occurred but wasn't caught

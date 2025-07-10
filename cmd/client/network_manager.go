@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
+	st "github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
@@ -46,13 +46,13 @@ type NetworkManager struct {
 
 	// Dependencies
 	RealtimeData       *data.RealtimeDataLayer
-	ConfigManager      *ConfigManager
+	ConfigManager      *st.ConfigManager
 	refreshNetworkList func()
 	refreshUI          func()
 }
 
 // NewNetworkManager creates a new instance of NetworkManager
-func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
+func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *st.ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
 	nm := &NetworkManager{
 		connectionState:    ConnectionStateDisconnected,
 		ReconnectAttempts:  0,
@@ -115,9 +115,9 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 
 			// Convert models.Network to storage.Network
-			updatedNetworks := make([]*storage.Network, 0, len(computerNetworksResponse.Networks))
+			updatedNetworks := make([]*st.Network, 0, len(computerNetworksResponse.Networks))
 			for _, network := range computerNetworksResponse.Networks {
-				storageNetwork := &storage.Network{
+				storageNetwork := &st.Network{
 					ID:            network.NetworkID,
 					Name:          network.NetworkName,
 					LastConnected: network.LastConnected,
@@ -243,7 +243,7 @@ func (nm *NetworkManager) CreateNetwork(name string, password string) error {
 	log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
 
 	// Store network information in memory
-	network := &storage.Network{
+	network := &st.Network{
 		ID:            res.NetworkID,
 		Name:          name,
 		LastConnected: time.Now(),
@@ -284,7 +284,7 @@ func (nm *NetworkManager) JoinNetwork(networkID string, password string, compute
 	networkName := res.NetworkName
 
 	// Store network information in memory
-	network := &storage.Network{
+	network := &st.Network{
 		ID:            networkID,
 		Name:          networkName,
 		LastConnected: time.Now(),

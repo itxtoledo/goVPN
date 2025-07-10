@@ -4,7 +4,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -13,7 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
+	st "github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
@@ -69,21 +68,17 @@ type HomeTabComponent struct {
 	NetworksContainer *fyne.Container
 
 	// Dependencies
-	ConfigManager   *ConfigManager
+	ConfigManager   *st.ConfigManager
 	RealtimeData    *data.RealtimeDataLayer
-	App             fyne.App
-	refreshUI       func()
 	NetworkListComp *NetworkListComponent // Add NetworkListComp here
 	UI              *UIManager
 }
 
 // NewHomeTabComponent cria uma nova instância do componente da aba principal
-func NewHomeTabComponent(configManager *ConfigManager, realtimeData *data.RealtimeDataLayer, app fyne.App, refreshUI func(), networkListComp *NetworkListComponent, ui *UIManager) *HomeTabComponent {
+func NewHomeTabComponent(configManager *st.ConfigManager, realtimeData *data.RealtimeDataLayer, networkListComp *NetworkListComponent, ui *UIManager) *HomeTabComponent {
 	htc := &HomeTabComponent{
 		ConfigManager:   configManager,
 		RealtimeData:    realtimeData,
-		App:             app,
-		refreshUI:       refreshUI,
 		NetworkListComp: networkListComp,
 		UI:              ui,
 	}
@@ -124,23 +119,15 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 
 		adapter := &NetworkManagerAdapter{htc.UI.VPN.NetworkManager}
 		globalNetworkWindow = NewNetworkWindow(
-			htc.UI,
+			htc.UI.App,
 			adapter.CreateNetwork,
-			func(networkID, name, password string) error {
-				// This is where you'd save the network to local storage if needed
-				// For now, we'll just add it to the RealtimeDataLayer
-				network := &storage.Network{
-					ID:            networkID,
-					Name:          name,
-					LastConnected: time.Now(),
-				}
-				adapter.GetRealtimeData().AddNetwork(network)
-				return nil
-			},
 			adapter.GetNetworkID,
 			computername,
 			ValidatePassword,
 			ConfigurePasswordEntry,
+			func(networkID, networkName, password string) {
+				htc.UI.HandleNetworkCreated(networkID, networkName, password)
+			},
 		)
 		globalNetworkWindow.Show()
 	})
@@ -172,15 +159,14 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 
 		adapter := &NetworkManagerAdapter{htc.UI.VPN.NetworkManager}
 		globalJoinWindow = NewJoinWindow(
-			htc.UI,
+			htc.UI.App,
 			adapter.JoinNetwork,
-			func(networkID, name, password string) error {
-				// Save network logic if needed
-				return nil
-			},
 			computername,
 			ValidatePassword,
 			ConfigurePasswordEntry,
+			func(networkID, password string) {
+				htc.UI.HandleNetworkJoined(networkID, password)
+			},
 		)
 		globalJoinWindow.Show()
 	})
