@@ -39,24 +39,24 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
 
 ### System Components
 
-- **cmd/server**: Signaling server that facilitates:
-  - Network creation and management
-  - Operation authentication via Ed25519 keys
-  - Establishment of connections between clients
-  - Data persistence in Supabase
-  - WebSocketServer: Manages WebSocket connections with clients
-  - SupabaseManager: Interface with Supabase database
+- **cmd/server**: The central signaling server responsible for orchestrating network operations and facilitating P2P connections. Its key functions include:
+  - **Network Creation and Management**: Handles the creation, joining, and management of virtual VPN networks.
+  - **Client Authentication**: Authenticates clients using Ed25519 keys to ensure secure access.
+  - **Connection Establishment**: Relays signaling messages (e.g., WebRTC SDP offers/answers, ICE candidates) between clients to help them establish direct P2P connections.
+  - **Data Persistence**: Utilizes Supabase for persistent storage of network and client metadata.
+  - **WebSocketServer**: Manages all incoming and outgoing WebSocket connections with clients.
+  - **SupabaseManager**: Provides an interface for interacting with the Supabase database.
 
-- **cmd/client**: Client application with a graphical interface that allows:
-  - Creating and joining game networks
-  - Managing P2P connections
-  - Local configuration storage in SQLite
-  - Graphical interface built with Fyne (v2.0+)
-  - Modular components such as NetworkManager, SignalingClient, etc.
+- **cmd/client**: The client application with a graphical user interface (GUI) that allows users to:
+  - Create and join virtual game networks.
+  - Manage P2P connections to other clients within a network.
+  - Store local configurations and data using SQLite.
+  - Provides a user-friendly interface built with Fyne (v2.0+).
+  - Composed of modular components like `NetworkManager`, `SignalingClient`, etc., for clear separation of concerns.
 
 ### Communication Flow
 
-Here's a simplified diagram of the client-server communication flow:
+The communication in GoVPN follows a hybrid model, leveraging a central server for signaling and P2P connections for actual data transfer.
 
 ```mermaid
 sequenceDiagram
@@ -77,15 +77,19 @@ sequenceDiagram
 
     ClientA->>Server: Create/Join Network Request
     Server->>ClientA: Network Confirmation / Peer List
+    Note over Server: Server updates its in-memory state and database with network info.
 
     ClientB->>Server: Join Network Request
     Server->>ClientB: Network Confirmation / Peer List
+    Note over Server: Server relays peer information to facilitate P2P setup.
 
     ClientA->>Server: Send Offer (WebRTC SDP) to ClientB
     Server-->>ClientB: Relay Offer from ClientA
+    Note over Server: Server acts as a temporary relay for WebRTC signaling.
 
     ClientB->>Server: Send Answer (WebRTC SDP) to ClientA
     Server-->>ClientA: Relay Answer from ClientB
+    Note over Server: Server continues to relay signaling messages.
 
     ClientA->>STUN/TURN: Discover Public IP
     STUN/TURN-->>ClientA: Public IP
@@ -95,30 +99,36 @@ sequenceDiagram
 
     ClientA->>Server: Send ICE Candidates to ClientB
     Server-->>ClientB: Relay ICE Candidates from ClientA
+    Note over Server: Server relays ICE candidates for NAT traversal.
 
     ClientB->>Server: Send ICE Candidates to ClientA
     Server-->>ClientA: Relay ICE Candidates from ClientB
+    Note over Server: Server's role in connection establishment ends here.
 
     Note over ClientA,ClientB: P2P Connection Established
     ClientA<->>ClientB: Direct Encrypted Communication (VPN Tunnel)
+    Note over ClientA,ClientB: All subsequent VPN traffic flows directly between clients.
 ```
 
 1. **Signaling Phase**:
-   - The server acts as an intermediary to establish initial connections
-   - Clients authenticate and exchange information about available networks
+   - The server acts as a crucial intermediary for initial connection establishment and coordination.
+   - Clients connect to the server via WebSockets, authenticate using Ed25519 keys, and exchange metadata about available networks and peers.
+   - The server maintains an in-memory representation of active networks and connected peers, ensuring real-time updates.
    
 2. **P2P Connection Establishment**:
-   - Exchange of offers, answers, and candidates via server
-   - Use of STUN servers for public address discovery
-   - Fallback to TURN servers when direct connection fails
+   - Once clients are authenticated and aware of each other, they use the server to exchange WebRTC signaling messages (SDP offers/answers and ICE candidates).
+   - STUN (Session Traversal Utilities for NAT) servers are used by clients to discover their public IP addresses, aiding in NAT traversal.
+   - TURN (Traversal Using Relays around NAT) servers provide a fallback relay mechanism if a direct P2P connection cannot be established.
+   - The server's role in this phase is purely to relay these signaling messages; it does not process or store the actual WebRTC data.
 
-3. **Direct Communication**:
-   - Once established, communication occurs directly between clients
-   - Data is end-to-end encrypted (key derived from network password)
+3. **Direct Communication (VPN Tunnel)**:
+   - After the WebRTC handshake is complete, a direct P2P connection (VPN tunnel) is established between the clients.
+   - All subsequent VPN traffic (network packets) flows directly between the connected clients, bypassing the signaling server.
+   - Data is end-to-end encrypted using a key derived from the network password, ensuring privacy and security.
 
 4. **Virtual Network**:
-   - Each client receives a virtual IP address (format 10.0.0.x)
-   - Network packets are encapsulated, encrypted, and sent through the data channel
+   - Each client within a network is assigned a unique virtual IP address (e.g., in the 10.10.0.x range).
+   - Network packets are encapsulated, encrypted, and routed through these direct P2P data channels, creating a virtual local area network.
 
 ## Current Project Structure
 
@@ -127,40 +137,58 @@ The current project structure is organized as follows:
 ```
 README.md                        # Main documentation
 cmd/                             # Main components
-    client/                      # GoVPN client
-        data/                    # Real-time data layer
-        dialogs/                 # UI dialogs
-        icon/                    # Icons and graphic resources
-            assets/              # Image files
-        storage/                 # Database and config management
-        *.go                     # UI components and client logic
-    server/                      # Signaling server
-        docs/                    # API documentation
-        *.go                     # Server implementation
-libs/                            # Shared libraries
-    crypto_utils/                # Cryptographic utilities
-    models/                      # Data structure definitions
-    network/                     # Virtual network management
-migrations/                      # SQL scripts for the database
+    client/                      # GoVPN client application
+        data/                    # Real-time data layer for UI updates
+        dialogs/                 # UI dialogs and modal windows
+        icon/                    # Application icons and graphic resources
+            assets/              # Image files for icons
+        storage/                 # Local database (SQLite) and configuration management
+        *.go                     # Core UI components and client-side logic
+    server/                      # GoVPN signaling server
+        docs/                    # API documentation for the server's WebSocket interface
+        *.go                     # Core server implementation files
+libs/                            # Shared libraries and common utilities
+    crypto_utils/                # Cryptographic utilities for key management and encryption
+    models/                      # Defines data structures and message formats shared across client and server
+    network/                     # Manages the virtual network interfaces and packet handling
+migrations/                      # SQL scripts for database schema management
 ```
 
 ### Main Client Components
 
-- **UIManager**: Manages the entire computer interface
-- **VPNClient**: Controls all VPN connection logic
-- **NetworkManager**: Manages network connections and networks
-- **SignalingClient**: Communicates with the signaling server
-- **DatabaseManager**: Manages local storage using SQLite
-- **ConfigManager**: Manages application settings
-- **RealtimeDataLayer**: Provides data binding to update the UI
+- **UIManager**: Orchestrates the entire client-side graphical user interface.
+- **VPNClient**: Manages the overarching VPN connection logic and state.
+- **NetworkManager**: Handles the creation, joining, and management of virtual networks.
+- **SignalingClient**: Manages the WebSocket communication with the central signaling server.
+- **DatabaseManager**: Interfaces with the local SQLite database for persistent storage.
+- **ConfigManager**: Manages application settings and user preferences.
+- **RealtimeDataLayer**: Provides observable data bindings to ensure the UI is always synchronized with the application's state.
 
 ### Main Server Components
 
-- **WebSocketServer**: Manages WebSocket connections, networks, and clients
-- **SupabaseManager**: Interface with Supabase database
-- **Network Management**: Manages network creation, deletion, and modification
-- **Authentication**: Authentication based on Ed25519 keys
-- **Connection Management**: Manages the connection lifecycle
+- **WebSocketServer**: The core of the server, responsible for:
+    - Managing all active WebSocket connections.
+    - Handling incoming signaling messages from clients.
+    - Maintaining in-memory state of networks and connected peers.
+    - Relaying WebRTC signaling messages between clients.
+- **SupabaseManager**: A dedicated module for interacting with the Supabase backend, handling:
+    - Network creation, retrieval, and deletion.
+    - Management of computer-network relationships (which computer belongs to which network).
+    - Updating network activity timestamps.
+- **Network Management**: Encompasses the logic for:
+    - Creating new virtual networks with unique IDs and passwords.
+    - Allowing clients to join existing networks.
+    - Assigning unique virtual IP addresses to connected peers within a network.
+    - Handling network activity updates and cleanup of stale networks.
+- **Authentication**: Implements secure client authentication based on Ed25519 public keys, ensuring only authorized clients can interact with the server.
+- **Connection Management**: Manages the lifecycle of client connections, including:
+    - Tracking connected peers in memory (`connectedPeers` map).
+    - Handling disconnections and notifying other peers in the network.
+    - Ensuring proper cleanup of resources when clients disconnect or leave networks.
+    - Implementing graceful shutdown procedures.
+- **StatsManager**: Collects and provides real-time statistics about server performance, active connections, and network usage.
+- **Logger**: Provides structured logging capabilities for monitoring server operations and debugging.
+
 
 ## Server WebSocket API
 

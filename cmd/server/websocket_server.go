@@ -1171,7 +1171,6 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 			NetworkName:   network.Name,
 			JoinedAt:      computerNetwork.JoinedAt,
 			LastConnected: computerNetwork.LastConnected,
-			IsConnected:   s.connectedPeers[computerNetwork.NetworkID][computerNetwork.PublicKey],
 		}
 		response.Networks = append(response.Networks, networkInfo)
 	}

@@ -10,11 +10,9 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // NetworkListComponent representa o componente da árvore de rede
@@ -102,9 +100,16 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				currentStatusResource = icon.ConnectionOn
 			}
 
+			var displayMyComputerName string
+			if len(computername) > 5 {
+				displayMyComputerName = computername[:5] + "..."
+			} else {
+				displayMyComputerName = computername
+			}
+
 			currentComputerItem := container.NewHBox(
 				widget.NewIcon(currentStatusResource),
-				widget.NewLabel(computername+" (you)"),
+				widget.NewLabelWithStyle(displayMyComputerName+" (you)", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
 			)
 			computersContainer.Add(currentComputerItem)
 
@@ -125,9 +130,16 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 					}
 
 					// Create computer item with icon, activity indicator and name
+					// Create computer item with icon, activity indicator and name
+					var displayComputerName string
+					if len(computer.Name) > 5 {
+						displayComputerName = computer.Name[:5] + "..."
+					} else {
+						displayComputerName = computer.Name
+					}
 					computerItem := container.NewHBox(
 						widget.NewIcon(activity),
-						widget.NewLabel(fmt.Sprintf("%s (%s)", computer.Name, computer.PeerIP)),
+						widget.NewLabelWithStyle(fmt.Sprintf("%s (%s)", displayComputerName, computer.PeerIP), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
 					)
 					computersContainer.Add(computerItem)
 				}
@@ -136,85 +148,8 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			// Create computers section
 			computersBox := computersContainer
 
-			// Create buttons for network actions with improved styling
-			connectButtonText := "Connect"
-			connectIcon := theme.LoginIcon()
-
-			// If already connected to this network, use "Disconnect" text and different icon
-			if isConnected {
-				connectButtonText = "Disconnect"
-				connectIcon = theme.LogoutIcon()
-			}
-
-			connectButton := widget.NewButtonWithIcon(connectButtonText, connectIcon, func(currentNetwork *storage.Network, isConnected bool) func() {
-				return func() {
-					ntc.UI.SelectedNetwork = currentNetwork
-
-					if isConnected {
-						// If already connected, disconnect
-						log.Println("Disconnecting from network:", currentNetwork.Name)
-						go func() {
-							err := ntc.UI.VPN.NetworkManager.DisconnectNetwork(currentNetwork.ID)
-							if err != nil {
-								log.Printf("Error disconnecting from network: %v", err)
-								dialog.ShowError(fmt.Errorf("failed to disconnect from network: %v", err), ntc.UI.MainWindow)
-							} else {
-								log.Println("Successfully disconnected from network.")
-								dialog.ShowInformation("Success", "Successfully disconnected from network.", ntc.UI.MainWindow)
-							}
-						}()
-					} else {
-						// Show connection dialog
-						if ntc.UI.ConnectDialog == nil {
-							ntc.UI.ConnectDialog = dialogs.NewConnectDialog(ntc.UI, ntc.UI.VPN.ComputerName)
-						}
-						ntc.UI.ConnectDialog.Show()
-					}
-				}
-			}(network, isConnected))
-
-			leaveButton := widget.NewButtonWithIcon("Leave", theme.LogoutIcon(), func(currentNetwork *storage.Network) func() {
-				return func() {
-					// Delegate deletion to NetworkManager
-					if ntc.UI.VPN.NetworkManager != nil {
-						go func() {
-							err := ntc.UI.VPN.NetworkManager.LeaveNetworkById(currentNetwork.ID)
-							if err != nil {
-								log.Printf("Error deleting network: %v", err)
-								fyne.CurrentApp().SendNotification(&fyne.Notification{
-									Title:   "Error",
-									Content: "Failed to leave network: " + err.Error(),
-								})
-							} else {
-								log.Println("Successfully left network:", currentNetwork.Name)
-								fyne.CurrentApp().SendNotification(&fyne.Notification{
-									Title:   "Success",
-									Content: "Successfully left network: " + currentNetwork.Name,
-								})
-
-								// Show success dialog on the main thread
-								dialog.ShowInformation("Success", "Successfully left network: "+currentNetwork.Name, ntc.UI.MainWindow)
-							}
-						}()
-					}
-				}
-			}(network))
-
-			// Style buttons based on connection status
-			if isConnected {
-				connectButton.Importance = widget.HighImportance
-			} else {
-				connectButton.Importance = widget.MediumImportance
-			}
-
 			// Create actions section
-			actionsBox := container.NewVBox(
-				container.NewHBox(
-					layout.NewSpacer(),
-					connectButton,
-					leaveButton,
-				),
-			)
+			actionsBox := container.NewVBox()
 
 			content := container.NewPadded(
 				container.NewHBox(
