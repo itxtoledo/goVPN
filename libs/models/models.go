@@ -230,7 +230,6 @@ type GetComputerNetworksRequest struct {
 type ComputerNetworkInfo struct {
 	NetworkID     string    `json:"network_id"`
 	NetworkName   string    `json:"network_name"`
-	IsConnected   bool      `json:"is_connected"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
 }
