@@ -91,6 +91,7 @@ type CreateNetworkResponse struct {
 	NetworkName string `json:"network_name"`
 	Password    string `json:"password"`
 	PublicKey   string `json:"public_key"`
+	PeerIP      string `json:"peer_ip"`
 }
 
 // JoinNetworkRequest represents a request to join an existing network
@@ -105,6 +106,7 @@ type JoinNetworkRequest struct {
 type JoinNetworkResponse struct {
 	NetworkID   string `json:"network_id"`
 	NetworkName string `json:"network_name"`
+	PeerIP      string `json:"peer_ip"`
 }
 
 // ConnectNetworkRequest represents a request to connect to a previously joined network
@@ -118,6 +120,7 @@ type ConnectNetworkRequest struct {
 type ConnectNetworkResponse struct {
 	NetworkID   string `json:"network_id"`
 	NetworkName string `json:"network_name"`
+	PeerIP      string `json:"peer_ip"`
 }
 
 // DisconnectNetworkRequest represents a request to disconnect from a network (but stay joined)
@@ -177,6 +180,7 @@ type ComputerJoinedNotification struct {
 	NetworkID    string `json:"network_id"`
 	PublicKey    string `json:"public_key"`
 	ComputerName string `json:"computername,omitempty"`
+	PeerIP       string `json:"peer_ip,omitempty"`
 }
 
 // ComputerLeftNotification notifies that a computer has left the network
@@ -190,6 +194,7 @@ type ComputerConnectedNotification struct {
 	NetworkID    string `json:"network_id"`
 	PublicKey    string `json:"public_key"`
 	ComputerName string `json:"computername,omitempty"`
+	PeerIP       string `json:"peer_ip,omitempty"`
 }
 
 // ComputerDisconnectedNotification notifies that a computer has disconnected from the network (but not left)

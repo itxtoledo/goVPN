@@ -729,7 +729,7 @@ func (s *SignalingClient) listenForMessages() {
 					if computerName == "" {
 						computerName = "Unknown computer"
 					}
-					log.Printf("New computer joined network %s: %s (Key: %s)", notification.NetworkID, computerName, notification.PublicKey)
+					log.Printf("New computer joined network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.PeerIP)
 
 					// Add the new computer to the computers list
 					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
@@ -741,6 +741,7 @@ func (s *SignalingClient) listenForMessages() {
 								Name:     computerName,
 								OwnerID:  notification.PublicKey,
 								IsOnline: true,
+								PeerIP:   notification.PeerIP,
 							}
 
 							s.VPNClient.NetworkManager.Computers = append(
@@ -752,6 +753,49 @@ func (s *SignalingClient) listenForMessages() {
 							if s.MessageHandler != nil {
 								s.MessageHandler(models.TypeComputerJoined, sigMsg.Payload)
 							}
+						}
+					}
+				}
+			}
+
+		case models.TypeComputerConnected:
+			{
+				var notification models.ComputerConnectedNotification
+				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+					log.Printf("Failed to unmarshal computer connected notification: %v", err)
+				} else {
+					computerName := notification.ComputerName
+					if computerName == "" {
+						computerName = "Unknown computer"
+					}
+					log.Printf("Computer connected to network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.PeerIP)
+
+					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
+						// Update the status of the connected computer
+						found := false
+						for i, comp := range s.VPNClient.NetworkManager.Computers {
+							if comp.ID == notification.PublicKey {
+								s.VPNClient.NetworkManager.Computers[i].IsOnline = true
+								s.VPNClient.NetworkManager.Computers[i].PeerIP = notification.PeerIP
+								found = true
+								break
+							}
+						}
+						if !found {
+							// If for some reason the computer wasn't in the list (e.g., joined while we were offline), add it
+							newComputer := Computer{
+								ID:       notification.PublicKey,
+								Name:     computerName,
+								OwnerID:  notification.PublicKey,
+								IsOnline: true,
+								PeerIP:   notification.PeerIP,
+							}
+							s.VPNClient.NetworkManager.Computers = append(s.VPNClient.NetworkManager.Computers, newComputer)
+						}
+
+						// Notify the handler about the computer connected event
+						if s.MessageHandler != nil {
+							s.MessageHandler(models.TypeComputerConnected, sigMsg.Payload)
 						}
 					}
 				}
@@ -812,13 +856,7 @@ func (s *SignalingClient) listenForMessages() {
 					// Create a slice to store the converted networks
 
 					for i, network := range response.Networks {
-						connectionStatus := "Disconnected"
-						if network.IsConnected {
-							connectionStatus = "Connected"
-						}
-
 						log.Printf("Network %d: %s (ID: %s)", i+1, network.NetworkName, network.NetworkID)
-						log.Printf("  Status: %s", connectionStatus)
 						log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
 						log.Printf("  Last connected: %s", network.LastConnected.Format(time.RFC1123))
 						log.Printf("  ---")

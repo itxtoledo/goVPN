@@ -231,18 +231,18 @@ type ComputerNetwork struct {
 	ComputerName  string    `json:"computername"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
-	IsConnected   bool      `json:"is_connected"`
+	PeerIP        string    `json:"peer_ip"`
 }
 
 // AddComputerToNetwork adds a computer to a network in the computer_networks table
-func (sm *SupabaseManager) AddComputerToNetwork(networkID, publicKey, computerName string) error {
+func (sm *SupabaseManager) AddComputerToNetwork(networkID, publicKey, computerName, peerIP string) error {
 	computerNetworkData := map[string]interface{}{
 		"network_id":     networkID,
 		"public_key":     publicKey,
 		"computername":   computerName,
 		"joined_at":      time.Now().Format(time.RFC3339),
 		"last_connected": time.Now().Format(time.RFC3339),
-		"is_connected":   true,
+		"peer_ip":        peerIP,
 	}
 
 	if sm.logLevel == "debug" {
@@ -257,15 +257,14 @@ func (sm *SupabaseManager) AddComputerToNetwork(networkID, publicKey, computerNa
 	return nil
 }
 
-// UpdateComputerNetworkConnection updates the connection status and last_connected timestamp for a computer in a network
-func (sm *SupabaseManager) UpdateComputerNetworkConnection(networkID, publicKey string, isConnected bool) error {
+// UpdateComputerNetworkConnection updates the last_connected timestamp for a computer in a network
+func (sm *SupabaseManager) UpdateComputerNetworkConnection(networkID, publicKey string) error {
 	updateData := map[string]interface{}{
 		"last_connected": time.Now().Format(time.RFC3339),
-		"is_connected":   isConnected,
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Updating computer network connection", "networkID", networkID, "publicKey", publicKey, "isConnected", isConnected)
+		logger.Debug("Updating computer network connection", "networkID", networkID, "publicKey", publicKey)
 	}
 
 	_, _, err := sm.client.From("computer_networks").Update(updateData, "", "").Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
@@ -305,6 +304,30 @@ func (sm *SupabaseManager) GetNetworkComputers(networkID string) ([]ComputerNetw
 	return computerNetworks, nil
 }
 
+// GetUsedIPsForNetwork fetches all used IPs for a specific network
+func (sm *SupabaseManager) GetUsedIPsForNetwork(networkID string) ([]string, error) {
+	var computerNetworks []struct {
+		PeerIP string `json:"peer_ip"`
+	}
+	data, _, err := sm.client.From("computer_networks").Select("peer_ip", "", false).Eq("network_id", networkID).Execute()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get used IPs: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		return nil, fmt.Errorf("failed to parse used IPs data: %w", err)
+	}
+
+	ips := make([]string, 0, len(computerNetworks))
+	for _, cn := range computerNetworks {
+		if cn.PeerIP != "" {
+			ips = append(ips, cn.PeerIP)
+		}
+	}
+
+	return ips, nil
+}
+
 // GetComputerNetworks gets all networks a computer has joined
 func (sm *SupabaseManager) GetComputerNetworks(publicKey string) ([]ComputerNetwork, error) {
 	var computerNetworks []ComputerNetwork
@@ -318,6 +341,24 @@ func (sm *SupabaseManager) GetComputerNetworks(publicKey string) ([]ComputerNetw
 	}
 
 	return computerNetworks, nil
+}
+
+func (sm *SupabaseManager) GetComputerInNetwork(networkID, publicKey string) (ComputerNetwork, error) {
+	var computerNetworks []ComputerNetwork
+	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return ComputerNetwork{}, fmt.Errorf("failed to get computer in network: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		return ComputerNetwork{}, fmt.Errorf("failed to parse computer network data: %w", err)
+	}
+
+	if len(computerNetworks) == 0 {
+		return ComputerNetwork{}, fmt.Errorf("computer not found in network")
+	}
+
+	return computerNetworks[0], nil
 }
 
 // IsComputerInNetwork checks if a computer is already in a network

@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
+	"github.com/itxtoledo/govpn/cmd/client/icon"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
@@ -96,18 +97,13 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			computersContainer := container.NewVBox()
 
 			// Add current computer to the list (always show if we're in this network)
-			var currentStatusIndicator fyne.CanvasObject
+			var currentStatusResource = icon.ConnectionOff
 			if isConnected {
-				currentActivity := widget.NewActivity()
-				currentActivity.Start() // Green and animated when connected/online
-				currentStatusIndicator = currentActivity
-			} else {
-				// Show RadioButtonFillIcon when not connected
-				currentStatusIndicator = widget.NewIcon(theme.RadioButtonFillIcon())
+				currentStatusResource = icon.ConnectionOn
 			}
 
 			currentComputerItem := container.NewHBox(
-				currentStatusIndicator,
+				widget.NewIcon(currentStatusResource),
 				widget.NewLabel(computername+" (you)"),
 			)
 			computersContainer.Add(currentComputerItem)
@@ -123,21 +119,15 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 					}
 
 					// Create activity indicator based on online status
-					var activity fyne.CanvasObject
+					var activity = icon.ConnectionOff
 					if computer.IsOnline {
-						activityWidget := widget.NewActivity()
-						activityWidget.Start() // Green and animated when online
-						activity = activityWidget
-					} else {
-						// Show RadioButtonFillIcon when offline
-						activity = widget.NewIcon(theme.RadioButtonFillIcon())
+						activity = icon.ConnectionOn
 					}
 
 					// Create computer item with icon, activity indicator and name
 					computerItem := container.NewHBox(
-						widget.NewIcon(theme.AccountIcon()),
-						activity,
-						widget.NewLabel(computer.Name),
+						widget.NewIcon(activity),
+						widget.NewLabel(fmt.Sprintf("%s (%s)", computer.Name, computer.PeerIP)),
 					)
 					computersContainer.Add(computerItem)
 				}
@@ -239,14 +229,9 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			)
 
 			// Create custom title with activity indicator or radio button icon
-			var statusIndicator fyne.CanvasObject
+			var statusIndicator = icon.ConnectionOff
 			if isConnected {
-				titleActivity := widget.NewActivity()
-				titleActivity.Start()
-				statusIndicator = titleActivity
-			} else {
-				// Show RadioButtonFillIcon when not connected
-				statusIndicator = widget.NewIcon(theme.RadioButtonFillIcon())
+				statusIndicator = icon.ConnectionOn
 			}
 
 			// Calculate connected computers count
@@ -268,7 +253,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			computerCountLabel := widget.NewLabelWithStyle(fmt.Sprintf("(%d/10)", connectedComputers), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
 			customTitle := container.NewHBox(
-				statusIndicator,
+				widget.NewIcon(statusIndicator),
 				titleLabel,
 			)
 

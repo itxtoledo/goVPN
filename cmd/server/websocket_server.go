@@ -43,6 +43,7 @@ type WebSocketServer struct {
 	clients           map[*websocket.Conn]string   // Maps connection to networkID
 	networks          map[string][]*websocket.Conn // Maps networkID to list of connections
 	clientToPublicKey map[*websocket.Conn]string   // Maps connection to public key
+	connectedPeers    map[string]map[string]bool   // Maps networkID to map of publicKey to connected status
 	mu                sync.RWMutex
 	config            Config
 	supabaseManager   *SupabaseManager
@@ -83,6 +84,7 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		clients:           make(map[*websocket.Conn]string),
 		networks:          make(map[string][]*websocket.Conn),
 		clientToPublicKey: make(map[*websocket.Conn]string),
+		connectedPeers:    make(map[string]map[string]bool),
 		config:            cfg,
 		supabaseManager:   supaMgr,
 		upgrader:          upgrader,
@@ -92,6 +94,28 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		httpServer:        &http.Server{},
 		isShutdown:        false,
 	}, nil
+}
+
+func (s *WebSocketServer) generateUniqueIP(networkID string) (string, error) {
+	usedIPs, err := s.supabaseManager.GetUsedIPsForNetwork(networkID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get used IPs for network %s: %w", networkID, err)
+	}
+
+	usedIPSet := make(map[string]bool)
+	for _, ip := range usedIPs {
+		usedIPSet[ip] = true
+	}
+
+	const maxAttempts = 254 // Limit attempts to find an IP
+	for i := 0; i < maxAttempts; i++ {
+		ip := fmt.Sprintf("10.10.0.%d", i+1)
+		if !usedIPSet[ip] {
+			return ip, nil
+		}
+	}
+
+	return "", fmt.Errorf("no available IPs in network %s", networkID)
 }
 
 func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -297,7 +321,8 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.C
 		return
 	}
 
-	err = s.supabaseManager.AddComputerToNetwork(networkID, req.PublicKey, "Owner")
+	creatorIP := "10.10.0.1"
+	err = s.supabaseManager.AddComputerToNetwork(networkID, req.PublicKey, "Owner", creatorIP)
 	if err != nil {
 		logger.Error("Error adding network owner to computer_networks", "error", err)
 	}
@@ -325,6 +350,7 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.C
 		"network_name": req.NetworkName,
 		"password":     req.Password,
 		"public_key":   req.PublicKey,
+		"peer_ip":      creatorIP,
 	}
 
 	s.sendSignal(conn, models.TypeNetworkCreated, responsePayload, originalID)
@@ -356,21 +382,44 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 		return
 	}
 
+	var assignedIP string
 	isInNetwork, err := s.supabaseManager.IsComputerInNetwork(req.NetworkID, req.PublicKey)
 	if err != nil {
 		logger.Error("Error checking if computer is in network", "error", err)
+		s.sendErrorSignal(conn, "Error checking network membership", originalID)
+		return
 	}
 
 	if !isInNetwork {
-		err = s.supabaseManager.AddComputerToNetwork(req.NetworkID, req.PublicKey, req.ComputerName)
+		// Assign a new IP if not already in network
+		ip, err := s.generateUniqueIP(req.NetworkID)
+		if err != nil {
+			s.sendErrorSignal(conn, "Failed to assign IP address", originalID)
+			return
+		}
+		assignedIP = ip
+
+		err = s.supabaseManager.AddComputerToNetwork(req.NetworkID, req.PublicKey, req.ComputerName, assignedIP)
 		if err != nil {
 			logger.Error("Error adding computer to network", "error", err)
+			s.sendErrorSignal(conn, "Error adding computer to network", originalID)
+			return
 		}
 	} else {
-		err = s.supabaseManager.UpdateComputerNetworkConnection(req.NetworkID, req.PublicKey, true)
+		// If already in network, retrieve existing IP
+		computer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, req.PublicKey)
 		if err != nil {
-			logger.Error("Error updating computer network connection", "error", err)
+			logger.Error("Error getting computer from network", "error", err)
+			s.sendErrorSignal(conn, "Error retrieving existing IP", originalID)
+			return
 		}
+		assignedIP = computer.PeerIP
+
+		// Update connection status in memory
+		if _, ok := s.connectedPeers[req.NetworkID]; !ok {
+			s.connectedPeers[req.NetworkID] = make(map[string]bool)
+		}
+		s.connectedPeers[req.NetworkID][req.PublicKey] = true
 	}
 
 	s.clientToPublicKey[conn] = req.PublicKey
@@ -392,7 +441,8 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 		logger.Info("Client joined network",
 			"clientAddr", conn.RemoteAddr().String(),
 			"networkID", req.NetworkID,
-			"activeClients", clientCount)
+			"activeClients", clientCount,
+			"assignedIP", assignedIP)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
@@ -400,26 +450,38 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
 		"network_name": network.Name,
+		"peer_ip":      assignedIP,
 	}
 	s.sendSignal(conn, models.TypeNetworkJoined, responsePayload, originalID)
 
+	// Notify other clients in the network about the new peer
 	for _, computer := range s.networks[req.NetworkID] {
 		if computer != conn {
 			computerJoinedPayload := map[string]interface{}{
 				"network_id":   req.NetworkID,
 				"public_key":   req.PublicKey,
 				"computername": req.ComputerName,
+				"peer_ip":      assignedIP,
 			}
 			s.sendSignal(computer, models.TypeComputerJoined, computerJoinedPayload, "")
+		}
+	}
 
-			computerPublicKey, hasComputerKey := s.clientToPublicKey[computer]
-			if hasComputerKey {
-				existingComputerPayload := map[string]interface{}{
-					"network_id":   req.NetworkID,
-					"public_key":   computerPublicKey,
-					"computername": "Computer",
+	// Send existing peers' info to the newly joined client
+	for _, existingConn := range s.networks[req.NetworkID] {
+		if existingConn != conn {
+			existingPublicKey, hasExistingKey := s.clientToPublicKey[existingConn]
+			if hasExistingKey {
+				existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
+				if err == nil {
+					existingComputerPayload := map[string]interface{}{
+						"network_id":   req.NetworkID,
+						"public_key":   existingPublicKey,
+						"computername": existingComputer.ComputerName,
+						"peer_ip":      existingComputer.PeerIP,
+					}
+					s.sendSignal(conn, models.TypeComputerJoined, existingComputerPayload, "")
 				}
-				s.sendSignal(conn, models.TypeComputerJoined, existingComputerPayload, "")
 			}
 		}
 	}
@@ -440,14 +502,9 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 		return
 	}
 
-	isInNetwork, err := s.supabaseManager.IsComputerInNetwork(req.NetworkID, req.PublicKey)
+	computer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, req.PublicKey)
 	if err != nil {
-		logger.Error("Error checking if computer is in network", "error", err)
-		s.sendErrorSignal(conn, "Error verifying network membership", originalID)
-		return
-	}
-
-	if !isInNetwork {
+		logger.Error("Error getting computer from network", "error", err)
 		s.sendErrorSignal(conn, "You must join this network first", originalID)
 		return
 	}
@@ -458,10 +515,11 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 		return
 	}
 
-	err = s.supabaseManager.UpdateComputerNetworkConnection(req.NetworkID, req.PublicKey, true)
-	if err != nil {
-		logger.Error("Error updating computer network connection", "error", err)
+	// Update connection status in memory
+	if _, ok := s.connectedPeers[req.NetworkID]; !ok {
+		s.connectedPeers[req.NetworkID] = make(map[string]bool)
 	}
+	s.connectedPeers[req.NetworkID][req.PublicKey] = true
 
 	s.clientToPublicKey[conn] = req.PublicKey
 
@@ -480,7 +538,8 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 		logger.Info("Client connected to network (reconnect)",
 			"clientAddr", conn.RemoteAddr().String(),
 			"networkID", req.NetworkID,
-			"activeClients", len(s.networks[req.NetworkID]))
+			"activeClients", len(s.networks[req.NetworkID]),
+			"assignedIP", computer.PeerIP)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
@@ -488,26 +547,38 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
 		"network_name": network.Name,
+		"peer_ip":      computer.PeerIP,
 	}
 	s.sendSignal(conn, models.TypeNetworkConnected, responsePayload, originalID)
 
-	for _, computer := range s.networks[req.NetworkID] {
-		if computer != conn {
+	// Notify other clients in the network about the new peer
+	for _, computerConn := range s.networks[req.NetworkID] {
+		if computerConn != conn {
 			computerConnectedPayload := map[string]interface{}{
 				"network_id":   req.NetworkID,
 				"public_key":   req.PublicKey,
 				"computername": req.ComputerName,
+				"peer_ip":      computer.PeerIP,
 			}
-			s.sendSignal(computer, models.TypeComputerConnected, computerConnectedPayload, "")
+			s.sendSignal(computerConn, models.TypeComputerConnected, computerConnectedPayload, "")
+		}
+	}
 
-			computerPublicKey, hasComputerKey := s.clientToPublicKey[computer]
-			if hasComputerKey {
-				existingComputerPayload := map[string]interface{}{
-					"network_id":   req.NetworkID,
-					"public_key":   computerPublicKey,
-					"computername": "Computer",
+	// Send existing peers' info to the newly connected client
+	for _, existingConn := range s.networks[req.NetworkID] {
+		if existingConn != conn {
+			existingPublicKey, hasExistingKey := s.clientToPublicKey[existingConn]
+			if hasExistingKey {
+				existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
+				if err == nil {
+					existingComputerPayload := map[string]interface{}{
+						"network_id":   req.NetworkID,
+						"public_key":   existingPublicKey,
+						"computername": existingComputer.ComputerName,
+						"peer_ip":      existingComputer.PeerIP,
+					}
+					s.sendSignal(conn, models.TypeComputerConnected, existingComputerPayload, "")
 				}
-				s.sendSignal(conn, models.TypeComputerConnected, existingComputerPayload, "")
 			}
 		}
 	}
@@ -553,9 +624,12 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req mode
 		}
 	}
 
-	err = s.supabaseManager.UpdateComputerNetworkConnection(networkID, publicKey, false)
-	if err != nil {
-		logger.Error("Error updating computer network connection status", "error", err)
+	// Update connection status in memory
+	if peers, ok := s.connectedPeers[networkID]; ok {
+		delete(peers, publicKey)
+		if len(peers) == 0 {
+			delete(s.connectedPeers, networkID)
+		}
 	}
 
 	if networks, exists := s.networks[networkID]; exists {
@@ -802,6 +876,14 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		// Limpa as referências do cliente
 		delete(s.clients, conn)
 		delete(s.clientToPublicKey, conn)
+
+		// Update connection status in memory
+		if peers, ok := s.connectedPeers[networkID]; ok {
+			delete(peers, publicKey)
+			if len(peers) == 0 {
+				delete(s.connectedPeers, networkID)
+			}
+		}
 
 		// Se a sala não existe no networks, não há nada mais a fazer
 		network, exists := s.networks[networkID]
@@ -1087,9 +1169,9 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 		networkInfo := models.ComputerNetworkInfo{
 			NetworkID:     computerNetwork.NetworkID,
 			NetworkName:   network.Name,
-			IsConnected:   computerNetwork.IsConnected,
 			JoinedAt:      computerNetwork.JoinedAt,
 			LastConnected: computerNetwork.LastConnected,
+			IsConnected:   s.connectedPeers[computerNetwork.NetworkID][computerNetwork.PublicKey],
 		}
 		response.Networks = append(response.Networks, networkInfo)
 	}

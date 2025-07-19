@@ -23,6 +23,7 @@ type Computer struct {
 	Name     string `json:"name"`
 	OwnerID  string `json:"owner_id"`
 	IsOnline bool   `json:"is_online"`
+	PeerIP   string `json:"peer_ip"`
 }
 
 // ConnectionState represents the state of the connection
@@ -213,6 +214,7 @@ func (nm *NetworkManager) handleDisconnection() {
 			nm.connectionState = ConnectionStateDisconnected
 			nm.RealtimeData.SetConnectionState(data.StateDisconnected)
 			nm.RealtimeData.SetStatusMessage("Connection lost")
+			nm.RealtimeData.SetComputerIP("0.0.0.0") // Clear the IP when connection is lost
 			nm.refreshUI()
 		}
 	}
@@ -255,8 +257,27 @@ func (nm *NetworkManager) CreateNetwork(name string, password string) error {
 	// Store network information for current connection
 	nm.NetworkID = res.NetworkID
 
+	// Update the current computer's PeerIP in the NetworkManager's Computers list
+	// This assumes the creator is automatically connected and their IP is returned
+	if len(nm.Computers) > 0 && nm.Computers[0].ID == nm.ConfigManager.GetConfig().PublicKey {
+		nm.Computers[0].PeerIP = res.PeerIP
+	} else {
+		// If the computer list is empty or the current computer is not found,
+		// initialize it with the current computer's info including the PeerIP
+		nm.Computers = []Computer{
+			{
+				ID:       nm.ConfigManager.GetConfig().PublicKey,
+				Name:     nm.ConfigManager.GetConfig().ComputerName,
+				OwnerID:  nm.ConfigManager.GetConfig().PublicKey,
+				IsOnline: true,
+				PeerIP:   res.PeerIP,
+			},
+		}
+	}
+
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo(res.NetworkID)
+	nm.RealtimeData.SetComputerIP(res.PeerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, res.NetworkID, nil)
 
 	// Refresh network list now that we have added the network to memory
@@ -311,8 +332,27 @@ func (nm *NetworkManager) JoinNetwork(networkID string, password string, compute
 	// Store network information for current connection
 	nm.NetworkID = networkID
 
+	// Update the current computer's PeerIP in the NetworkManager's Computers list
+	// This assumes the joined user's IP is returned
+	if len(nm.Computers) > 0 && nm.Computers[0].ID == nm.ConfigManager.GetConfig().PublicKey {
+		nm.Computers[0].PeerIP = res.PeerIP
+	} else {
+		// If the computer list is empty or the current computer is not found,
+		// initialize it with the current computer's info including the PeerIP
+		nm.Computers = []Computer{
+			{
+				ID:       nm.ConfigManager.GetConfig().PublicKey,
+				Name:     nm.ConfigManager.GetConfig().ComputerName,
+				OwnerID:  nm.ConfigManager.GetConfig().PublicKey,
+				IsOnline: true,
+				PeerIP:   res.PeerIP,
+			},
+		}
+	}
+
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo(networkID)
+	nm.RealtimeData.SetComputerIP(res.PeerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
 
 	// Refresh network list now that we have added the network to memory
@@ -361,8 +401,29 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 	// Store network information for current connection
 	nm.NetworkID = networkID
 
+	// Update the current computer's PeerIP in the NetworkManager's Computers list
+	// This assumes the connected user's IP is returned
+	if len(nm.Computers) > 0 && nm.Computers[0].ID == nm.ConfigManager.GetConfig().PublicKey {
+		nm.Computers[0].PeerIP = res.PeerIP
+	} else {
+		// If the computer list is empty or the current computer is not found,
+		// initialize it with the current computer's info including the PeerIP
+		nm.Computers = []Computer{
+			{
+				ID:       nm.ConfigManager.GetConfig().PublicKey,
+				Name:     nm.ConfigManager.GetConfig().ComputerName,
+				OwnerID:  nm.ConfigManager.GetConfig().PublicKey,
+				IsOnline: true,
+				PeerIP:   res.PeerIP,
+			},
+		}
+	}
+
+	
+
 	// Update data layer (without password since we don't store it)
 	nm.RealtimeData.SetNetworkInfo(networkID)
+	nm.RealtimeData.SetComputerIP(res.PeerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
 
 	// Refresh network list now that we have re-connected to the network
@@ -395,6 +456,7 @@ func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 
 		// Update data layer
 		nm.RealtimeData.SetNetworkInfo("Not connected")
+		nm.RealtimeData.SetComputerIP("0.0.0.0")
 		nm.RealtimeData.EmitEvent(data.EventNetworkDisconnected, networkID, nil)
 	}
 
@@ -436,6 +498,7 @@ func (nm *NetworkManager) LeaveNetwork() error {
 
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo("Not connected")
+	nm.RealtimeData.SetComputerIP("0.0.0.0")
 	nm.RealtimeData.EmitEvent(data.EventNetworkLeft, networkID, nil)
 
 	// Refresh the network list UI
@@ -535,6 +598,7 @@ func (nm *NetworkManager) Disconnect() error {
 	nm.connectionState = ConnectionStateDisconnected
 	nm.RealtimeData.SetConnectionState(data.StateDisconnected)
 	nm.RealtimeData.SetStatusMessage("Disconnected")
+	nm.RealtimeData.SetComputerIP("0.0.0.0") // Clear the IP when disconnected
 	nm.ReconnectAttempts = 0
 
 	// Update UI

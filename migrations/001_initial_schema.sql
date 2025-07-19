@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS computer_networks (
   computername VARCHAR(255),
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   last_connected TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  is_connected BOOLEAN DEFAULT TRUE,
   UNIQUE(network_id, public_key),
   FOREIGN KEY (network_id) REFERENCES networks(id) ON DELETE CASCADE
 );
@@ -50,4 +49,3 @@ COMMENT ON COLUMN computer_networks.public_key IS 'Base64-encoded public key of 
 COMMENT ON COLUMN computer_networks.computername IS 'ComputerName of the computer in this network';
 COMMENT ON COLUMN computer_networks.joined_at IS 'Timestamp when the computer first joined the network';
 COMMENT ON COLUMN computer_networks.last_connected IS 'Timestamp of the last connection to the network';
-COMMENT ON COLUMN computer_networks.is_connected IS 'Whether the computer is currently connected to the network';
