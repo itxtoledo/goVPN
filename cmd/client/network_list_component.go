@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
@@ -107,9 +108,12 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				displayMyComputerName = computername
 			}
 
+			myComputerIP, _ := ntc.UI.RealtimeData.ComputerIP.Get()
 			currentComputerItem := container.NewHBox(
 				widget.NewIcon(currentStatusResource),
 				widget.NewLabelWithStyle(displayMyComputerName+" (you)", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
+				layout.NewSpacer(),
+				widget.NewLabelWithStyle(myComputerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
 			)
 			computersContainer.Add(currentComputerItem)
 
@@ -139,7 +143,9 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 					}
 					computerItem := container.NewHBox(
 						widget.NewIcon(activity),
-						widget.NewLabelWithStyle(fmt.Sprintf("%s (%s)", displayComputerName, computer.PeerIP), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
+						widget.NewLabelWithStyle(displayComputerName, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
+						layout.NewSpacer(),
+						widget.NewLabelWithStyle(computer.PeerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
 					)
 					computersContainer.Add(computerItem)
 				}
@@ -151,15 +157,11 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			// Create actions section
 			actionsBox := container.NewVBox()
 
-			content := container.NewPadded(
-				container.NewHBox(
-					layout.NewSpacer(),
-					container.NewVBox(
-						computersBox,
-						widget.NewSeparator(),
-						actionsBox,
-					),
-					layout.NewSpacer(),
+			content := container.NewHBox(
+				container.NewVBox(
+					computersBox,
+					widget.NewSeparator(),
+					actionsBox,
 				),
 			)
 

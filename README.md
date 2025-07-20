@@ -108,7 +108,7 @@ sequenceDiagram
     Note over Server: Server's role in connection establishment ends here.
 
     Note over ClientA,ClientB: P2P Connection Established
-    ClientA<-->ClientB: Direct Encrypted Communication (VPN Tunnel)
+    ClientA<->ClientB: Direct Encrypted Communication (VPN Tunnel)
     Note over ClientA,ClientB: All subsequent VPN traffic flows directly between clients.
 ```
 
