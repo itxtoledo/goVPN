@@ -1,13 +1,13 @@
 module github.com/itxtoledo/govpn/cmd/client
 
-go 1.21
+go 1.22
 
-toolchain go1.21.13
+toolchain go1.23.11
 
 require (
 	fyne.io/fyne/v2 v2.6.0
-	github.com/gorilla/websocket v1.5.3
 	github.com/itxtoledo/govpn/libs/models v0.0.0
+	github.com/itxtoledo/govpn/libs/signaling v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.22
 )
 
@@ -15,6 +15,7 @@ replace (
 	github.com/itxtoledo/govpn/libs/crypto_utils v0.0.0 => ../../libs/crypto_utils
 	github.com/itxtoledo/govpn/libs/models v0.0.0 => ../../libs/models
 	github.com/itxtoledo/govpn/libs/network v0.0.0 => ../../libs/network
+	github.com/itxtoledo/govpn/libs/signaling v0.0.0 => ../../libs/signaling
 )
 
 require (
@@ -37,6 +38,7 @@ require (
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20240506104042-037f3cc74f2a // indirect
 	github.com/go-text/typesetting v0.2.1 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20241217141322-fcc2cadd6f08 // indirect

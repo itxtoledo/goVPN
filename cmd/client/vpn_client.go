@@ -18,7 +18,6 @@ type VPNClient struct {
 	PublicKey      interface{}
 	PublicKeyStr   string // Identificador principal do cliente
 	ComputerName   string
-	Computers      []Computer
 	CurrentNetwork string
 	IsConnected    bool
 	NetworkManager *NetworkManager
@@ -64,7 +63,6 @@ func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, c
 		PublicKey:     publicKey,
 		PublicKeyStr:  publicKeyStr,
 		ComputerName:  computername,
-		Computers:     make([]Computer, 0),
 		ConfigManager: configManager,
 	}
 

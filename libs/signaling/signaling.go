@@ -1,4 +1,4 @@
-package main
+package signaling
 
 import (
 	"encoding/json"
@@ -14,12 +14,20 @@ import (
 	"github.com/itxtoledo/govpn/libs/models"
 )
 
+// Computer represents a computer connected to a network
+type Computer struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	OwnerID  string `json:"owner_id"`
+	IsOnline bool   `json:"is_online"`
+	PeerIP   string `json:"peer_ip,omitempty"`
+}
+
 // SignalingMessageHandler define o tipo de função para lidar com mensagens de sinalização recebidas.
 type SignalingMessageHandler func(messageType models.MessageType, payload []byte)
 
 // SignalingClient representa uma conexão com o servidor de sinalização
 type SignalingClient struct {
-	VPNClient      *VPNClient
 	Conn           *websocket.Conn
 	ServerAddress  string
 	Connected      bool
@@ -41,11 +49,6 @@ func NewSignalingClient(publicKey string, handler SignalingMessageHandler) *Sign
 		MessageHandler:  handler, // Atribuir o handler passado
 		pendingRequests: make(map[string]chan models.SignalingMessage),
 	}
-}
-
-// SetVPNClient sets the reference to the VPNClient for key access
-func (s *SignalingClient) SetVPNClient(client *VPNClient) {
-	s.VPNClient = client
 }
 
 // Connect conecta ao servidor de sinalização
@@ -79,9 +82,6 @@ func (s *SignalingClient) Connect(serverAddress string) error {
 	// Adicionar identificador do cliente usando a chave pública armazenada diretamente
 	if s.PublicKeyStr != "" {
 		headers["X-Client-ID"] = []string{s.PublicKeyStr}
-	} else if s.VPNClient != nil && s.VPNClient.PublicKeyStr != "" {
-		// Fallback para manter compatibilidade
-		headers["X-Client-ID"] = []string{s.VPNClient.PublicKeyStr}
 	}
 
 	// Estabelecer conexão com o servidor WebSocket com retry
@@ -621,14 +621,9 @@ func (s *SignalingClient) listenForMessages() {
 					log.Printf("Failed to unmarshal network disconnected response: %v", err)
 				} else {
 					log.Printf("Successfully disconnected from network: %s", response.NetworkID)
-					// Handle client disconnecting from network
-					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// Clean up computers list when disconnecting from a network
-						s.VPNClient.NetworkManager.Computers = []Computer{}
-						// Notify the handler about the network disconnection
-						if s.MessageHandler != nil {
-							s.MessageHandler(models.TypeNetworkDisconnected, sigMsg.Payload)
-						}
+					// Notify the handler about the network disconnection
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeNetworkDisconnected, sigMsg.Payload)
 					}
 				}
 			}
@@ -644,19 +639,6 @@ func (s *SignalingClient) listenForMessages() {
 					if s.MessageHandler != nil {
 						s.MessageHandler(models.TypeNetworkJoined, sigMsg.Payload)
 					}
-
-					// Initialize computers list for the network
-					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// Initialize with just this computer for now
-						s.VPNClient.NetworkManager.Computers = []Computer{
-							{
-								ID:       s.VPNClient.PublicKeyStr,
-								Name:     s.VPNClient.ComputerName,
-								OwnerID:  s.VPNClient.PublicKeyStr,
-								IsOnline: true,
-							},
-						}
-					}
 				}
 			}
 
@@ -670,19 +652,6 @@ func (s *SignalingClient) listenForMessages() {
 					// Notify the handler about the network created event
 					if s.MessageHandler != nil {
 						s.MessageHandler(models.TypeNetworkCreated, sigMsg.Payload)
-					}
-
-					// Initialize computers list for the network
-					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// When creating a network, just add this computer as the only member
-						s.VPNClient.NetworkManager.Computers = []Computer{
-							{
-								ID:       s.VPNClient.PublicKeyStr,
-								Name:     s.VPNClient.ComputerName,
-								OwnerID:  s.VPNClient.PublicKeyStr,
-								IsOnline: true,
-							},
-						}
 					}
 				}
 			}
@@ -731,29 +700,9 @@ func (s *SignalingClient) listenForMessages() {
 					}
 					log.Printf("New computer joined network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.PeerIP)
 
-					// Add the new computer to the computers list
-					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// Skip if this is our own public key
-						if notification.PublicKey != s.VPNClient.PublicKeyStr {
-							// Add the new computer to the computers list
-							newComputer := Computer{
-								ID:       notification.PublicKey,
-								Name:     computerName,
-								OwnerID:  notification.PublicKey,
-								IsOnline: true,
-								PeerIP:   notification.PeerIP,
-							}
-
-							s.VPNClient.NetworkManager.Computers = append(
-								s.VPNClient.NetworkManager.Computers,
-								newComputer,
-							)
-
-							// Notify the handler about the computer joined event
-							if s.MessageHandler != nil {
-								s.MessageHandler(models.TypeComputerJoined, sigMsg.Payload)
-							}
-						}
+					// Notify the handler about the computer joined event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeComputerJoined, sigMsg.Payload)
 					}
 				}
 			}
@@ -770,33 +719,9 @@ func (s *SignalingClient) listenForMessages() {
 					}
 					log.Printf("Computer connected to network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.PeerIP)
 
-					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						// Update the status of the connected computer
-						found := false
-						for i, comp := range s.VPNClient.NetworkManager.Computers {
-							if comp.ID == notification.PublicKey {
-								s.VPNClient.NetworkManager.Computers[i].IsOnline = true
-								s.VPNClient.NetworkManager.Computers[i].PeerIP = notification.PeerIP
-								found = true
-								break
-							}
-						}
-						if !found {
-							// If for some reason the computer wasn't in the list (e.g., joined while we were offline), add it
-							newComputer := Computer{
-								ID:       notification.PublicKey,
-								Name:     computerName,
-								OwnerID:  notification.PublicKey,
-								IsOnline: true,
-								PeerIP:   notification.PeerIP,
-							}
-							s.VPNClient.NetworkManager.Computers = append(s.VPNClient.NetworkManager.Computers, newComputer)
-						}
-
-						// Notify the handler about the computer connected event
-						if s.MessageHandler != nil {
-							s.MessageHandler(models.TypeComputerConnected, sigMsg.Payload)
-						}
+					// Notify the handler about the computer connected event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeComputerConnected, sigMsg.Payload)
 					}
 				}
 			}
@@ -808,24 +733,9 @@ func (s *SignalingClient) listenForMessages() {
 			} else {
 				log.Printf("Computer left network %s: %s", notification.NetworkID, notification.PublicKey)
 
-				// Remove the computer from the computers list
-				if s.VPNClient != nil && s.VPNClient.NetworkManager != nil && len(s.VPNClient.NetworkManager.Computers) > 0 {
-					// Skip if this is our own public key
-					if notification.PublicKey != s.VPNClient.PublicKeyStr {
-						// Find and remove the computer from the computers list
-						updatedComputers := []Computer{}
-						for _, computer := range s.VPNClient.NetworkManager.Computers {
-							if computer.ID != notification.PublicKey {
-								updatedComputers = append(updatedComputers, computer)
-							}
-						}
-						s.VPNClient.NetworkManager.Computers = updatedComputers
-
-						// Notify the handler about the computer left event
-						if s.MessageHandler != nil {
-							s.MessageHandler(models.TypeComputerLeft, sigMsg.Payload)
-						}
-					}
+				// Notify the handler about the computer left event
+				if s.MessageHandler != nil {
+					s.MessageHandler(models.TypeComputerLeft, sigMsg.Payload)
 				}
 			}
 
@@ -836,11 +746,10 @@ func (s *SignalingClient) listenForMessages() {
 					log.Printf("Failed to unmarshal network deleted notification: %v", err)
 				} else {
 					log.Printf("Network deleted: %s", notification.NetworkID)
-					// Clear computers list when a network is deleted
-					if s.VPNClient != nil && s.VPNClient.NetworkManager != nil {
-						s.VPNClient.NetworkManager.Computers = []Computer{}
+					// Notify the handler about the network deleted event
+					if s.MessageHandler != nil {
+						s.MessageHandler(models.TypeNetworkDeleted, sigMsg.Payload)
 					}
-					s.VPNClient.NetworkManager.HandleNetworkDeleted(notification.NetworkID)
 				}
 			}
 
@@ -853,8 +762,6 @@ func (s *SignalingClient) listenForMessages() {
 					log.Printf("========== COMPUTER NETWORKS RECEIVED ==========")
 					log.Printf("Total networks found: %d", len(response.Networks))
 
-					// Create a slice to store the converted networks
-
 					for i, network := range response.Networks {
 						log.Printf("Network %d: %s (ID: %s)", i+1, network.NetworkName, network.NetworkID)
 						log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
@@ -862,7 +769,7 @@ func (s *SignalingClient) listenForMessages() {
 						log.Printf("  ---")
 					}
 
-					log.Printf("========================================")
+					log.Printf("==========================================")
 
 					// Notify the handler about the updated network list
 					if s.MessageHandler != nil {
@@ -886,9 +793,6 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 		}
-
-		// Also pass to custom handler if configured
-		// Note: The MessageHandler is already called for specific message types above
 	}
 }
 

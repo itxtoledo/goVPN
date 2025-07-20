@@ -13,6 +13,7 @@ import (
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
+	signaling "github.com/itxtoledo/govpn/libs/signaling"
 )
 
 // UIManager represents the UI manager for the VPN client app
@@ -26,7 +27,7 @@ type UIManager struct {
 	HeaderComponent     *HeaderComponent
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
-	ComputerList        []Computer
+	ComputerList        []signaling.Computer
 	SelectedNetwork     *st.Network
 	defaultWebsocketURL string
 

@@ -9,6 +9,7 @@ import (
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
 	"github.com/itxtoledo/govpn/libs/models"
+	signaling "github.com/itxtoledo/govpn/libs/signaling"
 )
 
 // NetworkInterface define a interface mínima para a rede virtual
@@ -17,14 +18,7 @@ type NetworkInterface interface {
 	GetComputerCount() int
 }
 
-// Computer represents a computer in the VPN network
-type Computer struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	OwnerID  string `json:"owner_id"`
-	IsOnline bool   `json:"is_online"`
-	PeerIP   string `json:"peer_ip"`
-}
+
 
 // ConnectionState represents the state of the connection
 type ConnectionState int
@@ -38,9 +32,9 @@ const (
 // NetworkManager handles the VPN network
 type NetworkManager struct {
 	VirtualNetwork    NetworkInterface
-	SignalingServer   *SignalingClient
+	SignalingServer   *signaling.SignalingClient
 	NetworkID         string
-	Computers         []Computer
+	Computers         []signaling.Computer
 	connectionState   ConnectionState
 	ReconnectAttempts int
 	MaxReconnects     int
@@ -156,7 +150,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			nm.RealtimeData.SetComputerIP(ipDisplay)
 		}
 	}
-	nm.SignalingServer = NewSignalingClient(publicKey, signalingHandler)
+	nm.SignalingServer = signaling.NewSignalingClient(publicKey, signalingHandler)
 
 	// Connect to signaling server
 	err := nm.SignalingServer.Connect(serverAddress)
@@ -251,7 +245,7 @@ func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 	} else {
 		// If the computer list is empty or the current computer is not found,
 		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []Computer{
+		nm.Computers = []signaling.Computer{
 			{
 				ID:       nm.ConfigManager.GetConfig().PublicKey,
 				Name:     nm.ConfigManager.GetConfig().ComputerName,
@@ -300,7 +294,7 @@ func (nm *NetworkManager) JoinNetwork(networkID string, pin string, computername
 	} else {
 		// If the computer list is empty or the current computer is not found,
 		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []Computer{
+		nm.Computers = []signaling.Computer{
 			{
 				ID:       nm.ConfigManager.GetConfig().PublicKey,
 				Name:     nm.ConfigManager.GetConfig().ComputerName,
@@ -366,7 +360,7 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 	} else {
 		// If the computer list is empty or the current computer is not found,
 		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []Computer{
+		nm.Computers = []signaling.Computer{
 			{
 				ID:       nm.ConfigManager.GetConfig().PublicKey,
 				Name:     nm.ConfigManager.GetConfig().ComputerName,
@@ -417,7 +411,7 @@ func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 	}
 
 	// Clear the computers list
-	nm.Computers = []Computer{}
+	nm.Computers = []signaling.Computer{}
 
 	// Refresh the network list UI
 	nm.refreshNetworkList()
