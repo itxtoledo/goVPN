@@ -324,7 +324,7 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 }
 
 // CreateNetwork cria uma nova sala no servidor
-func (s *SignalingClient) CreateNetwork(name string, password string) (*models.CreateNetworkResponse, error) {
+func (s *SignalingClient) CreateNetwork(name string, pin string) (*models.CreateNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -335,7 +335,7 @@ func (s *SignalingClient) CreateNetwork(name string, password string) (*models.C
 	payload := &models.CreateNetworkRequest{
 		BaseRequest: models.BaseRequest{},
 		NetworkName: name,
-		Password:    password,
+		PIN:    pin,
 	}
 
 	// Enviar solicitação de criação de sala usando a função de empacotamento
@@ -353,7 +353,7 @@ func (s *SignalingClient) CreateNetwork(name string, password string) (*models.C
 }
 
 // JoinNetwork entra em uma sala
-func (s *SignalingClient) JoinNetwork(networkID string, password string, computername string) (*models.JoinNetworkResponse, error) {
+func (s *SignalingClient) JoinNetwork(networkID string, pin string, computername string) (*models.JoinNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -364,7 +364,7 @@ func (s *SignalingClient) JoinNetwork(networkID string, password string, compute
 	payload := &models.JoinNetworkRequest{
 		BaseRequest:  models.BaseRequest{},
 		NetworkID:    networkID,
-		Password:     password,
+		PIN:     pin,
 		ComputerName: computername,
 	}
 

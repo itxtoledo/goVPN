@@ -21,9 +21,9 @@ type NetworkWindow struct {
 	CreateNetwork          func(string, string) (*models.CreateNetworkResponse, error)
 	GetNetworkID           func() string
 	ComputerName           string
-	ValidatePassword       func(string) bool
-	ConfigurePasswordEntry func(*widget.Entry)
-	OnNetworkCreated       func(networkID, networkName, password string)
+	ValidatePIN       func(string) bool
+	ConfigurePINEntry func(*widget.Entry)
+	OnNetworkCreated       func(networkID, networkName, pin string)
 }
 
 // NewNetworkWindow creates a new network creation window
@@ -32,17 +32,17 @@ func NewNetworkWindow(
 	createNetwork func(string, string) (*models.CreateNetworkResponse, error),
 	getNetworkID func() string,
 	computername string,
-	validatePassword func(string) bool,
-	configurePasswordEntry func(*widget.Entry),
-	onNetworkCreated func(networkID, networkName, password string),
+	validatePIN func(string) bool,
+	configurePINEntry func(*widget.Entry),
+	onNetworkCreated func(networkID, networkName, pin string),
 ) *NetworkWindow {
 	rw := &NetworkWindow{
 		BaseWindow:             NewBaseWindow(app, "Create Network", 320, 260),
 		CreateNetwork:          createNetwork,
 		GetNetworkID:           getNetworkID,
 		ComputerName:           computername,
-		ValidatePassword:       validatePassword,
-		ConfigurePasswordEntry: configurePasswordEntry,
+		ValidatePIN:       validatePIN,
+		ConfigurePINEntry: configurePINEntry,
 		OnNetworkCreated:       onNetworkCreated,
 	}
 
@@ -69,26 +69,26 @@ func (rw *NetworkWindow) Show() {
 	nameEntry := widget.NewEntry()
 	nameEntry.PlaceHolder = "Network name"
 
-	passwordEntry := widget.NewPasswordEntry()
-	passwordEntry.PlaceHolder = "4-digit PIN"
-	rw.ConfigurePasswordEntry(passwordEntry)
+	pinEntry := widget.NewPasswordEntry()
+	pinEntry.PlaceHolder = "4-digit PIN"
+	rw.ConfigurePINEntry(pinEntry)
 
-	confirmPasswordEntry := widget.NewPasswordEntry()
-	confirmPasswordEntry.PlaceHolder = "Repeat 4-digit PIN"
-	rw.ConfigurePasswordEntry(confirmPasswordEntry)
+	confirmPINEntry := widget.NewPasswordEntry()
+	confirmPINEntry.PlaceHolder = "Repeat 4-digit PIN"
+	rw.ConfigurePINEntry(confirmPINEntry)
 
 	// Add keyboard shortcuts
 	nameEntry.OnSubmitted = func(text string) {
-		passwordEntry.FocusGained()
+		pinEntry.FocusGained()
 	}
 
-	passwordEntry.OnSubmitted = func(text string) {
-		confirmPasswordEntry.FocusGained()
+	pinEntry.OnSubmitted = func(text string) {
+		confirmPINEntry.FocusGained()
 	}
 
-	confirmPasswordEntry.OnSubmitted = func(text string) {
-		// Trigger create button when Enter is pressed on password field
-		if nameEntry.Text != "" && rw.ValidatePassword(text) {
+	confirmPINEntry.OnSubmitted = func(text string) {
+		// Trigger create button when Enter is pressed on pin field
+		if nameEntry.Text != "" && rw.ValidatePIN(text) {
 			// Will be triggered by the create button logic
 		}
 	}
@@ -97,18 +97,18 @@ func (rw *NetworkWindow) Show() {
 	formContainer := container.NewVBox(
 		widget.NewLabel("Network Name:"),
 		container.NewPadded(nameEntry),
-		widget.NewLabel("Password:"),
-		container.NewPadded(passwordEntry),
-		widget.NewLabel("Repeat Password:"),
-		container.NewPadded(confirmPasswordEntry),
+		widget.NewLabel("PIN:"),
+		container.NewPadded(pinEntry),
+		widget.NewLabel("Repeat PIN:"),
+		container.NewPadded(confirmPINEntry),
 	)
 
 	// Create buttons
 	var createButton *widget.Button
 	createButton = widget.NewButtonWithIcon("Create Network", theme.ConfirmIcon(), func() {
 		name := nameEntry.Text
-		password := passwordEntry.Text
-		confirmPassword := confirmPasswordEntry.Text
+		pin := pinEntry.Text
+		confirmPIN := confirmPINEntry.Text
 
 		// Validate name
 		if name == "" {
@@ -116,15 +116,15 @@ func (rw *NetworkWindow) Show() {
 			return
 		}
 
-		// Validate password using the abstract function
-		if !rw.ValidatePassword(password) {
-			dialog.ShowError(errors.New("password must be exactly 4 digits"), rw.BaseWindow.Window)
+		// Validate pin using the abstract function
+		if !rw.ValidatePIN(pin) {
+			dialog.ShowError(errors.New("PIN must be exactly 4 digits"), rw.BaseWindow.Window)
 			return
 		}
 
-		// Validate password confirmation
-		if password != confirmPassword {
-			dialog.ShowError(errors.New("passwords do not match"), rw.BaseWindow.Window)
+		// Validate pin confirmation
+		if pin != confirmPIN {
+			dialog.ShowError(errors.New("PINs do not match"), rw.BaseWindow.Window)
 			return
 		}
 
@@ -135,7 +135,7 @@ func (rw *NetworkWindow) Show() {
 		// Create network in a goroutine
 		go func() {
 			// Send create network command to backend
-			res, err := rw.CreateNetwork(name, password)
+			res, err := rw.CreateNetwork(name, pin)
 
 			fyne.Do(func() {
 				createButton.SetText("Create Network")
@@ -151,7 +151,7 @@ func (rw *NetworkWindow) Show() {
 
 				if networkID != "" {
 					// Invoke the callback with the network details
-					rw.OnNetworkCreated(networkID, name, password)
+					rw.OnNetworkCreated(networkID, name, pin)
 
 					// Close the create window after invoking the callback
 					rw.BaseWindow.Close()

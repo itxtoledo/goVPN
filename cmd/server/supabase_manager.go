@@ -36,7 +36,7 @@ func (sm *SupabaseManager) CreateNetwork(network ServerNetwork) error {
 	networkData := map[string]interface{}{
 		"id":          network.ID,
 		"name":        network.Name,
-		"password":    network.Password,
+		"pin":         network.PIN,
 		"public_key":  network.PublicKeyB64,
 		"created_at":  network.CreatedAt.Format(time.RFC3339),
 		"last_active": network.LastActive.Format(time.RFC3339),
@@ -75,9 +75,9 @@ func (sm *SupabaseManager) GetNetwork(networkID string) (ServerNetwork, error) {
 	// Create a ServerNetwork from the SupabaseNetwork data
 	return ServerNetwork{
 		Network: models.Network{
-			ID:       dbNetwork.ID,
-			Name:     dbNetwork.Name,
-			Password: dbNetwork.Password,
+			ID:   dbNetwork.ID,
+			Name: dbNetwork.Name,
+			PIN:  dbNetwork.PIN,
 		},
 		PublicKeyB64: dbNetwork.PublicKey,
 		CreatedAt:    dbNetwork.CreatedAt,
@@ -157,9 +157,9 @@ func (sm *SupabaseManager) GetNetworkByPublicKey(publicKey string) (ServerNetwor
 
 	return ServerNetwork{
 		Network: models.Network{
-			ID:       dbNetwork.ID,
-			Name:     dbNetwork.Name,
-			Password: dbNetwork.Password,
+			ID:   dbNetwork.ID,
+			Name: dbNetwork.Name,
+			PIN:  dbNetwork.PIN,
 		},
 		PublicKeyB64: dbNetwork.PublicKey,
 		CreatedAt:    dbNetwork.CreatedAt,

@@ -111,7 +111,7 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
 - **home_tab_component.go**: Home tab UI component
 - **network_list_component.go**: Network list UI component
 - **network_manager.go**: Network connection management
-- **password_validator.go**: Password validation logic
+- **pin_validator.go**: PIN validation logic
 - **network_item_component.go**: Network item UI component
 - **settings_tab_component.go**: Settings tab UI component
 - **signaling_client.go**: WebSocket signaling client

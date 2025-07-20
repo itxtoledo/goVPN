@@ -45,10 +45,10 @@ const (
 	TypeClientIPInfo         MessageType = "ClientIPInfo"
 )
 
-// Password validation constants
+// PIN validation constants
 const (
-	// DefaultPasswordPattern is the default password validation pattern: exactly 4 numeric digits
-	DefaultPasswordPattern = `^\d{4}$`
+	// DefaultPINPattern is the default PIN validation pattern: exactly 4 numeric digits
+	DefaultPINPattern = `^\d{4}$`
 )
 
 // SignalingMessage represents the wrapper structure for WebSocket communication
@@ -72,7 +72,7 @@ type ErrorResponse struct {
 type Network struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	Password    string `json:"password,omitempty"`
+	PIN    string `json:"pin"`
 	ClientCount int    `json:"client_count"`
 }
 
@@ -82,14 +82,14 @@ type Network struct {
 type CreateNetworkRequest struct {
 	BaseRequest
 	NetworkName string `json:"network_name"`
-	Password    string `json:"password"`
+	PIN    string `json:"pin"`
 }
 
 // CreateNetworkResponse represents a response to a network creation request
 type CreateNetworkResponse struct {
 	NetworkID   string `json:"network_id"`
 	NetworkName string `json:"network_name"`
-	Password    string `json:"password"`
+	PIN    string `json:"pin"`
 	PublicKey   string `json:"public_key"`
 	PeerIP      string `json:"peer_ip"`
 }
@@ -98,7 +98,7 @@ type CreateNetworkResponse struct {
 type JoinNetworkRequest struct {
 	BaseRequest
 	NetworkID    string `json:"network_id"`
-	Password     string `json:"password"`
+	PIN     string `json:"pin"`
 	ComputerName string `json:"computername,omitempty"`
 }
 
@@ -283,16 +283,16 @@ func GenerateRandomID(length int) (string, error) {
 	return id, nil
 }
 
-// PasswordRegex returns a compiled regex for the default password pattern
-func PasswordRegex() (*regexp.Regexp, error) {
-	return regexp.Compile(DefaultPasswordPattern)
+// PINRegex returns a compiled regex for the default PIN pattern
+func PINRegex() (*regexp.Regexp, error) {
+	return regexp.Compile(DefaultPINPattern)
 }
 
-// ValidatePassword checks if a password matches the default password pattern
-func ValidatePassword(password string) bool {
-	regex, err := PasswordRegex()
+// ValidatePIN checks if a PIN matches the default PIN pattern
+func ValidatePIN(pin string) bool {
+	regex, err := PINRegex()
 	if err != nil {
 		return false
 	}
-	return regex.MatchString(password)
+	return regex.MatchString(pin)
 }

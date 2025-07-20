@@ -223,13 +223,13 @@ func (nm *NetworkManager) GetConnectionState() ConnectionState {
 }
 
 // CreateNetwork creates a new network
-func (nm *NetworkManager) CreateNetwork(name string, password string) error {
+func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
 	// Create network
-	res, err := nm.SignalingServer.CreateNetwork(name, password)
+	res, err := nm.SignalingServer.CreateNetwork(name, pin)
 	if err != nil {
 		return fmt.Errorf("failed to create network: %v", err)
 	}
@@ -274,13 +274,13 @@ func (nm *NetworkManager) CreateNetwork(name string, password string) error {
 }
 
 // JoinNetwork joins a network
-func (nm *NetworkManager) JoinNetwork(networkID string, password string, computername string) error {
+func (nm *NetworkManager) JoinNetwork(networkID string, pin string, computername string) error {
 	if nm.connectionState != ConnectionStateConnected {
 		return fmt.Errorf("not connected to server")
 	}
 
 	// Join network
-	res, err := nm.SignalingServer.JoinNetwork(networkID, password, computername)
+	res, err := nm.SignalingServer.JoinNetwork(networkID, pin, computername)
 	if err != nil {
 		return fmt.Errorf("failed to join network: %v", err)
 	}

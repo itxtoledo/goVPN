@@ -22,9 +22,9 @@ type NetworkManagerAdapter struct {
 }
 
 // CreateNetwork adapts the NetworkManager CreateNetwork method to match the interface
-func (nma *NetworkManagerAdapter) CreateNetwork(name, password string) (*models.CreateNetworkResponse, error) {
+func (nma *NetworkManagerAdapter) CreateNetwork(name, pin string) (*models.CreateNetworkResponse, error) {
 	// Call the original CreateNetwork method
-	err := nma.NetworkManager.CreateNetwork(name, password)
+	err := nma.NetworkManager.CreateNetwork(name, pin)
 	if err != nil {
 		return nil, err
 	}
@@ -33,14 +33,14 @@ func (nma *NetworkManagerAdapter) CreateNetwork(name, password string) (*models.
 	return &models.CreateNetworkResponse{
 		NetworkID:   nma.NetworkManager.NetworkID,
 		NetworkName: name,
-		Password:    password,
+		PIN:    pin,
 	}, nil
 }
 
 // JoinNetwork adapts the NetworkManager JoinNetwork method to match the interface
-func (nma *NetworkManagerAdapter) JoinNetwork(networkID, password, computername string) (*models.JoinNetworkResponse, error) {
+func (nma *NetworkManagerAdapter) JoinNetwork(networkID, pin, computername string) (*models.JoinNetworkResponse, error) {
 	// Call the original JoinNetwork method
-	err := nma.NetworkManager.JoinNetwork(networkID, password, computername)
+	err := nma.NetworkManager.JoinNetwork(networkID, pin, computername)
 	if err != nil {
 		return nil, err
 	}
@@ -122,10 +122,10 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			adapter.CreateNetwork,
 			adapter.GetNetworkID,
 			computername,
-			ValidatePassword,
-			ConfigurePasswordEntry,
-			func(networkID, networkName, password string) {
-				htc.UI.HandleNetworkCreated(networkID, networkName, password)
+			ValidatePIN,
+			ConfigurePINEntry,
+			func(networkID, networkName, pin string) {
+				htc.UI.HandleNetworkCreated(networkID, networkName, pin)
 			},
 		)
 		globalNetworkWindow.Show()
@@ -161,10 +161,10 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			htc.UI.App,
 			adapter.JoinNetwork,
 			computername,
-			ValidatePassword,
-			ConfigurePasswordEntry,
-			func(networkID, password string) {
-				htc.UI.HandleNetworkJoined(networkID, password)
+			ValidatePIN,
+			ConfigurePINEntry,
+			func(networkID, pin string) {
+				htc.UI.HandleNetworkJoined(networkID, pin)
 			},
 		)
 		globalJoinWindow.Show()

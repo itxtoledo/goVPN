@@ -20,9 +20,9 @@ type JoinWindow struct {
 	*BaseWindow
 	JoinNetwork            func(string, string, string) (*models.JoinNetworkResponse, error)
 	ComputerName           string
-	ValidatePassword       func(string) bool
-	ConfigurePasswordEntry func(*widget.Entry)
-	OnNetworkJoined        func(networkID, password string)
+	ValidatePIN       func(string) bool
+	ConfigurePINEntry func(*widget.Entry)
+	OnNetworkJoined        func(networkID, pin string)
 }
 
 // NewJoinWindow creates a new network joining window
@@ -30,16 +30,16 @@ func NewJoinWindow(
 	app fyne.App,
 	joinNetwork func(string, string, string) (*models.JoinNetworkResponse, error),
 	computername string,
-	validatePassword func(string) bool,
-	configurePasswordEntry func(*widget.Entry),
-	onNetworkJoined func(networkID, password string),
+	validatePIN func(string) bool,
+	configurePINEntry func(*widget.Entry),
+	onNetworkJoined func(networkID, pin string),
 ) *JoinWindow {
 	jw := &JoinWindow{
 		BaseWindow:             NewBaseWindow(app, "Join Network", 320, 260),
 		JoinNetwork:            joinNetwork,
 		ComputerName:           computername,
-		ValidatePassword:       validatePassword,
-		ConfigurePasswordEntry: configurePasswordEntry,
+		ValidatePIN:       validatePIN,
+		ConfigurePINEntry: configurePINEntry,
 		OnNetworkJoined:        onNetworkJoined,
 	}
 
@@ -65,18 +65,18 @@ func (jw *JoinWindow) Show() {
 	networkIDEntry := widget.NewEntry()
 	networkIDEntry.PlaceHolder = "Network ID (e.g. ABC123)"
 
-	passwordEntry := widget.NewPasswordEntry()
-	passwordEntry.PlaceHolder = "4-digit PIN"
-	jw.ConfigurePasswordEntry(passwordEntry)
+	pinEntry := widget.NewPasswordEntry()
+	pinEntry.PlaceHolder = "4-digit PIN"
+	jw.ConfigurePINEntry(pinEntry)
 
 	// Add keyboard shortcuts
 	networkIDEntry.OnSubmitted = func(text string) {
-		passwordEntry.FocusGained()
+		pinEntry.FocusGained()
 	}
 
-	passwordEntry.OnSubmitted = func(text string) {
-		// Trigger join button when Enter is pressed on password field
-		if networkIDEntry.Text != "" && jw.ValidatePassword(text) {
+	pinEntry.OnSubmitted = func(text string) {
+		// Trigger join button when Enter is pressed on pin field
+		if networkIDEntry.Text != "" && jw.ValidatePIN(text) {
 			// Will be triggered by the join button logic
 		}
 	}
@@ -85,23 +85,23 @@ func (jw *JoinWindow) Show() {
 	formContainer := container.NewVBox(
 		widget.NewLabel("Network ID:"),
 		container.NewPadded(networkIDEntry),
-		widget.NewLabel("Password:"),
-		container.NewPadded(passwordEntry),
+		widget.NewLabel("PIN:"),
+		container.NewPadded(pinEntry),
 	)
 
 	// Create buttons
 	var joinButton *widget.Button
 	joinButton = widget.NewButtonWithIcon("Join Network", theme.ConfirmIcon(), func() {
 		networkID := networkIDEntry.Text
-		password := passwordEntry.Text
+		pin := pinEntry.Text
 
 		if networkID == "" {
 			dialog.ShowError(errors.New("network ID cannot be empty"), jw.BaseWindow.Window)
 			return
 		}
 
-		if !jw.ValidatePassword(password) {
-			dialog.ShowError(errors.New("password must be exactly 4 digits"), jw.BaseWindow.Window)
+		if !jw.ValidatePIN(pin) {
+			dialog.ShowError(errors.New("PIN must be exactly 4 digits"), jw.BaseWindow.Window)
 			return
 		}
 
@@ -110,7 +110,7 @@ func (jw *JoinWindow) Show() {
 		joinButton.Disable()
 
 		go func() {
-			_, err := jw.JoinNetwork(networkID, password, jw.ComputerName)
+			_, err := jw.JoinNetwork(networkID, pin, jw.ComputerName)
 
 			// Use goroutine to update UI
 			go func() {
@@ -123,7 +123,7 @@ func (jw *JoinWindow) Show() {
 				}
 
 				// Invoke the callback with the network details
-				jw.OnNetworkJoined(networkID, password)
+				jw.OnNetworkJoined(networkID, pin)
 
 				// Close the join window after invoking the callback
 				jw.BaseWindow.Close()

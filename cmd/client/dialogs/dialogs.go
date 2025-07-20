@@ -28,17 +28,17 @@ func isDigit(s string) bool {
 	return true
 }
 
-// ValidatePassword checks if a password matches the default password pattern
-func ValidatePassword(password string) bool {
-	return len(password) == 4 && isDigit(password)
+// ValidatePIN checks if a PIN matches the default PIN pattern
+func ValidatePIN(pin string) bool {
+	return len(pin) == 4 && isDigit(pin)
 }
 
-// ConfigurePasswordEntry configures a password entry widget with 4-digit validation
-func ConfigurePasswordEntry(entry *widget.Entry) {
-	entry.SetPlaceHolder("4-digit password")
+// ConfigurePINEntry configures a PIN entry widget with 4-digit validation
+func ConfigurePINEntry(entry *widget.Entry) {
+	entry.SetPlaceHolder("4-digit PIN")
 	entry.Validator = func(s string) error {
-		if !ValidatePassword(s) {
-			return errors.New("Password must be exactly 4 digits")
+		if !ValidatePIN(s) {
+			return errors.New("PIN must be exactly 4 digits")
 		}
 		return nil
 	}

@@ -32,7 +32,7 @@ type ServerNetwork struct {
 type SupabaseNetwork struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
-	Password   string    `json:"password"`
+	PIN        string    `json:"pin"`
 	PublicKey  string    `json:"public_key"` // Base64 encoded public key
 	CreatedAt  time.Time `json:"created_at"`
 	LastActive time.Time `json:"last_active"`
@@ -48,7 +48,7 @@ type WebSocketServer struct {
 	config            Config
 	supabaseManager   *SupabaseManager
 	upgrader          websocket.Upgrader
-	passwordRegex     *regexp.Regexp
+	pinRegex          *regexp.Regexp
 
 	// Server statistics
 	statsManager *StatsManager
@@ -60,9 +60,9 @@ type WebSocketServer struct {
 }
 
 func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
-	passwordRegex, err := models.PasswordRegex()
+	pinRegex, err := models.PINRegex()
 	if err != nil {
-		return nil, fmt.Errorf("failed to compile password pattern: %w", err)
+		return nil, fmt.Errorf("failed to compile pin pattern: %w", err)
 	}
 
 	supaMgr, err := NewSupabaseManager(cfg.SupabaseURL, cfg.SupabaseKey, cfg.SupabaseNetworksTable, cfg.LogLevel)
@@ -88,7 +88,7 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 		config:            cfg,
 		supabaseManager:   supaMgr,
 		upgrader:          upgrader,
-		passwordRegex:     passwordRegex,
+		pinRegex:          pinRegex,
 		statsManager:      statsManager,
 		shutdownChan:      make(chan struct{}),
 		httpServer:        &http.Server{},
@@ -268,13 +268,13 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.C
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if req.NetworkName == "" || req.Password == "" || req.PublicKey == "" {
-		s.sendErrorSignal(conn, "Network name, password, and public key are required", originalID)
+	if req.NetworkName == "" || req.PIN == "" || req.PublicKey == "" {
+		s.sendErrorSignal(conn, "Network name, pin, and public key are required", originalID)
 		return
 	}
 
-	if !s.passwordRegex.MatchString(req.Password) {
-		s.sendErrorSignal(conn, "Password does not match required pattern", originalID)
+	if !s.pinRegex.MatchString(req.PIN) {
+		s.sendErrorSignal(conn, "PIN does not match required pattern", originalID)
 		return
 	}
 
@@ -304,9 +304,9 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.C
 
 	network := ServerNetwork{
 		Network: models.Network{
-			ID:       networkID,
-			Name:     req.NetworkName,
-			Password: req.Password,
+			ID:   networkID,
+			Name: req.NetworkName,
+			PIN:  req.PIN,
 		},
 		PublicKey:    pubKey,
 		PublicKeyB64: req.PublicKey,
@@ -348,7 +348,7 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.C
 	responsePayload := map[string]interface{}{
 		"network_id":   networkID,
 		"network_name": req.NetworkName,
-		"password":     req.Password,
+		"pin":          req.PIN,
 		"public_key":   req.PublicKey,
 		"peer_ip":      creatorIP,
 	}
@@ -366,8 +366,8 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 		return
 	}
 
-	if req.Password != network.Password {
-		s.sendErrorSignal(conn, "Incorrect password", originalID)
+	if req.PIN != network.PIN {
+		s.sendErrorSignal(conn, "Incorrect PIN", originalID)
 		return
 	}
 

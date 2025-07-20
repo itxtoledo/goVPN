@@ -244,7 +244,7 @@ func (ui *UIManager) refreshNetworkList() {
 }
 
 // HandleNetworkCreated is the callback for when a network is created
-func (ui *UIManager) HandleNetworkCreated(networkID, networkName, password string) {
+func (ui *UIManager) HandleNetworkCreated(networkID, networkName, pin string) {
 	// Save network to database
 	network := st.Network{
 		ID:            networkID,
@@ -263,7 +263,7 @@ func (ui *UIManager) HandleNetworkCreated(networkID, networkName, password strin
 }
 
 // HandleNetworkJoined is the callback for when a network is joined
-func (ui *UIManager) HandleNetworkJoined(networkID, password string) {
+func (ui *UIManager) HandleNetworkJoined(networkID, pin string) {
 	// Save network to database (if not already saved)
 	network := st.Network{
 		ID:            networkID,
