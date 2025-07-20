@@ -13,7 +13,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
-	"github.com/itxtoledo/govpn/libs/models"
+	sig "github.com/itxtoledo/govpn/libs/signaling"
 )
 
 // NetworkManagerAdapter adapts NetworkManager to implement dialogs.NetworkManagerInterface
@@ -22,7 +22,7 @@ type NetworkManagerAdapter struct {
 }
 
 // CreateNetwork adapts the NetworkManager CreateNetwork method to match the interface
-func (nma *NetworkManagerAdapter) CreateNetwork(name, pin string) (*models.CreateNetworkResponse, error) {
+func (nma *NetworkManagerAdapter) CreateNetwork(name, pin string) (*sig.CreateNetworkResponse, error) {
 	// Call the original CreateNetwork method
 	err := nma.NetworkManager.CreateNetwork(name, pin)
 	if err != nil {
@@ -30,7 +30,7 @@ func (nma *NetworkManagerAdapter) CreateNetwork(name, pin string) (*models.Creat
 	}
 
 	// Return a response with the current network info
-	return &models.CreateNetworkResponse{
+	return &sig.CreateNetworkResponse{
 		NetworkID:   nma.NetworkManager.NetworkID,
 		NetworkName: name,
 		PIN:    pin,
@@ -38,7 +38,7 @@ func (nma *NetworkManagerAdapter) CreateNetwork(name, pin string) (*models.Creat
 }
 
 // JoinNetwork adapts the NetworkManager JoinNetwork method to match the interface
-func (nma *NetworkManagerAdapter) JoinNetwork(networkID, pin, computername string) (*models.JoinNetworkResponse, error) {
+func (nma *NetworkManagerAdapter) JoinNetwork(networkID, pin, computername string) (*sig.JoinNetworkResponse, error) {
 	// Call the original JoinNetwork method
 	err := nma.NetworkManager.JoinNetwork(networkID, pin, computername)
 	if err != nil {
@@ -46,7 +46,7 @@ func (nma *NetworkManagerAdapter) JoinNetwork(networkID, pin, computername strin
 	}
 
 	// Return a response with the current network info
-	return &models.JoinNetworkResponse{
+	return &sig.JoinNetworkResponse{
 		NetworkID:   networkID,
 		NetworkName: networkID, // We don't have network name in the NetworkManager
 	}, nil

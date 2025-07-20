@@ -17,11 +17,12 @@ import (
 	"github.com/itxtoledo/govpn/cmd/server/logger"
 	"github.com/itxtoledo/govpn/libs/crypto_utils"
 	"github.com/itxtoledo/govpn/libs/models"
+	sig "github.com/itxtoledo/govpn/libs/signaling"
 )
 
 // ServerNetwork extends the basic Network model with server-specific fields
 type ServerNetwork struct {
-	models.Network                   // Embed the Network from models package
+	models.Network // Keep this as it's a shared model, not specific to signaling
 	PublicKey      ed25519.PublicKey `json:"-"`          // Not stored in Supabase directly
 	PublicKeyB64   string            `json:"public_key"` // Stored as base64 string in Supabase
 	CreatedAt      time.Time         `json:"created_at"`
@@ -135,8 +136,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 		msgID, _ := models.GenerateMessageID()
 
-		req := models.GetComputerNetworksRequest{
-			BaseRequest: models.BaseRequest{
+		req := sig.GetComputerNetworksRequest{
+			BaseRequest: sig.BaseRequest{
 				PublicKey: publicKeyHeader,
 			},
 		}
@@ -145,7 +146,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	}
 
 	for {
-		var sigMsg models.SignalingMessage
+		var sigMsg sig.SignalingMessage
 		err := conn.ReadJSON(&sigMsg)
 		if err != nil {
 			s.handleDisconnect(conn)
@@ -157,8 +158,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 		originalID := sigMsg.ID
 
 		switch sigMsg.Type {
-		case models.TypeCreateNetwork:
-			var req models.CreateNetworkRequest
+		case sig.TypeCreateNetwork:
+			var req sig.CreateNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid create network request format", originalID)
 				continue
@@ -166,8 +167,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleCreateNetwork(conn, req, originalID)
 
-		case models.TypeJoinNetwork:
-			var req models.JoinNetworkRequest
+		case sig.TypeJoinNetwork:
+			var req sig.JoinNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid join network request format", originalID)
 				continue
@@ -175,8 +176,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleJoinNetwork(conn, req, originalID)
 
-		case models.TypeConnectNetwork:
-			var req models.ConnectNetworkRequest
+		case sig.TypeConnectNetwork:
+			var req sig.ConnectNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid connect network request format", originalID)
 				continue
@@ -184,8 +185,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleConnectNetwork(conn, req, originalID)
 
-		case models.TypeDisconnectNetwork:
-			var req models.DisconnectNetworkRequest
+		case sig.TypeDisconnectNetwork:
+			var req sig.DisconnectNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid disconnect network request format", originalID)
 				continue
@@ -193,8 +194,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleDisconnectNetwork(conn, req, originalID)
 
-		case models.TypeLeaveNetwork:
-			var req models.LeaveNetworkRequest
+		case sig.TypeLeaveNetwork:
+			var req sig.LeaveNetworkRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid leave network request format", originalID)
 				continue
@@ -202,8 +203,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleLeaveNetwork(conn, req, originalID)
 
-		case models.TypeKick:
-			var req models.KickRequest
+		case sig.TypeKick:
+			var req sig.KickRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid kick request format", originalID)
 				continue
@@ -211,8 +212,8 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleKick(conn, req, originalID)
 
-		case models.TypeRename:
-			var req models.RenameRequest
+		case sig.TypeRename:
+			var req sig.RenameRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid rename request format", originalID)
 				continue
@@ -220,11 +221,11 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleRename(conn, req, originalID)
 
-		case models.TypePing:
+		case sig.TypePing:
 			s.handlePing(conn, sigMsg.Payload, originalID)
 
-		case models.TypeGetComputerNetworks:
-			var req models.GetComputerNetworksRequest
+		case sig.TypeGetComputerNetworks:
+			var req sig.GetComputerNetworksRequest
 			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
 				s.sendErrorSignal(conn, "Invalid get computer networks request format", originalID)
 				continue
@@ -244,27 +245,27 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 func (s *WebSocketServer) sendErrorSignal(conn *websocket.Conn, errorMsg string, originalID string) {
 	errPayload, _ := json.Marshal(map[string]string{"error": errorMsg})
 
-	conn.WriteJSON(models.SignalingMessage{
+	conn.WriteJSON(sig.SignalingMessage{
 		ID:      originalID,
-		Type:    models.TypeError,
+		Type:    sig.TypeError,
 		Payload: errPayload,
 	})
 }
 
-func (s *WebSocketServer) sendSignal(conn *websocket.Conn, msgType models.MessageType, payload interface{}, originalID string) error {
+func (s *WebSocketServer) sendSignal(conn *websocket.Conn, msgType sig.MessageType, payload interface{}, originalID string) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	return conn.WriteJSON(models.SignalingMessage{
+	return conn.WriteJSON(sig.SignalingMessage{
 		ID:      originalID,
 		Type:    msgType,
 		Payload: payloadBytes,
 	})
 }
 
-func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.CreateNetworkRequest, originalID string) {
+func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req sig.CreateNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -353,10 +354,10 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req models.C
 		"peer_ip":      creatorIP,
 	}
 
-	s.sendSignal(conn, models.TypeNetworkCreated, responsePayload, originalID)
+	s.sendSignal(conn, sig.TypeNetworkCreated, responsePayload, originalID)
 }
 
-func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.JoinNetworkRequest, originalID string) {
+func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req sig.JoinNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -452,7 +453,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 		"network_name": network.Name,
 		"peer_ip":      assignedIP,
 	}
-	s.sendSignal(conn, models.TypeNetworkJoined, responsePayload, originalID)
+	s.sendSignal(conn, sig.TypeNetworkJoined, responsePayload, originalID)
 
 	// Notify other clients in the network about the new peer
 	for _, computer := range s.networks[req.NetworkID] {
@@ -463,7 +464,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 				"computername": req.ComputerName,
 				"peer_ip":      assignedIP,
 			}
-			s.sendSignal(computer, models.TypeComputerJoined, computerJoinedPayload, "")
+			s.sendSignal(computer, sig.TypeComputerJoined, computerJoinedPayload, "")
 		}
 	}
 
@@ -480,14 +481,14 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req models.Joi
 						"computername": existingComputer.ComputerName,
 						"peer_ip":      existingComputer.PeerIP,
 					}
-					s.sendSignal(conn, models.TypeComputerJoined, existingComputerPayload, "")
+					s.sendSignal(conn, sig.TypeComputerJoined, existingComputerPayload, "")
 				}
 			}
 		}
 	}
 }
 
-func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.ConnectNetworkRequest, originalID string) {
+func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req sig.ConnectNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -549,7 +550,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 		"network_name": network.Name,
 		"peer_ip":      computer.PeerIP,
 	}
-	s.sendSignal(conn, models.TypeNetworkConnected, responsePayload, originalID)
+	s.sendSignal(conn, sig.TypeNetworkConnected, responsePayload, originalID)
 
 	// Notify other clients in the network about the new peer
 	for _, computerConn := range s.networks[req.NetworkID] {
@@ -560,7 +561,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 				"computername": req.ComputerName,
 				"peer_ip":      computer.PeerIP,
 			}
-			s.sendSignal(computerConn, models.TypeComputerConnected, computerConnectedPayload, "")
+			s.sendSignal(computerConn, sig.TypeComputerConnected, computerConnectedPayload, "")
 		}
 	}
 
@@ -577,14 +578,14 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req models.
 						"computername": existingComputer.ComputerName,
 						"peer_ip":      existingComputer.PeerIP,
 					}
-					s.sendSignal(conn, models.TypeComputerConnected, existingComputerPayload, "")
+					s.sendSignal(conn, sig.TypeComputerConnected, existingComputerPayload, "")
 				}
 			}
 		}
 	}
 }
 
-func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req models.DisconnectNetworkRequest, originalID string) {
+func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req sig.DisconnectNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -648,7 +649,7 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req mode
 					"network_id": networkID,
 					"public_key": publicKey,
 				}
-				s.sendSignal(computer, models.TypeComputerDisconnected, computerDisconnectedPayload, "")
+				s.sendSignal(computer, sig.TypeComputerDisconnected, computerDisconnectedPayload, "")
 			}
 		}
 	}
@@ -656,7 +657,7 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req mode
 	disconnectResponse := map[string]interface{}{
 		"network_id": networkID,
 	}
-	s.sendSignal(conn, models.TypeNetworkDisconnected, disconnectResponse, originalID)
+	s.sendSignal(conn, sig.TypeNetworkDisconnected, disconnectResponse, originalID)
 
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
 		logger.Info("Client disconnected from network (but still a member)",
@@ -668,7 +669,7 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req mode
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 }
 
-func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req models.LeaveNetworkRequest, originalID string) {
+func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req sig.LeaveNetworkRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -710,10 +711,10 @@ func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req models.Le
 
 		for _, computer := range s.networks[networkID] {
 			if computer != conn {
-				deletedNotification := models.NetworkDeletedNotification{
+				deletedNotification := sig.NetworkDeletedNotification{
 					NetworkID: networkID,
 				}
-				s.sendSignal(computer, models.TypeNetworkDeleted, deletedNotification, "")
+				s.sendSignal(computer, sig.TypeNetworkDeleted, deletedNotification, "")
 			}
 		}
 
@@ -739,7 +740,7 @@ func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req models.Le
 	leaveSuccessPayload := map[string]interface{}{
 		"network_id": networkID,
 	}
-	s.sendSignal(conn, models.TypeLeaveNetwork, leaveSuccessPayload, originalID)
+	s.sendSignal(conn, sig.TypeLeaveNetwork, leaveSuccessPayload, originalID)
 
 	logger.Info("Client left network via explicit leave",
 		"clientAddr", conn.RemoteAddr().String(),
@@ -748,7 +749,7 @@ func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req models.Le
 }
 
 // handleKick processes a request to kick a computer from the network
-func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickRequest, originalID string) {
+func (s *WebSocketServer) handleKick(conn *websocket.Conn, req sig.KickRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -770,7 +771,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 			kickedPayload := map[string]interface{}{
 				"network_id": req.NetworkID,
 			}
-			s.sendSignal(computer, models.TypeKicked, kickedPayload, "")
+			s.sendSignal(computer, sig.TypeKicked, kickedPayload, "")
 
 			computer.Close()
 			s.removeClient(computer, req.NetworkID)
@@ -782,7 +783,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 				"network_id": req.NetworkID,
 				"target_id":  req.TargetID,
 			}
-			s.sendSignal(conn, models.TypeKickSuccess, kickSuccessPayload, originalID)
+			s.sendSignal(conn, sig.TypeKickSuccess, kickSuccessPayload, originalID)
 			return
 		}
 	}
@@ -791,7 +792,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req models.KickReques
 }
 
 // handleRename processes a request to rename a network
-func (s *WebSocketServer) handleRename(conn *websocket.Conn, req models.RenameRequest, originalID string) {
+func (s *WebSocketServer) handleRename(conn *websocket.Conn, req sig.RenameRequest, originalID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -824,11 +825,11 @@ func (s *WebSocketServer) handleRename(conn *websocket.Conn, req models.RenameRe
 	}
 
 	for _, computer := range s.networks[req.NetworkID] {
-		s.sendSignal(computer, models.TypeNetworkRenamed, renamePayload, "")
+		s.sendSignal(computer, sig.TypeNetworkRenamed, renamePayload, "")
 	}
 
 	// Additional successful rename notification to the requester
-	s.sendSignal(conn, models.TypeRenameSuccess, renamePayload, originalID)
+	s.sendSignal(conn, sig.TypeRenameSuccess, renamePayload, originalID)
 }
 
 // handleDisconnect manages cleanup when a client disconnects
@@ -869,7 +870,7 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 					"network_id": networkID,
 					"public_key": publicKey,
 				}
-				s.sendSignal(computer, models.TypeComputerLeft, computerLeftPayload, "")
+				s.sendSignal(computer, sig.TypeComputerLeft, computerLeftPayload, "")
 			}
 		}
 
@@ -1018,7 +1019,7 @@ func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, origi
 	}
 
 	// Send pong response with the same message ID
-	s.sendSignal(conn, models.TypePing, pongPayload, originalID)
+	s.sendSignal(conn, sig.TypePing, pongPayload, originalID)
 }
 
 // removeClient remove um cliente da sala e, se necessário, a sala do Supabase
@@ -1075,10 +1076,10 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, networkID string) {
 		for _, computer := range s.networks[networkID] {
 			if computer != conn {
 				// Usando o struct correto do models para TypeNetworkDeleted
-				deletedNotification := models.NetworkDeletedNotification{
+				deletedNotification := sig.NetworkDeletedNotification{
 					NetworkID: networkID,
 				}
-				s.sendSignal(computer, models.TypeNetworkDeleted, deletedNotification, "")
+				s.sendSignal(computer, sig.TypeNetworkDeleted, deletedNotification, "")
 			}
 		}
 
@@ -1130,12 +1131,12 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 }
 
 // handleGetComputerNetworks processes a request to get all networks a computer has joined
-func (s *WebSocketServer) handleGetComputerNetworks(conn *websocket.Conn, req models.GetComputerNetworksRequest, originalID string) {
+func (s *WebSocketServer) handleGetComputerNetworks(conn *websocket.Conn, req sig.GetComputerNetworksRequest, originalID string) {
 	s.handleGetComputerNetworksWithIP(conn, req, originalID, nil)
 }
 
 // handleGetComputerNetworksWithIP processes a request to get all networks a computer has joined and optionally sends IP info
-func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req models.GetComputerNetworksRequest, originalID string, httpReq *http.Request) {
+func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req sig.GetComputerNetworksRequest, originalID string, httpReq *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1153,8 +1154,8 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 	}
 
 	// Build response with network details
-	response := models.ComputerNetworksResponse{
-		Networks: make([]models.ComputerNetworkInfo, 0, len(computerNetworks)),
+	response := sig.ComputerNetworksResponse{
+		Networks: make([]sig.ComputerNetworkInfo, 0, len(computerNetworks)),
 	}
 
 	for _, computerNetwork := range computerNetworks {
@@ -1166,7 +1167,7 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 			continue
 		}
 
-		networkInfo := models.ComputerNetworkInfo{
+		networkInfo := sig.ComputerNetworkInfo{
 			NetworkID:     computerNetwork.NetworkID,
 			NetworkName:   network.Name,
 			JoinedAt:      computerNetwork.JoinedAt,
@@ -1182,14 +1183,14 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 	}
 
 	// Send networks response
-	s.sendSignal(conn, models.TypeComputerNetworks, response, originalID)
+	s.sendSignal(conn, sig.TypeComputerNetworks, response, originalID)
 
 	// If HTTP request is provided, also send client IP information
 	if httpReq != nil {
 		ipInfo := s.getClientIPInfo(httpReq)
 		// Generate a new message ID for the IP info
 		ipMsgID, _ := models.GenerateMessageID()
-		s.sendSignal(conn, models.TypeClientIPInfo, ipInfo, ipMsgID)
+		s.sendSignal(conn, sig.TypeClientIPInfo, ipInfo, ipMsgID)
 	}
 }
 
@@ -1238,7 +1239,7 @@ func (s *WebSocketServer) notifyClientsAboutShutdown(shutdownSeconds int, restar
 
 	logger.Info("Notifying clients about server shutdown", "clientCount", len(s.clients))
 
-	notification := models.ServerShutdownNotification{
+	notification := sig.ServerShutdownNotification{
 		Message:     "Server is shutting down for maintenance",
 		ShutdownIn:  shutdownSeconds,
 		RestartInfo: restartInfo,
@@ -1252,7 +1253,7 @@ func (s *WebSocketServer) notifyClientsAboutShutdown(shutdownSeconds int, restar
 			msgID = ""
 		}
 
-		err = s.sendSignal(conn, models.TypeServerShutdown, notification, msgID)
+		err = s.sendSignal(conn, sig.TypeServerShutdown, notification, msgID)
 		if err != nil {
 			logger.Error("Error notifying client", "clientAddr", conn.RemoteAddr().String(), "error", err)
 		}
@@ -1288,8 +1289,8 @@ func (s *WebSocketServer) WaitForShutdown() {
 
 // extractIP extracts the client's IP address from the request
 // getClientIPInfo extracts IPv4 and IPv6 addresses from the client request
-func (s *WebSocketServer) getClientIPInfo(r *http.Request) models.ClientIPInfoResponse {
-	ipInfo := models.ClientIPInfoResponse{}
+func (s *WebSocketServer) getClientIPInfo(r *http.Request) sig.ClientIPInfoResponse {
+	ipInfo := sig.ClientIPInfoResponse{}
 
 	// Get the client's remote address
 	remoteAddr := r.RemoteAddr
