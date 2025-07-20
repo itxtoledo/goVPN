@@ -1,5 +1,7 @@
 # GoVPN
 
+![Uptime Robot status](https://img.shields.io/uptimerobot/status/m800985544-1223a57b3890ce2a69ce9b68)
+
 **🚧 WORK IN PROGRESS 🚧**
 
 This project is currently under active development. It is not yet functional, and there are no stable releases available.
@@ -106,7 +108,7 @@ sequenceDiagram
     Note over Server: Server's role in connection establishment ends here.
 
     Note over ClientA,ClientB: P2P Connection Established
-    ClientA<->>ClientB: Direct Encrypted Communication (VPN Tunnel)
+    ClientA<-->ClientB: Direct Encrypted Communication (VPN Tunnel)
     Note over ClientA,ClientB: All subsequent VPN traffic flows directly between clients.
 ```
 
