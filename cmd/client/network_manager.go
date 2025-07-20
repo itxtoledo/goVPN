@@ -176,9 +176,6 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	// então não precisamos chamar GetComputerNetworks explicitamente
 	log.Println("Aguardando lista de salas do servidor...")
 
-	// Get network list
-	nm.refreshNetworkList()
-
 	return nil
 }
 
@@ -244,16 +241,6 @@ func (nm *NetworkManager) CreateNetwork(name string, password string) error {
 
 	log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
 
-	// Store network information in memory
-	network := &st.Network{
-		ID:            res.NetworkID,
-		Name:          name,
-		LastConnected: time.Now(),
-	}
-
-	// Add the network to the RealtimeDataLayer's in-memory network list
-	nm.RealtimeData.AddNetwork(network)
-
 	// Store network information for current connection
 	nm.NetworkID = res.NetworkID
 
@@ -280,9 +267,6 @@ func (nm *NetworkManager) CreateNetwork(name string, password string) error {
 	nm.RealtimeData.SetComputerIP(res.PeerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, res.NetworkID, nil)
 
-	// Refresh network list now that we have added the network to memory
-	nm.refreshNetworkList()
-
 	// Update UI
 	nm.refreshUI()
 
@@ -303,29 +287,6 @@ func (nm *NetworkManager) JoinNetwork(networkID string, password string, compute
 
 	// Use networkName from the response
 	networkName := res.NetworkName
-
-	// Store network information in memory
-	network := &st.Network{
-		ID:            networkID,
-		Name:          networkName,
-		LastConnected: time.Now(),
-	}
-
-	// Check if the network already exists in memory
-	networkExists := false
-	for i, existingNetwork := range nm.RealtimeData.GetNetworks() {
-		if existingNetwork.ID == networkID {
-			// Update existing network
-			nm.RealtimeData.UpdateNetwork(i, network)
-			networkExists = true
-			break
-		}
-	}
-
-	// If network doesn't exist, add it
-	if !networkExists {
-		nm.RealtimeData.AddNetwork(network)
-	}
 
 	log.Printf("Network joined: ID=%s, Name=%s", networkID, networkName)
 
@@ -354,9 +315,6 @@ func (nm *NetworkManager) JoinNetwork(networkID string, password string, compute
 	nm.RealtimeData.SetNetworkInfo(networkID)
 	nm.RealtimeData.SetComputerIP(res.PeerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
-
-	// Refresh network list now that we have added the network to memory
-	nm.refreshNetworkList()
 
 	// Update UI
 	nm.refreshUI()
@@ -418,8 +376,6 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 			},
 		}
 	}
-
-	
 
 	// Update data layer (without password since we don't store it)
 	nm.RealtimeData.SetNetworkInfo(networkID)

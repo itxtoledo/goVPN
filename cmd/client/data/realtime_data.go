@@ -1,6 +1,7 @@
 package data
 
 import (
+	"log"
 	"sync"
 
 	"fyne.io/fyne/v2/data/binding"
@@ -171,6 +172,8 @@ func (rdl *RealtimeDataLayer) SetNetworks(networks []*storage.Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
+	log.Printf("SetNetworks: Setting %d networks", len(networks))
+
 	// Convert []*storage.Network to []interface{}
 	var untypedNetworks []interface{}
 	for _, network := range networks {
@@ -227,10 +230,13 @@ func (rdl *RealtimeDataLayer) GetNetworks() []*storage.Network {
 	defer rdl.mu.Unlock()
 
 	currentNetworks, _ := rdl.Networks.Get()
+	log.Printf("GetNetworks: Retrieved %d networks", len(currentNetworks))
 	networks := make([]*storage.Network, len(currentNetworks))
 	for i, r := range currentNetworks {
 		if network, ok := r.(*storage.Network); ok {
 			networks[i] = network
+		} else {
+			log.Printf("GetNetworks: Type assertion failed for network at index %d", i)
 		}
 	}
 	return networks
