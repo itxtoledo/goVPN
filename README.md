@@ -62,10 +62,10 @@ The communication in GoVPN follows a hybrid model, leveraging a central server f
 
 ```mermaid
 sequenceDiagram
-    participant ClientA
-    participant ClientB
-    participant Server
-    participant STUN/TURN
+    participant ClientA as ClientA
+    participant Server as Server
+    participant ClientB as ClientB
+    participant STUN_TURN as STUN/TURN
 
     ClientA->>Server: Connect (WebSocket)
     Server-->>ClientA: Connection Acknowledged
@@ -93,11 +93,11 @@ sequenceDiagram
     Server-->>ClientA: Relay Answer from ClientB
     Note over Server: Server continues to relay signaling messages.
 
-    ClientA->>STUN/TURN: Discover Public IP
-    STUN/TURN-->>ClientA: Public IP
+    ClientA->>STUN_TURN: Discover Public IP
+    STUN_TURN-->>ClientA: Public IP
 
-    ClientB->>STUN/TURN: Discover Public IP
-    STUN/TURN-->>ClientB: Public IP
+    ClientB->>STUN_TURN: Discover Public IP
+    STUN_TURN-->>ClientB: Public IP
 
     ClientA->>Server: Send ICE Candidates to ClientB
     Server-->>ClientB: Relay ICE Candidates from ClientA
@@ -108,7 +108,8 @@ sequenceDiagram
     Note over Server: Server's role in connection establishment ends here.
 
     Note over ClientA,ClientB: P2P Connection Established
-    ClientA<->ClientB: Direct Encrypted Communication (VPN Tunnel)
+    ClientA->>ClientB: Direct Encrypted Communication (VPN Tunnel)
+    ClientB->>ClientA: Direct Encrypted Communication (VPN Tunnel)
     Note over ClientA,ClientB: All subsequent VPN traffic flows directly between clients.
 ```
 
