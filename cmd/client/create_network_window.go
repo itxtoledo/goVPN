@@ -137,8 +137,7 @@ func (rw *NetworkWindow) Show() {
 			// Send create network command to backend
 			res, err := rw.CreateNetwork(name, password)
 
-			// Update UI on the main thread
-			go func() {
+			fyne.Do(func() {
 				createButton.SetText("Create Network")
 				createButton.Enable()
 
@@ -160,7 +159,7 @@ func (rw *NetworkWindow) Show() {
 					// If networkID is empty, it's likely an error occurred but wasn't caught
 					dialog.ShowError(errors.New("failed to create network: no network ID returned"), rw.BaseWindow.Window)
 				}
-			}()
+			})
 		}()
 	})
 

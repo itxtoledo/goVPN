@@ -185,6 +185,12 @@ func (rdl *RealtimeDataLayer) AddNetwork(network *storage.Network) {
 	defer rdl.mu.Unlock()
 
 	currentNetworks, _ := rdl.Networks.Get()
+	for _, existing := range currentNetworks {
+		if n, ok := existing.(*storage.Network); ok && n.ID == network.ID {
+			// Network already exists, do not add
+			return
+		}
+	}
 	rdl.Networks.Set(append(currentNetworks, network))
 }
 

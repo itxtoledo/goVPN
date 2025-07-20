@@ -11,6 +11,7 @@ import (
 type ConnectDialogManager interface {
 	GetSelectedNetwork() *storage.Network
 	ConnectToNetwork(networkID, computername string) error
+	GetMainWindow() fyne.Window
 }
 
 // ConnectDialog representa um diálogo para conexão a uma sala
@@ -52,12 +53,12 @@ func (cd *ConnectDialog) Show() {
 				err := cd.UI.ConnectToNetwork(networkID, cd.ComputerName)
 				if err != nil {
 					// Exibir erro em caso de falha
-					errorDialog := dialog.NewError(err, fyne.CurrentApp().Driver().AllWindows()[0])
+					errorDialog := dialog.NewError(err, cd.UI.GetMainWindow())
 					errorDialog.Show()
 				}
 			}
 		},
-		fyne.CurrentApp().Driver().AllWindows()[0],
+		cd.UI.GetMainWindow(),
 	)
 
 	cd.Dialog.Show()

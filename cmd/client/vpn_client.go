@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 
+	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
 )
@@ -117,8 +118,10 @@ func (v *VPNClient) Run(defaultWebsocketURL string, realtimeData *data.RealtimeD
 	// Attempt to connect to the backend in a background goroutine
 	go func() {
 		// Defina o estado inicial na camada de dados
-		realtimeData.SetConnectionState(data.StateDisconnected)
-		realtimeData.SetStatusMessage("Starting...")
+		fyne.Do(func() {
+			realtimeData.SetConnectionState(data.StateDisconnected)
+			realtimeData.SetStatusMessage("Starting...")
+		})
 
 		// Obter o endereço do servidor das configurações
 		config := v.ConfigManager.GetConfig()

@@ -64,7 +64,6 @@ func (nma *NetworkManagerAdapter) GetRealtimeData() *data.RealtimeDataLayer {
 
 // HomeTabComponent representa o componente da aba principal
 type HomeTabComponent struct {
-	AppTabs           *container.AppTabs
 	NetworksContainer *fyne.Container
 
 	// Dependencies
@@ -172,22 +171,11 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 	})
 
 	// Criar o container da aba de salas
-	networksTabContent := container.NewBorder(
+	return container.NewBorder(
 		nil,
 		container.NewHBox(layout.NewSpacer(), joinNetworkButton, createNetworkButton),
 		nil,
 		nil,
 		networksContainer,
 	)
-
-	// Criar o AppTabs com múltiplas abas
-	htc.AppTabs = container.NewAppTabs(
-		container.NewTabItem("Networks", networksTabContent),
-	)
-
-	// Definir a posição das abas na parte superior (abaixo do cabeçalho)
-	htc.AppTabs.SetTabLocation(container.TabLocationTop)
-
-	// Envolva o AppTabs em um container para retornar o tipo correto *fyne.Container
-	return container.NewStack(htc.AppTabs)
 }

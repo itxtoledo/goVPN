@@ -46,6 +46,11 @@ func NewSettingsWindow(app fyne.App, currentConfig storage.Config, onSettingsSav
 	sw.ComputerNameEntry = widget.NewEntry()
 	sw.ComputerNameEntry.SetText(currentConfig.ComputerName)
 	sw.ComputerNameEntry.SetPlaceHolder("Enter your computername")
+	sw.ComputerNameEntry.OnChanged = func(text string) {
+		if len(text) > 10 {
+			sw.ComputerNameEntry.SetText(text[:10])
+		}
+	}
 
 	// Server Address Entry
 	sw.ServerAddressEntry = widget.NewEntry()

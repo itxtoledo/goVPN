@@ -115,7 +115,6 @@ func (ui *UIManager) setupComponents() {
 
 	// Create main container
 	headerContainer := ui.HeaderComponent.CreateHeaderContainer()
-	tabContainer := ui.HomeTabComponent.CreateHomeTabContainer()
 
 	// Create vertical container
 	mainContainer := container.NewBorder(
@@ -123,7 +122,7 @@ func (ui *UIManager) setupComponents() {
 		nil,
 		nil,
 		nil,
-		tabContainer,
+		ui.HomeTabComponent.CreateHomeTabContainer(),
 	)
 
 	// Set content
@@ -183,14 +182,21 @@ func (ui *UIManager) refreshUI() {
 	ui.HeaderComponent.updatePowerButtonState()
 
 	// Force refresh widgets
-	if ui.MainWindow.Content() != nil {
-		ui.MainWindow.Content().Refresh()
-	}
+	fyne.Do(func() {
+		if ui.MainWindow.Content() != nil {
+			ui.MainWindow.Content().Refresh()
+		}
+	})
 }
 
 // GetSelectedNetwork implementa a interface ConnectDialogManager
 func (ui *UIManager) GetSelectedNetwork() *st.Network {
 	return ui.SelectedNetwork
+}
+
+// GetMainWindow implements the ConnectDialogManager interface
+func (ui *UIManager) GetMainWindow() fyne.Window {
+	return ui.MainWindow
 }
 
 // ConnectToNetwork implementa a interface ConnectDialogManager
@@ -227,9 +233,11 @@ func (ui *UIManager) refreshNetworkList() {
 	// No need to load from database anymore, UI.Networks is maintained in memory
 
 	// Update network tree component
-	if ui.NetworkListComp != nil {
-		ui.NetworkListComp.UpdateNetworkList()
-	}
+	fyne.Do(func() {
+		if ui.NetworkListComp != nil {
+			ui.NetworkListComp.UpdateNetworkList()
+		}
+	})
 
 	// Update UI
 	ui.refreshUI()
@@ -345,3 +353,4 @@ func (ui *UIManager) Run(defaultWebsocketURL string) {
 	// Exibir a janela e executar o loop de eventos principal
 	ui.MainWindow.ShowAndRun()
 }
+
