@@ -36,11 +36,6 @@ The GoVPN server follows a simple architecture, focused on signaling, where the 
    - `networks`: Maps network IDs to lists of connections
    - `clientToPublicKey`: Associates each connection with its public key
 
-2. **ServerNetwork**: Extension of the basic network structure:
-   - Fundamental network data (ID, name, password)
-   - Owner's public key
-   - Metadata (creation, last activity)
-
 ## Operation Flow
 
 ```

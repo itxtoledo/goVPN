@@ -209,18 +209,19 @@ type GetComputerNetworksRequest struct {
 type ComputerInfo struct {
 	Name       string `json:"name"`
 	ComputerIP string `json:"computer_ip"`
-	IsAdmin    bool   `json:"is_admin"`
 	PublicKey  string `json:"public_key"`
+	IsOnline   bool   `json:"is_online"`
 }
 
 // ComputerNetworkInfo represents information about a network a computer has joined
 type ComputerNetworkInfo struct {
-	NetworkID     string         `json:"network_id"`
-	NetworkName   string         `json:"network_name"`
-	JoinedAt      time.Time      `json:"joined_at"`
-	LastConnected time.Time      `json:"last_connected"`
-	ComputerIP    string         `json:"computer_ip,omitempty"`
-	Computers     []ComputerInfo `json:"computers"`
+	NetworkID      string         `json:"network_id"`
+	NetworkName    string         `json:"network_name"`
+	JoinedAt       time.Time      `json:"joined_at"`
+	LastConnected  time.Time      `json:"last_connected"`
+	ComputerIP     string         `json:"computer_ip,omitempty"`
+	AdminPublicKey string         `json:"admin_public_key"`
+	Computers      []ComputerInfo `json:"computers"`
 }
 
 // ComputerNetworksResponse represents a response containing all networks a computer has joined
@@ -230,9 +231,9 @@ type ComputerNetworksResponse struct {
 
 // Computer represents a computer connected to a network
 type Computer struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	OwnerID  string `json:"owner_id"`
-	IsOnline bool   `json:"is_online"`
-	PeerIP   string `json:"computer_ip,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	IsOnline  bool   `json:"is_online"`
+	PeerIP    string `json:"computer_ip"`
+	PublicKey string `json:"public_key"`
 }

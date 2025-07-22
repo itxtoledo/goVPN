@@ -9,22 +9,14 @@ import (
 	"github.com/supabase-community/supabase-go"
 )
 
-// ServerNetwork embeds the local Network struct with server-specific fields
-type ServerNetwork struct {
-	Network
-	PublicKeyB64 string    `json:"public_key"`
-	CreatedAt    time.Time `json:"created_at"`
-	LastActive   time.Time `json:"last_active"`
-}
-
 // SupabaseNetwork represents the structure of a network record in Supabase
 type SupabaseNetwork struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	PIN        string    `json:"pin"`
-	PublicKey  string    `json:"public_key"`
-	CreatedAt  time.Time `json:"created_at"`
-	LastActive time.Time `json:"last_active"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	PIN            string    `json:"pin"`
+	OwnerPublicKey string    `json:"owner_public_key"`
+	CreatedAt      time.Time `json:"created_at"`
+	LastActive     time.Time `json:"last_active"`
 }
 
 // SupabaseManager handles all Supabase database operations for the server
@@ -49,18 +41,18 @@ func NewSupabaseManager(supabaseURL, supabaseKey, networksTable, logLevel string
 }
 
 // CreateNetwork inserts a new network into the Supabase database
-func (sm *SupabaseManager) CreateNetwork(network ServerNetwork) error {
+func (sm *SupabaseManager) CreateNetwork(network SupabaseNetwork) error {
 	networkData := map[string]interface{}{
-		"id":          network.Network.ID,
-		"name":        network.Network.Name,
-		"pin":         network.Network.PIN,
-		"public_key":  network.PublicKeyB64,
-		"created_at":  network.CreatedAt.Format(time.RFC3339),
-		"last_active": network.LastActive.Format(time.RFC3339),
+		"id":               network.ID,
+		"name":             network.Name,
+		"pin":              network.PIN,
+		"owner_public_key": network.OwnerPublicKey,
+		"created_at":       network.CreatedAt.Format(time.RFC3339),
+		"last_active":      network.LastActive.Format(time.RFC3339),
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Creating network in Supabase", "networkID", network.Network.ID, "networkName", network.Network.Name)
+		logger.Debug("Creating network in Supabase", "networkID", network.ID, "networkName", network.Name)
 	}
 
 	_, _, err := sm.client.From(sm.networksTable).Insert(networkData, false, "", "", "").Execute()
@@ -72,34 +64,22 @@ func (sm *SupabaseManager) CreateNetwork(network ServerNetwork) error {
 }
 
 // GetNetwork fetches a network from the Supabase database by its ID
-func (sm *SupabaseManager) GetNetwork(networkID string) (ServerNetwork, error) {
+func (sm *SupabaseManager) GetNetwork(networkID string) (SupabaseNetwork, error) {
 	var networks []SupabaseNetwork
 	data, _, err := sm.client.From(sm.networksTable).Select("*", "", false).Eq("id", networkID).Execute()
 	if err != nil {
-		return ServerNetwork{}, fmt.Errorf("failed to fetch network from Supabase: %w", err)
+		return SupabaseNetwork{}, fmt.Errorf("failed to fetch network from Supabase: %w", err)
 	}
 
 	if err := json.Unmarshal(data, &networks); err != nil {
-		return ServerNetwork{}, fmt.Errorf("failed to parse network data: %w", err)
+		return SupabaseNetwork{}, fmt.Errorf("failed to parse network data: %w", err)
 	}
 
 	if len(networks) == 0 {
-		return ServerNetwork{}, fmt.Errorf("network not found: %s", networkID)
+		return SupabaseNetwork{}, fmt.Errorf("network not found: %s", networkID)
 	}
 
-	dbNetwork := networks[0]
-
-	// Create a ServerNetwork from the SupabaseNetwork data
-	return ServerNetwork{
-		Network: Network{
-			ID:   dbNetwork.ID,
-			Name: dbNetwork.Name,
-			PIN:  dbNetwork.PIN,
-		},
-		PublicKeyB64: dbNetwork.PublicKey,
-		CreatedAt:    dbNetwork.CreatedAt,
-		LastActive:   dbNetwork.LastActive,
-	}, nil
+	return networks[0], nil
 }
 
 // UpdateNetworkActivity updates the last_active timestamp for a network
@@ -155,33 +135,22 @@ func (sm *SupabaseManager) DeleteNetwork(networkID string) error {
 }
 
 // GetNetworkByPublicKey fetches a network by the owner's public key
-func (sm *SupabaseManager) GetNetworkByPublicKey(publicKey string) (ServerNetwork, error) {
+func (sm *SupabaseManager) GetNetworkByPublicKey(publicKey string) (SupabaseNetwork, error) {
 	var networks []SupabaseNetwork
-	data, _, err := sm.client.From(sm.networksTable).Select("*", "", false).Eq("public_key", publicKey).Execute()
+	data, _, err := sm.client.From(sm.networksTable).Select("*", "", false).Eq("owner_public_key", publicKey).Execute()
 	if err != nil {
-		return ServerNetwork{}, fmt.Errorf("failed to fetch network by public key: %w", err)
+		return SupabaseNetwork{}, fmt.Errorf("failed to fetch network by public key: %w", err)
 	}
 
 	if err := json.Unmarshal(data, &networks); err != nil {
-		return ServerNetwork{}, fmt.Errorf("failed to parse network data: %w", err)
+		return SupabaseNetwork{}, fmt.Errorf("failed to parse network data: %w", err)
 	}
 
 	if len(networks) == 0 {
-		return ServerNetwork{}, fmt.Errorf("no network found for public key")
+		return SupabaseNetwork{}, fmt.Errorf("no network found for public key")
 	}
 
-	dbNetwork := networks[0]
-
-	return ServerNetwork{
-		Network: Network{
-			ID:   dbNetwork.ID,
-			Name: dbNetwork.Name,
-			PIN:  dbNetwork.PIN,
-		},
-		PublicKeyB64: dbNetwork.PublicKey,
-		CreatedAt:    dbNetwork.CreatedAt,
-		LastActive:   dbNetwork.LastActive,
-	}, nil
+	return networks[0], nil
 }
 
 // GetStaleNetworks fetches networks that have not been active for a specified period
@@ -225,7 +194,7 @@ func (sm *SupabaseManager) NetworkExists(networkID string) (bool, error) {
 // PublicKeyHasNetwork checks if a public key already has an associated network
 func (sm *SupabaseManager) PublicKeyHasNetwork(publicKey string) (bool, string, error) {
 	var networks []map[string]interface{}
-	data, _, err := sm.client.From(sm.networksTable).Select("id", "", false).Eq("public_key", publicKey).Execute()
+	data, _, err := sm.client.From(sm.networksTable).Select("id", "", false).Eq("owner_public_key", publicKey).Execute()
 	if err != nil {
 		return false, "", fmt.Errorf("failed to check if public key has network: %w", err)
 	}
@@ -306,21 +275,7 @@ func (sm *SupabaseManager) RemoveComputerFromNetwork(networkID, publicKey string
 	return nil
 }
 
-// GetNetworkComputers gets all computers for a specific network
-func (sm *SupabaseManager) GetNetworkComputers(networkID string) ([]ComputerNetwork, error) {
-	var computerNetworks []ComputerNetwork
-	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("network_id", networkID).Execute()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get network computers: %w", err)
-	}
-
-	if err := json.Unmarshal(data, &computerNetworks); err != nil {
-		return nil, fmt.Errorf("failed to parse computer network data: %w", err)
-	}
-
-	return computerNetworks, nil
-}
-
+// GetComputersInNetwork gets all computers for a specific network
 func (sm *SupabaseManager) GetComputersInNetwork(networkID string) ([]ComputerNetwork, error) {
 	var computerNetworks []ComputerNetwork
 	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("network_id", networkID).Execute()

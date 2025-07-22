@@ -16,8 +16,6 @@ import (
 	"github.com/itxtoledo/govpn/libs/utils"
 )
 
-// ServerNetwork extends the basic Network model with server-specific fields
-
 // WebSocketServer manages the WebSocket connections and network handling
 type WebSocketServer struct {
 	clients            map[*websocket.Conn]string   // Maps connection to networkID
@@ -276,16 +274,13 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 		return
 	}
 
-	network := ServerNetwork{
-		Network: Network{
-			ID:          networkID,
-			Name:        req.NetworkName,
-			PIN:         req.PIN,
-			ClientCount: 0,
-		},
-		PublicKeyB64: req.PublicKey,
-		CreatedAt:    time.Now(),
-		LastActive:   time.Now(),
+	network := SupabaseNetwork{
+		ID:             networkID,
+		Name:           req.NetworkName,
+		PIN:            req.PIN,
+		OwnerPublicKey: req.PublicKey,
+		CreatedAt:      time.Now(),
+		LastActive:     time.Now(),
 	}
 
 	err = s.supabaseManager.CreateNetwork(network)
@@ -340,7 +335,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 		return
 	}
 
-	if req.PIN != network.Network.PIN {
+	if req.PIN != network.PIN {
 		s.sendErrorSignal(conn, "Incorrect PIN", originalID)
 		return
 	}
@@ -423,7 +418,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
-		"network_name": network.Network.Name,
+		"network_name": network.Name,
 		"computer_ip":  assignedIP,
 	}
 	s.sendSignal(conn, smodels.TypeNetworkJoined, responsePayload, originalID)
@@ -520,7 +515,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
-		"network_name": network.Network.Name,
+		"network_name": network.Name,
 		"computer_ip":  computer.PeerIP,
 	}
 	s.sendSignal(conn, smodels.TypeNetworkConnected, responsePayload, originalID)
@@ -589,7 +584,7 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req smod
 		return
 	}
 
-	isOwner := (publicKey == network.PublicKeyB64)
+	isOwner := (publicKey == network.OwnerPublicKey)
 
 	if isOwner {
 		err = s.supabaseManager.UpdateNetworkActivity(networkID)
@@ -672,7 +667,7 @@ func (s *WebSocketServer) handleLeaveNetwork(conn *websocket.Conn, req smodels.L
 		return
 	}
 
-	isCreator := (publicKey == network.PublicKeyB64)
+	isCreator := (publicKey == network.OwnerPublicKey)
 
 	err = s.supabaseManager.RemoveComputerFromNetwork(networkID, publicKey)
 	if err != nil {
@@ -734,7 +729,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req smodels.KickReque
 
 	// Verifica se o cliente é o dono da sala
 	publicKey, hasPublicKey := s.clientToPublicKey[conn]
-	if !hasPublicKey || publicKey != network.PublicKeyB64 {
+	if !hasPublicKey || publicKey != network.OwnerPublicKey {
 		s.sendErrorSignal(conn, "Only network owner can kick computers", originalID)
 		return
 	}
@@ -777,7 +772,7 @@ func (s *WebSocketServer) handleRename(conn *websocket.Conn, req smodels.RenameR
 
 	// Verifica se o cliente é o dono da sala
 	publicKey, hasPublicKey := s.clientToPublicKey[conn]
-	if !hasPublicKey || publicKey != network.PublicKeyB64 {
+	if !hasPublicKey || publicKey != network.OwnerPublicKey {
 		s.sendErrorSignal(conn, "Only network owner can rename the network", originalID)
 		return
 	}
@@ -822,7 +817,7 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		if hasPublicKey {
 			// Busca a sala no banco de dados
 			network, err := s.supabaseManager.GetNetwork(networkID)
-			if err == nil && publicKey == network.PublicKeyB64 {
+			if err == nil && publicKey == network.OwnerPublicKey {
 				// A chave pública do cliente que está saindo coincide com a do criador da sala
 				isOwner = true
 				logger.Info("Network owner disconnected",
@@ -1031,7 +1026,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, networkID string) {
 	if hasPublicKey {
 		// Busca a sala no banco de dados
 		network, err := s.supabaseManager.GetNetwork(networkID)
-		if err == nil && publicKey == network.PublicKeyB64 {
+		if err == nil && publicKey == network.OwnerPublicKey {
 			// A chave pública do cliente que está saindo coincide com a do criador da sala
 			isCreator = true
 			logger.Info("Network creator disconnected", "publicKey", publicKey)
@@ -1149,19 +1144,28 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 
 		var computerInfos []smodels.ComputerInfo
 		for _, computer := range computersInNetwork {
+			// Check if the computer is currently online by looking at the connectedComputers map
+			isOnline := false
+			if connectedMap, ok := s.connectedComputers[computerNetwork.NetworkID]; ok {
+				isOnline = connectedMap[computer.PublicKey]
+			}
+
 			computerInfos = append(computerInfos, smodels.ComputerInfo{
 				Name:       computer.ComputerName,
 				ComputerIP: computer.PeerIP,
+				PublicKey:  computer.PublicKey,
+				IsOnline:   isOnline,
 			})
 		}
 
 		networkInfo := smodels.ComputerNetworkInfo{
-			NetworkID:     computerNetwork.NetworkID,
-			NetworkName:   network.Name,
-			JoinedAt:      computerNetwork.JoinedAt,
-			LastConnected: computerNetwork.LastConnected,
-			ComputerIP:    computerNetwork.PeerIP,
-			Computers:     computerInfos,
+			NetworkID:      computerNetwork.NetworkID,
+			NetworkName:    network.Name,
+			JoinedAt:       computerNetwork.JoinedAt,
+			LastConnected:  computerNetwork.LastConnected,
+			ComputerIP:     computerNetwork.PeerIP,
+			AdminPublicKey: network.OwnerPublicKey,
+			Computers:      computerInfos,
 		}
 		response.Networks = append(response.Networks, networkInfo)
 	}
