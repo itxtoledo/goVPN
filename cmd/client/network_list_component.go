@@ -96,39 +96,26 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				// Create connected computers list
 				computersContainer := container.NewVBox()
 
-				// Add current computer to the list (always show if we're in this network)
-				var currentStatusResource = icon.ConnectionOff
-				if isConnected {
-					currentStatusResource = icon.ConnectionOn
+				// Use apenas os computadores que vêm do servidor
+
+				// Get our public key for comparison
+				myPublicKey := ""
+				if ntc.UI.VPN != nil {
+					myPublicKey = ntc.UI.VPN.PublicKeyStr
 				}
 
-				var displayMyComputerName string
-				if len(computername) > 5 {
-					displayMyComputerName = computername[:5] + "..."
-				} else {
-					displayMyComputerName = computername
-				}
-
-				myComputerIP, _ := ntc.UI.RealtimeData.ComputerIP.Get()
-				currentComputerItem := container.NewHBox(
-					widget.NewIcon(currentStatusResource),
-					widget.NewLabelWithStyle(displayMyComputerName, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
-					layout.NewSpacer(),
-					widget.NewLabelWithStyle(myComputerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
-				)
-				computersContainer.Add(currentComputerItem)
-
-				// Add other computers in the network
+				// Add all computers from the network response
 				if len(network.Computers) > 0 {
 					for _, computer := range network.Computers {
-						// Skip our own computer if it's already added
-						if computer.ComputerIP == myComputerIP {
-							continue
-						}
 
 						// Create activity indicator based on online status
 						var activity = icon.ConnectionOff
-						if computer.IsOnline {
+
+						// Se este computador for o nosso e estivermos conectados a esta rede,
+						// mostrar como conectado independentemente do status online
+						if isConnected && myPublicKey != "" && computer.PublicKey == myPublicKey {
+							activity = icon.ConnectionOn
+						} else if computer.IsOnline {
 							activity = icon.ConnectionOn
 						}
 
@@ -162,24 +149,16 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 					),
 				)
 
-				// Create custom title with activity indicator or radio button icon
-				var statusIndicator = icon.ConnectionOff
-				if isConnected {
-					statusIndicator = icon.ConnectionOn
-				}
+				// Create custom title without activity indicator
+				// Status indicator code removed
 
-				// Calculate connected computers count
+				// Calculate connected computers count - use only computers from server response
 				connectedComputers := 0
-				if isConnected {
-					connectedComputers = 1 // Count yourself if connected
-				}
 
-				// Count other computers that are online
-				// Iterate over network.Computers instead of ntc.UI.VPN.NetworkManager.Computers
+				// Count computers that are online
 				if network.Computers != nil {
 					for _, computer := range network.Computers {
-						// Exclude the current computer (already counted if connected)
-						if computer.ComputerIP != myComputerIP {
+						if computer.IsOnline {
 							connectedComputers++
 						}
 					}
@@ -188,7 +167,6 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				computerCountLabel := widget.NewLabelWithStyle(fmt.Sprintf("(%d/10)", connectedComputers), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
 				customTitle := container.NewHBox(
-					widget.NewIcon(statusIndicator),
 					titleLabel,
 				)
 

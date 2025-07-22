@@ -131,26 +131,8 @@ func (item *CustomAccordionItem) updateContainer() {
 		item.expandLabel.SetText("▶")
 	}
 
-	// Create the content for the title row
-	var endItems []fyne.CanvasObject
-	if item.EndContent != nil {
-		endItems = []fyne.CanvasObject{item.EndContent, item.expandLabel}
-	} else {
-		endItems = []fyne.CanvasObject{item.expandLabel}
-	}
-
-	titleContent := container.NewHBox(
-		item.Title,
-		layout.NewSpacer(),
-	)
-
-	// Add end items to the title content
-	for _, endItem := range endItems {
-		titleContent.Add(endItem)
-	}
-
-	// Create a tappable container for the title row
-	titleContainer := NewTappableContainer(container.NewPadded(titleContent), func() {
+	// Create a tappable container for the expand label
+	tappableExpandLabel := NewTappableContainer(item.expandLabel, func() {
 		// Toggle state
 		item.toggleState()
 		// Update the container with new state
@@ -166,6 +148,45 @@ func (item *CustomAccordionItem) updateContainer() {
 			item.OnTapSecondary(pe)
 		}
 	})
+
+	// Create the content for the title row
+	var endItems []fyne.CanvasObject
+	if item.EndContent != nil {
+		endItems = []fyne.CanvasObject{item.EndContent, tappableExpandLabel} // Use the tappable expand label
+	} else {
+		endItems = []fyne.CanvasObject{tappableExpandLabel} // Use the tappable expand label
+	}
+
+	titleContent := container.NewHBox(
+		item.Title,
+		layout.NewSpacer(),
+	)
+
+	// Add end items to the title content
+	for _, endItem := range endItems {
+		titleContent.Add(endItem)
+	}
+
+	// Wrap the entire title content in a tappable container to make the whole title clickable
+	tappableTitleContent := NewTappableContainer(titleContent, func() {
+		// Toggle state
+		item.toggleState()
+		// Update the container with new state
+		item.updateContainer()
+		item.container.Refresh()
+		// Call custom callback if set
+		if item.OnTap != nil {
+			item.OnTap()
+		}
+	}, func(pe *fyne.PointEvent) {
+		// Call secondary tap callback if set
+		if item.OnTapSecondary != nil {
+			item.OnTapSecondary(pe)
+		}
+	})
+
+	// Create a container for the title row
+	titleContainer := container.NewPadded(tappableTitleContent)
 
 	// Clear and rebuild container
 	if item.container != nil {

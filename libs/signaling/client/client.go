@@ -755,15 +755,30 @@ func (s *SignalingClient) listenForMessages() {
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
 					log.Printf("Failed to unmarshal computer networks response: %v", err)
 				} else {
-					log.Printf("========== COMPUTER NETWORKS RECEIVED ==========")
+					log.Printf("=================== COMPUTER NETWORKS RECEIVED ===================")
 					log.Printf("Total networks found: %d", len(response.Networks))
+					log.Printf("==================================================================")
 
 					for i, network := range response.Networks {
-						log.Printf("Network %d: %s (ID: %s)", i+1, network.NetworkName, network.NetworkID)
+						log.Printf("Network %d: %s", i+1, network.NetworkName)
+						log.Printf("  Network ID: %s", network.NetworkID)
+						log.Printf("  Admin Public Key: %s", network.AdminPublicKey)
 						log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
 						log.Printf("  Last connected: %s", network.LastConnected.Format(time.RFC1123))
-						log.Printf("  IP: %s", network.ComputerIP)
-						log.Printf("  ---")
+						log.Printf("  Your Computer IP: %s", network.ComputerIP)
+
+						log.Printf("  Connected computers (%d):", len(network.Computers))
+						if len(network.Computers) > 0 {
+							for j, computer := range network.Computers {
+								log.Printf("    Computer %d: %s", j+1, computer.Name)
+								log.Printf("      Public Key: %s", computer.PublicKey)
+								log.Printf("      IP Address: %s", computer.ComputerIP)
+								log.Printf("      Online: %t", computer.IsOnline)
+							}
+						} else {
+							log.Printf("    No computers currently connected")
+						}
+						log.Printf("  ==================================================================")
 					}
 
 					// Notify the handler about the updated network list
