@@ -5,7 +5,7 @@ import (
 	"regexp"
 
 	"fyne.io/fyne/v2/widget"
-	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
+	"github.com/itxtoledo/govpn/libs/utils"
 )
 
 // ConfigurePINEntry configura um campo de entrada de PIN com validação de 4 dígitos
@@ -13,7 +13,7 @@ import (
 func ConfigurePINEntry(pinEntry *widget.Entry) {
 	// Define o validador para verificar o PIN usando o validador do pacote models
 	pinEntry.Validator = func(s string) error {
-		if !smodels.ValidatePIN(s) {
+		if !utils.ValidatePIN(s) {
 			return errors.New("PIN must be exactly 4 digits")
 		}
 		return nil
@@ -39,5 +39,5 @@ func ConfigurePINEntry(pinEntry *widget.Entry) {
 
 // ValidatePIN verifica se um PIN atende ao padrão definido no pacote models
 func ValidatePIN(pin string) bool {
-	return smodels.ValidatePIN(pin)
+	return utils.ValidatePIN(pin)
 }

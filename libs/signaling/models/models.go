@@ -235,24 +235,3 @@ type Computer struct {
 	PeerIP   string `json:"peer_ip,omitempty"`
 }
 
-// Network represents a VPN network
-type Network struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	PIN  string `json:"pin"`
-}
-
-// ValidatePIN checks if a PIN is valid (4 digits)
-func ValidatePIN(pin string) bool {
-	return len(pin) == 4 && isNumeric(pin)
-}
-
-// isNumeric checks if a string contains only digits
-func isNumeric(s string) bool {
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
-}
