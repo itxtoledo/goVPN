@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	sig "github.com/itxtoledo/govpn/libs/signaling"
+	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
 // Global variable to ensure only one network window can be open
@@ -18,7 +18,7 @@ var globalNetworkWindow *NetworkWindow
 // NetworkWindow manages the network (network) creation interface as a window
 type NetworkWindow struct {
 	*BaseWindow
-	CreateNetwork          func(string, string) (*sig.CreateNetworkResponse, error)
+	CreateNetwork          func(string, string) (*smodels.CreateNetworkResponse, error)
 	GetNetworkID           func() string
 	ComputerName           string
 	ValidatePIN       func(string) bool
@@ -29,7 +29,7 @@ type NetworkWindow struct {
 // NewNetworkWindow creates a new network creation window
 func NewNetworkWindow(
 	app fyne.App,
-	createNetwork func(string, string) (*sig.CreateNetworkResponse, error),
+	createNetwork func(string, string) (*smodels.CreateNetworkResponse, error),
 	getNetworkID func() string,
 	computername string,
 	validatePIN func(string) bool,

@@ -28,6 +28,7 @@ type Network struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	LastConnected time.Time `json:"last_connected"`
+	PeerIP        string    `json:"peer_ip,omitempty"`
 }
 
 

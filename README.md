@@ -34,10 +34,13 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
   - NetworkPacket: Structure for network packets tunneled through the VPN
   - ClientInfo: Information about connected clients
 
-- **libs/network**: Manages the virtual network between clients:
+- **libs/network**: Manages the virtual network interfaces and packet handling, including:
   - VirtualNetwork: Main class that coordinates peer communication
   - Virtual IP address mapping
   - Encapsulation and routing of packets between clients
+- **libs/signaling**: Provides the client-side signaling logic and data models for WebSocket communication with the server, including:
+  - client: Implements the WebSocket client for signaling
+  - models: Defines signaling-specific message structures
 
 ### System Components
 
@@ -138,8 +141,8 @@ sequenceDiagram
 The current project structure is organized as follows:
 
 ```
-README.md                        # Main documentation
-cmd/                             # Main components
+.github/                         # GitHub Actions workflows and configurations
+cmd/                             # Main application components
     client/                      # GoVPN client application
         data/                    # Real-time data layer for UI updates
         dialogs/                 # UI dialogs and modal windows
@@ -149,12 +152,15 @@ cmd/                             # Main components
         *.go                     # Core UI components and client-side logic
     server/                      # GoVPN signaling server
         docs/                    # API documentation for the server's WebSocket interface
+        logger/                  # Logging utilities
         *.go                     # Core server implementation files
 libs/                            # Shared libraries and common utilities
     crypto_utils/                # Cryptographic utilities for key management and encryption
     models/                      # Defines data structures and message formats shared across client and server
     network/                     # Manages the virtual network interfaces and packet handling
+    signaling/                   # Signaling client and models for WebSocket communication
 migrations/                      # SQL scripts for database schema management
+README.md                        # Main documentation
 ```
 
 ### Main Client Components
