@@ -9,7 +9,7 @@ import (
 	"github.com/supabase-community/supabase-go"
 )
 
-// ServerNetwork extends models.Network with server-specific fields
+// ServerNetwork embeds the local Network struct with server-specific fields
 type ServerNetwork struct {
 	Network
 	PublicKeyB64 string    `json:"public_key"`
