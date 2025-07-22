@@ -36,7 +36,6 @@ const (
 	TypeDeleteSuccess        MessageType = "DeleteSuccess"
 	TypeServerShutdown       MessageType = "ServerShutdown"
 	TypeComputerNetworks     MessageType = "ComputerNetworks"
-	TypeClientIPInfo         MessageType = "ClientIPInfo"
 )
 
 // SignalingMessage represents the wrapper structure for WebSocket communication
@@ -71,7 +70,7 @@ type CreateNetworkResponse struct {
 	NetworkName string `json:"network_name"`
 	PIN         string `json:"pin"`
 	PublicKey   string `json:"public_key"`
-	PeerIP      string `json:"peer_ip"`
+	ComputerIP  string `json:"computer_ip"`
 }
 
 // JoinNetworkRequest represents a request to join an existing network
@@ -86,7 +85,7 @@ type JoinNetworkRequest struct {
 type JoinNetworkResponse struct {
 	NetworkID   string `json:"network_id"`
 	NetworkName string `json:"network_name"`
-	PeerIP      string `json:"peer_ip"`
+	ComputerIP  string `json:"computer_ip"`
 }
 
 // ConnectNetworkRequest represents a request to connect to a previously joined network
@@ -100,7 +99,7 @@ type ConnectNetworkRequest struct {
 type ConnectNetworkResponse struct {
 	NetworkID   string `json:"network_id"`
 	NetworkName string `json:"network_name"`
-	PeerIP      string `json:"peer_ip"`
+	ComputerIP  string `json:"computer_ip"`
 }
 
 // DisconnectNetworkRequest represents a request to disconnect from a network (but stay joined)
@@ -160,7 +159,7 @@ type ComputerJoinedNotification struct {
 	NetworkID    string `json:"network_id"`
 	PublicKey    string `json:"public_key"`
 	ComputerName string `json:"computername,omitempty"`
-	PeerIP       string `json:"peer_ip,omitempty"`
+	ComputerIP   string `json:"computer_ip,omitempty"`
 }
 
 // ComputerLeftNotification notifies that a computer has left the network
@@ -174,7 +173,7 @@ type ComputerConnectedNotification struct {
 	NetworkID    string `json:"network_id"`
 	PublicKey    string `json:"public_key"`
 	ComputerName string `json:"computername,omitempty"`
-	PeerIP       string `json:"peer_ip,omitempty"`
+	ComputerIP   string `json:"computer_ip,omitempty"`
 }
 
 // ComputerDisconnectedNotification notifies that a computer has disconnected from the network (but not left)
@@ -206,13 +205,23 @@ type GetComputerNetworksRequest struct {
 	BaseRequest
 }
 
+// ComputerInfo represents information about a computer in a network
+type ComputerInfo struct {
+	Name       string `json:"name"`
+	ComputerIP string `json:"computer_ip"`
+	PublicKey  string `json:"public_key"`
+	IsOnline   bool   `json:"is_online"`
+}
+
 // ComputerNetworkInfo represents information about a network a computer has joined
 type ComputerNetworkInfo struct {
-	NetworkID     string    `json:"network_id"`
-	NetworkName   string    `json:"network_name"`
-	JoinedAt      time.Time `json:"joined_at"`
-	LastConnected time.Time `json:"last_connected"`
-	PeerIP        string    `json:"peer_ip,omitempty"`
+	NetworkID      string         `json:"network_id"`
+	NetworkName    string         `json:"network_name"`
+	JoinedAt       time.Time      `json:"joined_at"`
+	LastConnected  time.Time      `json:"last_connected"`
+	ComputerIP     string         `json:"computer_ip,omitempty"`
+	AdminPublicKey string         `json:"admin_public_key"`
+	Computers      []ComputerInfo `json:"computers"`
 }
 
 // ComputerNetworksResponse represents a response containing all networks a computer has joined
@@ -220,18 +229,11 @@ type ComputerNetworksResponse struct {
 	Networks []ComputerNetworkInfo `json:"networks"`
 }
 
-// ClientIPInfoResponse represents client IP address information
-type ClientIPInfoResponse struct {
-	IPv4 string `json:"ipv4"`
-	IPv6 string `json:"ipv6"`
-}
-
 // Computer represents a computer connected to a network
 type Computer struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	OwnerID  string `json:"owner_id"`
-	IsOnline bool   `json:"is_online"`
-	PeerIP   string `json:"peer_ip,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	IsOnline  bool   `json:"is_online"`
+	PeerIP    string `json:"computer_ip"`
+	PublicKey string `json:"public_key"`
 }
-

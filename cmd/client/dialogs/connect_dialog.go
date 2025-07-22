@@ -4,12 +4,12 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
+	"github.com/itxtoledo/govpn/cmd/client/data"
 )
 
 // ConnectDialogManager é a interface que define as operações necessárias para o diálogo de conexão
 type ConnectDialogManager interface {
-	GetSelectedNetwork() *storage.Network
+	GetSelectedNetwork() *data.Network
 	ConnectToNetwork(networkID, computername string) error
 	GetMainWindow() fyne.Window
 }

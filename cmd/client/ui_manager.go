@@ -11,7 +11,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/dialogs"
+	dialogs "github.com/itxtoledo/govpn/cmd/client/dialogs"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
@@ -28,7 +28,7 @@ type UIManager struct {
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
 	ComputerList        []smodels.Computer
-	SelectedNetwork     *st.Network
+	SelectedNetwork     *data.Network
 	defaultWebsocketURL string
 
 	// Nova camada de dados em tempo real
@@ -149,7 +149,7 @@ func (ui *UIManager) ShowAboutWindow() {
 }
 
 func (ui *UIManager) ShowSettingsWindow() {
-	var config st.Config = ui.ConfigManager.GetConfig()
+	config := ui.ConfigManager.GetConfig()
 
 	// Create and show the settings window (singleton pattern)
 	if globalSettingsWindow != nil && globalSettingsWindow.BaseWindow.Window != nil {
@@ -191,7 +191,7 @@ func (ui *UIManager) refreshUI() {
 }
 
 // GetSelectedNetwork implementa a interface ConnectDialogManager
-func (ui *UIManager) GetSelectedNetwork() *st.Network {
+func (ui *UIManager) GetSelectedNetwork() *data.Network {
 	return ui.SelectedNetwork
 }
 
@@ -246,18 +246,11 @@ func (ui *UIManager) refreshNetworkList() {
 
 // HandleNetworkCreated is the callback for when a network is created
 func (ui *UIManager) HandleNetworkCreated(networkID, networkName, pin string) {
-	// Save network to database
-	network := st.Network{
+	network := data.Network{
 		ID:            networkID,
 		Name:          networkName,
 		LastConnected: time.Now(),
 	}
-	err := ui.ConfigManager.SaveNetwork(network)
-	if err != nil {
-		log.Printf("Error saving network to database: %v", err)
-	}
-
-	// Add to RealtimeDataLayer
 	ui.RealtimeData.AddNetwork(&network)
 
 	dialog.ShowInformation("Success", "Network created and saved!", ui.MainWindow)
@@ -265,17 +258,11 @@ func (ui *UIManager) HandleNetworkCreated(networkID, networkName, pin string) {
 
 // HandleNetworkJoined is the callback for when a network is joined
 func (ui *UIManager) HandleNetworkJoined(networkID, pin string) {
-	// Save network to database (if not already saved)
-	network := st.Network{
+	network := data.Network{
 		ID:            networkID,
 		Name:          networkID, // Name is the ID for joined networks
 		LastConnected: time.Now(),
 	}
-	err := ui.ConfigManager.SaveNetwork(network)
-	if err != nil {
-		log.Printf("Error saving network to database: %v", err)
-	}
-
 	ui.RealtimeData.AddNetwork(&network)
 
 	dialog.ShowInformation("Success!", "Successfully joined the network!", ui.MainWindow)
@@ -315,9 +302,9 @@ func (ui *UIManager) applySettings(config st.Config) {
 	ui.RealtimeData.EmitEvent(data.EventSettingsChanged, "Settings updated", nil)
 
 	// Refresh UI
-	ui.refreshUI()
 }
 
+// Run starts the UI and the VPN client
 func (ui *UIManager) Run(defaultWebsocketURL string) {
 	log.Println("Iniciando GoVPN Client")
 

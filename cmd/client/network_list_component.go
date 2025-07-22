@@ -119,12 +119,10 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				computersContainer.Add(currentComputerItem)
 
 				// Add other computers in the network
-				// Add other computers in the network
-				if ntc.UI.VPN.NetworkManager != nil && len(ntc.UI.VPN.NetworkManager.Computers) > 0 {
-					// Get computers in the network from the NetworkManager
-					for _, computer := range ntc.UI.VPN.NetworkManager.Computers {
-						// Skip our own computer
-						if computer.OwnerID == ntc.UI.VPN.PublicKeyStr {
+				if len(network.Computers) > 0 {
+					for _, computer := range network.Computers {
+						// Skip our own computer if it's already added
+						if computer.ComputerIP == myComputerIP {
 							continue
 						}
 
@@ -134,8 +132,6 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 							activity = icon.ConnectionOn
 						}
 
-						// Create computer item with icon, activity indicator and name
-						// Create computer item with icon, activity indicator and name
 						var displayComputerName string
 						if len(computer.Name) > 5 {
 							displayComputerName = computer.Name[:5] + "..."
@@ -146,7 +142,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 							widget.NewIcon(activity),
 							widget.NewLabelWithStyle(displayComputerName, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
 							layout.NewSpacer(),
-							widget.NewLabelWithStyle(computer.PeerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
+							widget.NewLabelWithStyle(computer.ComputerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
 						)
 						computersContainer.Add(computerItem)
 					}
@@ -179,9 +175,11 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				}
 
 				// Count other computers that are online
-				if ntc.UI.VPN.NetworkManager != nil && len(ntc.UI.VPN.NetworkManager.Computers) > 0 {
-					for _, computer := range ntc.UI.VPN.NetworkManager.Computers {
-						if computer.OwnerID != ntc.UI.VPN.PublicKeyStr && computer.IsOnline {
+				// Iterate over network.Computers instead of ntc.UI.VPN.NetworkManager.Computers
+				if network.Computers != nil {
+					for _, computer := range network.Computers {
+						// Exclude the current computer (already counted if connected)
+						if computer.ComputerIP != myComputerIP {
 							connectedComputers++
 						}
 					}
