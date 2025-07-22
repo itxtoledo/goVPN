@@ -1,8 +1,6 @@
 module github.com/itxtoledo/govpn/libs/network
 
-go 1.21
-
-toolchain go1.21.13
+go 1.22.0
 
 require (
 	github.com/itxtoledo/govpn/libs/crypto_utils v0.0.0
