@@ -16,7 +16,11 @@ import (
 	signaling_models "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
-// SignalingMessageHandler defines the function type for handling received signaling messages.
+// SignalingMessageHandler is a function type used to handle signaling messages received by the client.
+// It takes two parameters:
+// - messageType: The type of the signaling message, defined by the signaling_models.MessageType enum.
+// - payload: The raw message payload as a byte slice, which can be unmarshaled into the appropriate structure.
+// This handler is invoked whenever a new signaling message is received, allowing the client to process it.
 type SignalingMessageHandler func(messageType signaling_models.MessageType, payload []byte)
 
 // SignalingClient representa uma conexão com o servidor de sinalização
