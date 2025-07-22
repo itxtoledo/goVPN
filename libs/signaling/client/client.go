@@ -39,7 +39,7 @@ func NewSignalingClient(publicKey string, handler SignalingMessageHandler) *Sign
 		Connected:       false,
 		LastHeartbeat:   time.Now(),
 		PublicKeyStr:    publicKey,
-		MessageHandler:  handler, // Atribuir o handler passado
+		MessageHandler:  handler, // Assign the passed handler
 		pendingRequests: make(map[string]chan signaling_models.SignalingMessage),
 	}
 }
