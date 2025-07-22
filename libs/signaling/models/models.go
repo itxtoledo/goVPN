@@ -1,12 +1,6 @@
 package models
 
-import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
-	"regexp"
-	"time"
-)
+import "time"
 
 // MessageType defines the type of messages that can be sent between client and server
 type MessageType string
@@ -45,12 +39,6 @@ const (
 	TypeClientIPInfo         MessageType = "ClientIPInfo"
 )
 
-// PIN validation constants
-const (
-	// DefaultPINPattern is the default PIN validation pattern: exactly 4 numeric digits
-	DefaultPINPattern = `^\d{4}$`
-)
-
 // SignalingMessage represents the wrapper structure for WebSocket communication
 type SignalingMessage struct {
 	ID      string      `json:"message_id"`
@@ -68,28 +56,20 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// Network represents a network or network
-type Network struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	PIN    string `json:"pin"`
-	ClientCount int    `json:"client_count"`
-}
-
 // Event-specific request structs
 
 // CreateNetworkRequest represents a request to create a new network
 type CreateNetworkRequest struct {
 	BaseRequest
 	NetworkName string `json:"network_name"`
-	PIN    string `json:"pin"`
+	PIN         string `json:"pin"`
 }
 
 // CreateNetworkResponse represents a response to a network creation request
 type CreateNetworkResponse struct {
 	NetworkID   string `json:"network_id"`
 	NetworkName string `json:"network_name"`
-	PIN    string `json:"pin"`
+	PIN         string `json:"pin"`
 	PublicKey   string `json:"public_key"`
 	PeerIP      string `json:"peer_ip"`
 }
@@ -98,7 +78,7 @@ type CreateNetworkResponse struct {
 type JoinNetworkRequest struct {
 	BaseRequest
 	NetworkID    string `json:"network_id"`
-	PIN     string `json:"pin"`
+	PIN          string `json:"pin"`
 	ComputerName string `json:"computername,omitempty"`
 }
 
@@ -232,6 +212,7 @@ type ComputerNetworkInfo struct {
 	NetworkName   string    `json:"network_name"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
+	PeerIP        string    `json:"peer_ip,omitempty"`
 }
 
 // ComputerNetworksResponse represents a response containing all networks a computer has joined
@@ -245,54 +226,12 @@ type ClientIPInfoResponse struct {
 	IPv6 string `json:"ipv6"`
 }
 
-// Helper functions
-
-// GenerateMessageID generates a random ID in hexadecimal format based on the specified length
-func GenerateMessageID() (string, error) {
-	return GenerateRandomID(8)
+// Computer represents a computer connected to a network
+type Computer struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	OwnerID  string `json:"owner_id"`
+	IsOnline bool   `json:"is_online"`
+	PeerIP   string `json:"peer_ip,omitempty"`
 }
 
-func GenerateNetworkID() string {
-	id, err := GenerateRandomID(16)
-
-	if err != nil {
-		// Fall back to a timestamp-based ID if random generation fails
-		return fmt.Sprintf("%06x", time.Now().UnixNano()%0xFFFFFF)
-	}
-
-	return id
-}
-
-// GenerateRandomID generates a random ID in hexadecimal format with the desired length
-func GenerateRandomID(length int) (string, error) {
-	// Determine how many bytes we need to generate the ID
-	byteLength := (length + 1) / 2 // round up to ensure sufficient bytes
-
-	bytes := make([]byte, byteLength)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate random bytes: %w", err)
-	}
-
-	// Convert to hexadecimal and limit to desired length
-	id := hex.EncodeToString(bytes)
-	if len(id) > length {
-		id = id[:length]
-	}
-
-	return id, nil
-}
-
-// PINRegex returns a compiled regex for the default PIN pattern
-func PINRegex() (*regexp.Regexp, error) {
-	return regexp.Compile(DefaultPINPattern)
-}
-
-// ValidatePIN checks if a PIN matches the default PIN pattern
-func ValidatePIN(pin string) bool {
-	regex, err := PINRegex()
-	if err != nil {
-		return false
-	}
-	return regex.MatchString(pin)
-}

@@ -13,7 +13,7 @@ import (
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
-	signaling "github.com/itxtoledo/govpn/libs/signaling"
+	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
 // UIManager represents the UI manager for the VPN client app
@@ -27,7 +27,7 @@ type UIManager struct {
 	HeaderComponent     *HeaderComponent
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
-	ComputerList        []signaling.Computer
+	ComputerList        []smodels.Computer
 	SelectedNetwork     *st.Network
 	defaultWebsocketURL string
 
@@ -354,4 +354,3 @@ func (ui *UIManager) Run(defaultWebsocketURL string) {
 	// Exibir a janela e executar o loop de eventos principal
 	ui.MainWindow.ShowAndRun()
 }
-

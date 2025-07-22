@@ -6,9 +6,26 @@ import (
 	"time"
 
 	"github.com/itxtoledo/govpn/cmd/server/logger"
-	"github.com/itxtoledo/govpn/libs/models"
 	"github.com/supabase-community/supabase-go"
 )
+
+// ServerNetwork extends models.Network with server-specific fields
+type ServerNetwork struct {
+	Network
+	PublicKeyB64 string    `json:"public_key"`
+	CreatedAt    time.Time `json:"created_at"`
+	LastActive   time.Time `json:"last_active"`
+}
+
+// SupabaseNetwork represents the structure of a network record in Supabase
+type SupabaseNetwork struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	PIN        string    `json:"pin"`
+	PublicKey  string    `json:"public_key"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastActive time.Time `json:"last_active"`
+}
 
 // SupabaseManager handles all Supabase database operations for the server
 type SupabaseManager struct {
@@ -34,16 +51,16 @@ func NewSupabaseManager(supabaseURL, supabaseKey, networksTable, logLevel string
 // CreateNetwork inserts a new network into the Supabase database
 func (sm *SupabaseManager) CreateNetwork(network ServerNetwork) error {
 	networkData := map[string]interface{}{
-		"id":          network.ID,
-		"name":        network.Name,
-		"pin":         network.PIN,
+		"id":          network.Network.ID,
+		"name":        network.Network.Name,
+		"pin":         network.Network.PIN,
 		"public_key":  network.PublicKeyB64,
 		"created_at":  network.CreatedAt.Format(time.RFC3339),
 		"last_active": network.LastActive.Format(time.RFC3339),
 	}
 
 	if sm.logLevel == "debug" {
-		logger.Debug("Creating network in Supabase", "networkID", network.ID, "networkName", network.Name)
+		logger.Debug("Creating network in Supabase", "networkID", network.Network.ID, "networkName", network.Network.Name)
 	}
 
 	_, _, err := sm.client.From(sm.networksTable).Insert(networkData, false, "", "", "").Execute()
@@ -74,7 +91,7 @@ func (sm *SupabaseManager) GetNetwork(networkID string) (ServerNetwork, error) {
 
 	// Create a ServerNetwork from the SupabaseNetwork data
 	return ServerNetwork{
-		Network: models.Network{
+		Network: Network{
 			ID:   dbNetwork.ID,
 			Name: dbNetwork.Name,
 			PIN:  dbNetwork.PIN,
@@ -156,7 +173,7 @@ func (sm *SupabaseManager) GetNetworkByPublicKey(publicKey string) (ServerNetwor
 	dbNetwork := networks[0]
 
 	return ServerNetwork{
-		Network: models.Network{
+		Network: Network{
 			ID:   dbNetwork.ID,
 			Name: dbNetwork.Name,
 			PIN:  dbNetwork.PIN,

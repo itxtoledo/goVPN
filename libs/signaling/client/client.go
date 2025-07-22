@@ -1,4 +1,5 @@
-package signaling
+
+package client
 
 import (
 	"encoding/json"
@@ -11,20 +12,16 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/itxtoledo/govpn/libs/models"
+	"github.com/itxtoledo/govpn/libs/utils"
+	signaling_models "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
-// Computer represents a computer connected to a network
-type Computer struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	OwnerID  string `json:"owner_id"`
-	IsOnline bool   `json:"is_online"`
-	PeerIP   string `json:"peer_ip,omitempty"`
-}
-
-// SignalingMessageHandler define o tipo de função para lidar com mensagens de sinalização recebidas.
-type SignalingMessageHandler func(messageType models.MessageType, payload []byte)
+// SignalingMessageHandler is a function type used to handle signaling messages received by the client.
+// It takes two parameters:
+// - messageType: The type of the signaling message, defined by the signaling_models.MessageType enum.
+// - payload: The raw message payload as a byte slice, which can be unmarshaled into the appropriate structure.
+// This handler is invoked whenever a new signaling message is received, allowing the client to process it.
+type SignalingMessageHandler func(messageType signaling_models.MessageType, payload []byte)
 
 // SignalingClient representa uma conexão com o servidor de sinalização
 type SignalingClient struct {
@@ -36,7 +33,7 @@ type SignalingClient struct {
 	PublicKeyStr   string                  // Public key string to identify this client
 
 	// System to track pending requests by message ID
-	pendingRequests     map[string]chan models.SignalingMessage
+	pendingRequests     map[string]chan signaling_models.SignalingMessage
 	pendingRequestsLock sync.Mutex
 }
 
@@ -46,8 +43,8 @@ func NewSignalingClient(publicKey string, handler SignalingMessageHandler) *Sign
 		Connected:       false,
 		LastHeartbeat:   time.Now(),
 		PublicKeyStr:    publicKey,
-		MessageHandler:  handler, // Atribuir o handler passado
-		pendingRequests: make(map[string]chan models.SignalingMessage),
+		MessageHandler:  handler, // Assign the passed handler
+		pendingRequests: make(map[string]chan signaling_models.SignalingMessage),
 	}
 }
 
@@ -152,10 +149,10 @@ func (s *SignalingClient) Disconnect() error {
 	return nil
 }
 
-// sendPackagedMessage empacota e envia mensagem para o backend e espera pela resposta
-// Cria BaseRequest com a chave pública do cliente,
-// gera ID da mensagem, empacota na struct SignalingMessage e envia via WebSocket
-func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payload interface{}) (interface{}, error) {
+// sendPackagedMessage packages and sends a message to the backend and waits for a response.
+// Creates a BaseRequest with the client's public key,
+// generates a message ID, packages it into the SignalingMessage struct, and sends it via WebSocket.
+func (s *SignalingClient) sendPackagedMessage(msgType signaling_models.MessageType, payload interface{}) (interface{}, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -166,7 +163,7 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 	}
 
 	// Gerar ID da mensagem
-	messageID, err := models.GenerateMessageID()
+	messageID, err := utils.GenerateMessageID()
 	if err != nil {
 		return nil, fmt.Errorf("error generating message ID: %v", err)
 	}
@@ -181,7 +178,7 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 	}
 
 	// Criar SignalingMessage
-	message := models.SignalingMessage{
+	message := signaling_models.SignalingMessage{
 		ID:      messageID,
 		Type:    msgType,
 		Payload: payloadBytes,
@@ -200,7 +197,7 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 		log.Printf("Received response for message ID %s of type %s", messageID, response.Type)
 
 		// Check if response is an error
-		if response.Type == models.TypeError {
+		if response.Type == signaling_models.TypeError {
 			var errorPayload map[string]string
 			if err := json.Unmarshal(response.Payload, &errorPayload); err == nil {
 				if errorMsg, ok := errorPayload["error"]; ok {
@@ -223,38 +220,38 @@ func (s *SignalingClient) sendPackagedMessage(msgType models.MessageType, payloa
 }
 
 // parseResponse parses the response payload based on the request type
-func (s *SignalingClient) parseResponse(requestType models.MessageType, response models.SignalingMessage) (interface{}, error) {
+func (s *SignalingClient) parseResponse(requestType signaling_models.MessageType, response signaling_models.SignalingMessage) (interface{}, error) {
 	switch requestType {
-	case models.TypeCreateNetwork:
-		if response.Type == models.TypeNetworkCreated {
-			var resp models.CreateNetworkResponse
+	case signaling_models.TypeCreateNetwork:
+		if response.Type == signaling_models.TypeNetworkCreated {
+			var resp signaling_models.CreateNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal create network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeJoinNetwork:
-		if response.Type == models.TypeNetworkJoined {
-			var resp models.JoinNetworkResponse
+	case signaling_models.TypeJoinNetwork:
+		if response.Type == signaling_models.TypeNetworkJoined {
+			var resp signaling_models.JoinNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal join network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeConnectNetwork:
-		if response.Type == models.TypeNetworkConnected {
-			var resp models.ConnectNetworkResponse
+	case signaling_models.TypeConnectNetwork:
+		if response.Type == signaling_models.TypeNetworkConnected {
+			var resp signaling_models.ConnectNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal connect network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeDisconnectNetwork:
-		if response.Type == models.TypeDisconnectNetwork || response.Type == models.TypeNetworkDisconnected {
-			var resp models.DisconnectNetworkResponse
+	case signaling_models.TypeDisconnectNetwork:
+		if response.Type == signaling_models.TypeDisconnectNetwork || response.Type == signaling_models.TypeNetworkDisconnected {
+			var resp signaling_models.DisconnectNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				// If it fails, it might be because the server is using a different format
 				// Try to extract just the networkID
@@ -274,43 +271,43 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 			return resp, nil
 		}
 
-	case models.TypeLeaveNetwork:
-		if response.Type == models.TypeLeaveNetwork {
-			var resp models.LeaveNetworkResponse
+	case signaling_models.TypeLeaveNetwork:
+		if response.Type == signaling_models.TypeLeaveNetwork {
+			var resp signaling_models.LeaveNetworkResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal leave network response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeKick:
-		if response.Type == models.TypeKickSuccess {
-			var resp models.KickResponse
+	case signaling_models.TypeKick:
+		if response.Type == signaling_models.TypeKickSuccess {
+			var resp signaling_models.KickResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal kick response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeRename:
-		if response.Type == models.TypeRenameSuccess {
-			var resp models.RenameResponse
+	case signaling_models.TypeRename:
+		if response.Type == signaling_models.TypeRenameSuccess {
+			var resp signaling_models.RenameResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal rename response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypeGetComputerNetworks:
-		if response.Type == models.TypeComputerNetworks {
-			var resp models.ComputerNetworksResponse
+	case signaling_models.TypeGetComputerNetworks:
+		if response.Type == signaling_models.TypeComputerNetworks {
+			var resp signaling_models.ComputerNetworksResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal computer networks response: %v", err)
 			}
 			return resp, nil
 		}
 
-	case models.TypePing:
+	case signaling_models.TypePing:
 		// For ping, we just return a simple success message
 		return map[string]interface{}{"status": "success"}, nil
 	}
@@ -324,7 +321,7 @@ func (s *SignalingClient) parseResponse(requestType models.MessageType, response
 }
 
 // CreateNetwork cria uma nova sala no servidor
-func (s *SignalingClient) CreateNetwork(name string, pin string) (*models.CreateNetworkResponse, error) {
+func (s *SignalingClient) CreateNetwork(name string, pin string) (*signaling_models.CreateNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -332,20 +329,20 @@ func (s *SignalingClient) CreateNetwork(name string, pin string) (*models.Create
 	log.Printf("Creating network: %s", name)
 
 	// Criar payload para a requisição
-	payload := &models.CreateNetworkRequest{
-		BaseRequest: models.BaseRequest{},
+	payload := &signaling_models.CreateNetworkRequest{
+		BaseRequest: signaling_models.BaseRequest{},
 		NetworkName: name,
-		PIN:    pin,
+		PIN:         pin,
 	}
 
 	// Enviar solicitação de criação de sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeCreateNetwork, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeCreateNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.CreateNetworkResponse); ok {
+	if resp, ok := response.(signaling_models.CreateNetworkResponse); ok {
 		return &resp, nil
 	}
 
@@ -353,7 +350,7 @@ func (s *SignalingClient) CreateNetwork(name string, pin string) (*models.Create
 }
 
 // JoinNetwork entra em uma sala
-func (s *SignalingClient) JoinNetwork(networkID string, pin string, computername string) (*models.JoinNetworkResponse, error) {
+func (s *SignalingClient) JoinNetwork(networkID string, pin string, computername string) (*signaling_models.JoinNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -361,21 +358,21 @@ func (s *SignalingClient) JoinNetwork(networkID string, pin string, computername
 	log.Printf("Joining network: %s", networkID)
 
 	// Criar payload para join network
-	payload := &models.JoinNetworkRequest{
-		BaseRequest:  models.BaseRequest{},
+	payload := &signaling_models.JoinNetworkRequest{
+		BaseRequest:  signaling_models.BaseRequest{},
 		NetworkID:    networkID,
-		PIN:     pin,
+		PIN:          pin,
 		ComputerName: computername,
 	}
 
 	// Enviar solicitação para entrar na sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeJoinNetwork, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeJoinNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.JoinNetworkResponse); ok {
+	if resp, ok := response.(signaling_models.JoinNetworkResponse); ok {
 		return &resp, nil
 	}
 
@@ -383,7 +380,7 @@ func (s *SignalingClient) JoinNetwork(networkID string, pin string, computername
 }
 
 // ConnectNetwork conecta a uma sala previamente associada
-func (s *SignalingClient) ConnectNetwork(networkID string, computerName string) (*models.ConnectNetworkResponse, error) {
+func (s *SignalingClient) ConnectNetwork(networkID string, computerName string) (*signaling_models.ConnectNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -391,20 +388,20 @@ func (s *SignalingClient) ConnectNetwork(networkID string, computerName string) 
 	log.Printf("Connecting to network: %s", networkID)
 
 	// Criar payload para connect network
-	payload := &models.ConnectNetworkRequest{
-		BaseRequest:  models.BaseRequest{},
+	payload := &signaling_models.ConnectNetworkRequest{
+		BaseRequest:  signaling_models.BaseRequest{},
 		NetworkID:    networkID,
 		ComputerName: computerName,
 	}
 
 	// Enviar solicitação para conectar à sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeConnectNetwork, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeConnectNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.ConnectNetworkResponse); ok {
+	if resp, ok := response.(signaling_models.ConnectNetworkResponse); ok {
 		return &resp, nil
 	}
 
@@ -412,7 +409,7 @@ func (s *SignalingClient) ConnectNetwork(networkID string, computerName string) 
 }
 
 // DisconnectNetwork desconecta de uma sala sem sair dela
-func (s *SignalingClient) DisconnectNetwork(networkID string) (*models.DisconnectNetworkResponse, error) {
+func (s *SignalingClient) DisconnectNetwork(networkID string) (*signaling_models.DisconnectNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -420,13 +417,13 @@ func (s *SignalingClient) DisconnectNetwork(networkID string) (*models.Disconnec
 	log.Printf("Disconnecting from network: %s", networkID)
 
 	// Criar payload para disconnect network
-	payload := &models.DisconnectNetworkRequest{
-		BaseRequest: models.BaseRequest{},
+	payload := &signaling_models.DisconnectNetworkRequest{
+		BaseRequest: signaling_models.BaseRequest{},
 		NetworkID:   networkID,
 	}
 
 	// Enviar solicitação para desconectar da sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeDisconnectNetwork, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeDisconnectNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -436,11 +433,11 @@ func (s *SignalingClient) DisconnectNetwork(networkID string) (*models.Disconnec
 	if respMap, ok := response.(map[string]interface{}); ok {
 		// Extract network ID from the map
 		networkID, _ := respMap["network_id"].(string)
-		resp := models.DisconnectNetworkResponse{
+		resp := signaling_models.DisconnectNetworkResponse{
 			NetworkID: networkID,
 		}
 		return &resp, nil
-	} else if resp, ok := response.(models.DisconnectNetworkResponse); ok {
+	} else if resp, ok := response.(signaling_models.DisconnectNetworkResponse); ok {
 		return &resp, nil
 	}
 
@@ -450,7 +447,7 @@ func (s *SignalingClient) DisconnectNetwork(networkID string) (*models.Disconnec
 }
 
 // LeaveNetwork sai de uma sala
-func (s *SignalingClient) LeaveNetwork(networkID string) (*models.LeaveNetworkResponse, error) {
+func (s *SignalingClient) LeaveNetwork(networkID string) (*signaling_models.LeaveNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -458,19 +455,19 @@ func (s *SignalingClient) LeaveNetwork(networkID string) (*models.LeaveNetworkRe
 	log.Printf("Leaving network: %s", networkID)
 
 	// Criar payload para leave network
-	payload := &models.LeaveNetworkRequest{
-		BaseRequest: models.BaseRequest{},
+	payload := &signaling_models.LeaveNetworkRequest{
+		BaseRequest: signaling_models.BaseRequest{},
 		NetworkID:   networkID,
 	}
 
 	// Enviar solicitação para sair da sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeLeaveNetwork, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeLeaveNetwork, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.LeaveNetworkResponse); ok {
+	if resp, ok := response.(signaling_models.LeaveNetworkResponse); ok {
 		return &resp, nil
 	}
 
@@ -478,7 +475,7 @@ func (s *SignalingClient) LeaveNetwork(networkID string) (*models.LeaveNetworkRe
 }
 
 // RenameNetwork renomeia uma sala (apenas o proprietário pode fazer isso)
-func (s *SignalingClient) RenameNetwork(networkID string, newName string) (*models.RenameResponse, error) {
+func (s *SignalingClient) RenameNetwork(networkID string, newName string) (*signaling_models.RenameResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -486,20 +483,20 @@ func (s *SignalingClient) RenameNetwork(networkID string, newName string) (*mode
 	log.Printf("Renaming network %s to %s", networkID, newName)
 
 	// Criar payload para rename network
-	payload := &models.RenameRequest{
-		BaseRequest: models.BaseRequest{},
+	payload := &signaling_models.RenameRequest{
+		BaseRequest: signaling_models.BaseRequest{},
 		NetworkID:   networkID,
 		NetworkName: newName,
 	}
 
 	// Enviar solicitação para renomear a sala usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeRename, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeRename, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.RenameResponse); ok {
+	if resp, ok := response.(signaling_models.RenameResponse); ok {
 		return &resp, nil
 	}
 
@@ -507,7 +504,7 @@ func (s *SignalingClient) RenameNetwork(networkID string, newName string) (*mode
 }
 
 // KickComputer expulsa um usuário da sala (apenas o proprietário pode fazer isso)
-func (s *SignalingClient) KickComputer(networkID string, targetID string) (*models.KickResponse, error) {
+func (s *SignalingClient) KickComputer(networkID string, targetID string) (*signaling_models.KickResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -515,20 +512,20 @@ func (s *SignalingClient) KickComputer(networkID string, targetID string) (*mode
 	log.Printf("Kicking computer %s from network %s", targetID, networkID)
 
 	// Criar payload para kick computer
-	payload := &models.KickRequest{
-		BaseRequest: models.BaseRequest{},
+	payload := &signaling_models.KickRequest{
+		BaseRequest: signaling_models.BaseRequest{},
 		NetworkID:   networkID,
 		TargetID:    targetID,
 	}
 
 	// Enviar solicitação para expulsar o usuário usando a função de empacotamento
-	response, err := s.sendPackagedMessage(models.TypeKick, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeKick, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.KickResponse); ok {
+	if resp, ok := response.(signaling_models.KickResponse); ok {
 		return &resp, nil
 	}
 
@@ -545,7 +542,7 @@ func (s *SignalingClient) SendMessage(messageType string, payload map[string]int
 	payload["publicKey"] = s.PublicKeyStr
 
 	// Converter o messageType para o tipo apropriado
-	msgType := models.MessageType(messageType)
+	msgType := signaling_models.MessageType(messageType)
 
 	// Enviar a mensagem usando a função de empacotamento
 	return s.sendPackagedMessage(msgType, payload)
@@ -578,7 +575,7 @@ func (s *SignalingClient) listenForMessages() {
 		}
 
 		// Process the message here before passing to custom handler
-		var sigMsg models.SignalingMessage
+		var sigMsg signaling_models.SignalingMessage
 		err = json.Unmarshal(message, &sigMsg)
 		if err != nil {
 			log.Printf("Error parsing message: %v", err)
@@ -597,7 +594,7 @@ func (s *SignalingClient) listenForMessages() {
 
 		// Handle specific message types (for notifications and unsolicited messages)
 		switch sigMsg.Type {
-		case models.TypeError:
+		case signaling_models.TypeError:
 			{
 				// Decode error message from base64
 				var errorPayload map[string]string
@@ -606,7 +603,7 @@ func (s *SignalingClient) listenForMessages() {
 						log.Printf("Server error: %s", errorMsg)
 						// Notify the handler about the error
 						if s.MessageHandler != nil {
-							s.MessageHandler(models.TypeError, sigMsg.Payload)
+							s.MessageHandler(signaling_models.TypeError, sigMsg.Payload)
 						}
 					}
 				} else {
@@ -614,65 +611,65 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 
-		case models.TypeNetworkDisconnected:
+		case signaling_models.TypeNetworkDisconnected:
 			{
-				var response models.DisconnectNetworkResponse
+				var response signaling_models.DisconnectNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
 					log.Printf("Failed to unmarshal network disconnected response: %v", err)
 				} else {
 					log.Printf("Successfully disconnected from network: %s", response.NetworkID)
 					// Notify the handler about the network disconnection
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeNetworkDisconnected, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeNetworkDisconnected, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeNetworkJoined:
+		case signaling_models.TypeNetworkJoined:
 			{
-				var response models.JoinNetworkResponse
+				var response signaling_models.JoinNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
 					log.Printf("Failed to unmarshal network joined response: %v", err)
 				} else {
 					log.Printf("Successfully joined network: %s (%s)", response.NetworkName, response.NetworkID)
 					// Notify the handler about the network joined event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeNetworkJoined, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeNetworkJoined, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeNetworkCreated:
+		case signaling_models.TypeNetworkCreated:
 			{
-				var response models.CreateNetworkResponse
+				var response signaling_models.CreateNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
 					log.Printf("Failed to unmarshal network created response: %v", err)
 				} else {
 					log.Printf("Successfully created network: %s (%s)", response.NetworkName, response.NetworkID)
 					// Notify the handler about the network created event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeNetworkCreated, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeNetworkCreated, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeLeaveNetwork:
+		case signaling_models.TypeLeaveNetwork:
 			{
-				var response models.LeaveNetworkResponse
+				var response signaling_models.LeaveNetworkResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
 					log.Printf("Failed to unmarshal leave network response: %v", err)
 				} else {
 					log.Printf("Successfully left network: %s", response.NetworkID)
 					// Notify the handler about the network left event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeLeaveNetwork, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeLeaveNetwork, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeKicked:
+		case signaling_models.TypeKicked:
 			{
-				var notification models.KickedNotification
+				var notification signaling_models.KickedNotification
 				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
 					log.Printf("Failed to unmarshal kicked notification: %v", err)
 				} else {
@@ -683,14 +680,14 @@ func (s *SignalingClient) listenForMessages() {
 					log.Printf("Kicked from network %s: %s", notification.NetworkID, reason)
 					// Notify the handler about the kicked event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeKicked, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeKicked, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeComputerJoined:
+		case signaling_models.TypeComputerJoined:
 			{
-				var notification models.ComputerJoinedNotification
+				var notification signaling_models.ComputerJoinedNotification
 				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
 					log.Printf("Failed to unmarshal computer joined notification: %v", err)
 				} else {
@@ -702,14 +699,14 @@ func (s *SignalingClient) listenForMessages() {
 
 					// Notify the handler about the computer joined event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeComputerJoined, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeComputerJoined, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeComputerConnected:
+		case signaling_models.TypeComputerConnected:
 			{
-				var notification models.ComputerConnectedNotification
+				var notification signaling_models.ComputerConnectedNotification
 				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
 					log.Printf("Failed to unmarshal computer connected notification: %v", err)
 				} else {
@@ -721,13 +718,13 @@ func (s *SignalingClient) listenForMessages() {
 
 					// Notify the handler about the computer connected event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeComputerConnected, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeComputerConnected, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeComputerLeft:
-			var notification models.ComputerLeftNotification
+		case signaling_models.TypeComputerLeft:
+			var notification signaling_models.ComputerLeftNotification
 			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
 				log.Printf("Failed to unmarshal computer left notification: %v", err)
 			} else {
@@ -735,27 +732,27 @@ func (s *SignalingClient) listenForMessages() {
 
 				// Notify the handler about the computer left event
 				if s.MessageHandler != nil {
-					s.MessageHandler(models.TypeComputerLeft, sigMsg.Payload)
+					s.MessageHandler(signaling_models.TypeComputerLeft, sigMsg.Payload)
 				}
 			}
 
-		case models.TypeNetworkDeleted:
+		case signaling_models.TypeNetworkDeleted:
 			{
-				var notification models.NetworkDeletedNotification
+				var notification signaling_models.NetworkDeletedNotification
 				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
 					log.Printf("Failed to unmarshal network deleted notification: %v", err)
 				} else {
 					log.Printf("Network deleted: %s", notification.NetworkID)
 					// Notify the handler about the network deleted event
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeNetworkDeleted, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeNetworkDeleted, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeComputerNetworks:
+		case signaling_models.TypeComputerNetworks:
 			{
-				var response models.ComputerNetworksResponse
+				var response signaling_models.ComputerNetworksResponse
 				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
 					log.Printf("Failed to unmarshal computer networks response: %v", err)
 				} else {
@@ -769,18 +766,16 @@ func (s *SignalingClient) listenForMessages() {
 						log.Printf("  ---")
 					}
 
-					log.Printf("==========================================")
-
 					// Notify the handler about the updated network list
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeComputerNetworks, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeComputerNetworks, sigMsg.Payload)
 					}
 				}
 			}
 
-		case models.TypeClientIPInfo:
+		case signaling_models.TypeClientIPInfo:
 			{
-				var ipInfo models.ClientIPInfoResponse
+				var ipInfo signaling_models.ClientIPInfoResponse
 				if err := json.Unmarshal(sigMsg.Payload, &ipInfo); err != nil {
 					log.Printf("Failed to unmarshal client IP info: %v", err)
 				} else {
@@ -788,7 +783,7 @@ func (s *SignalingClient) listenForMessages() {
 
 					// Notify the handler about the IP info
 					if s.MessageHandler != nil {
-						s.MessageHandler(models.TypeClientIPInfo, sigMsg.Payload)
+						s.MessageHandler(signaling_models.TypeClientIPInfo, sigMsg.Payload)
 					}
 				}
 			}
@@ -805,30 +800,29 @@ func (s *SignalingClient) sendPing() error {
 	log.Printf("Sending ping to server")
 
 	// Create a simple ping message
-	pingMessage := map[string]interface{}{
-		"action":    "ping",
-		"timestamp": time.Now().UnixNano(),
-		"publicKey": s.PublicKeyStr,
-	}
+	pingMessage := map[string]interface{}{}
+	pingMessage["action"] = "ping"
+	pingMessage["timestamp"] = time.Now().UnixNano()
+	pingMessage["publicKey"] = s.PublicKeyStr
 
 	// Use the existing message sending infrastructure
-	_, err := s.sendPackagedMessage(models.TypePing, pingMessage)
+	_, err := s.sendPackagedMessage(signaling_models.TypePing, pingMessage)
 	return err
 }
 
 // registerPendingRequest registers a message ID and returns a channel to receive the response
-func (s *SignalingClient) registerPendingRequest(messageID string) chan models.SignalingMessage {
+func (s *SignalingClient) registerPendingRequest(messageID string) chan signaling_models.SignalingMessage {
 	s.pendingRequestsLock.Lock()
 	defer s.pendingRequestsLock.Unlock()
 
 	// Create channel for this request
-	responseChan := make(chan models.SignalingMessage, 1)
+	responseChan := make(chan signaling_models.SignalingMessage, 1)
 	s.pendingRequests[messageID] = responseChan
 	return responseChan
 }
 
 // handlePendingResponse routes responses to the appropriate waiting goroutine
-func (s *SignalingClient) handlePendingResponse(msg models.SignalingMessage) bool {
+func (s *SignalingClient) handlePendingResponse(msg signaling_models.SignalingMessage) bool {
 	messageID := msg.ID
 	if messageID == "" {
 		return false
@@ -904,7 +898,7 @@ func (s *SignalingClient) injectPublicKey(payload interface{}) bool {
 }
 
 // GetComputerNetworks requests all networks the computer has joined from the server
-func (s *SignalingClient) GetComputerNetworks() (*models.ComputerNetworksResponse, error) {
+func (s *SignalingClient) GetComputerNetworks() (*signaling_models.ComputerNetworksResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -912,18 +906,18 @@ func (s *SignalingClient) GetComputerNetworks() (*models.ComputerNetworksRespons
 	log.Printf("Requesting computer networks from server")
 
 	// Create payload for the request
-	payload := &models.GetComputerNetworksRequest{
-		BaseRequest: models.BaseRequest{},
+	payload := &signaling_models.GetComputerNetworksRequest{
+		BaseRequest: signaling_models.BaseRequest{},
 	}
 
 	// Send request using the packaging function
-	response, err := s.sendPackagedMessage(models.TypeGetComputerNetworks, payload)
+	response, err := s.sendPackagedMessage(signaling_models.TypeGetComputerNetworks, payload)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert the response to the expected type
-	if resp, ok := response.(models.ComputerNetworksResponse); ok {
+	if resp, ok := response.(signaling_models.ComputerNetworksResponse); ok {
 		return &resp, nil
 	}
 

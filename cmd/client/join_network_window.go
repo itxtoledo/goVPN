@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/itxtoledo/govpn/libs/models"
+	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
 // Global variable to ensure only one join window can be open
@@ -18,7 +18,7 @@ var globalJoinWindow *JoinWindow
 // JoinWindow manages the network joining interface as a window
 type JoinWindow struct {
 	*BaseWindow
-	JoinNetwork            func(string, string, string) (*models.JoinNetworkResponse, error)
+	JoinNetwork            func(string, string, string) (*smodels.JoinNetworkResponse, error)
 	ComputerName           string
 	ValidatePIN       func(string) bool
 	ConfigurePINEntry func(*widget.Entry)
@@ -28,7 +28,7 @@ type JoinWindow struct {
 // NewJoinWindow creates a new network joining window
 func NewJoinWindow(
 	app fyne.App,
-	joinNetwork func(string, string, string) (*models.JoinNetworkResponse, error),
+	joinNetwork func(string, string, string) (*smodels.JoinNetworkResponse, error),
 	computername string,
 	validatePIN func(string) bool,
 	configurePINEntry func(*widget.Entry),

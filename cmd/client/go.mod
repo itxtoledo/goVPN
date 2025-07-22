@@ -1,26 +1,28 @@
 module github.com/itxtoledo/govpn/cmd/client
 
-go 1.22
+go 1.22.0
 
 toolchain go1.23.11
 
 require (
 	fyne.io/fyne/v2 v2.6.0
-	github.com/itxtoledo/govpn/libs/models v0.0.0
-	github.com/itxtoledo/govpn/libs/signaling v0.0.0
+	github.com/itxtoledo/govpn/libs/signaling/client v0.0.0
+	github.com/itxtoledo/govpn/libs/signaling/models v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.22
 )
 
 replace (
 	github.com/itxtoledo/govpn/libs/crypto_utils v0.0.0 => ../../libs/crypto_utils
-	github.com/itxtoledo/govpn/libs/models v0.0.0 => ../../libs/models
 	github.com/itxtoledo/govpn/libs/network v0.0.0 => ../../libs/network
-	github.com/itxtoledo/govpn/libs/signaling v0.0.0 => ../../libs/signaling
+	github.com/itxtoledo/govpn/libs/signaling/client v0.0.0 => ../../libs/signaling/client
+	github.com/itxtoledo/govpn/libs/signaling/models v0.0.0 => ../../libs/signaling/models
+	github.com/itxtoledo/govpn/libs/utils v0.0.0 => ../../libs/utils
 )
 
 require (
 	fyne.io/systray v1.11.0 // indirect
 	github.com/go-text/render v0.2.0 // indirect
+	github.com/itxtoledo/govpn/libs/utils v0.0.0 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/kr/text v0.1.0 // indirect
 )

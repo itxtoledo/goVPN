@@ -8,8 +8,8 @@ import (
 
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	st "github.com/itxtoledo/govpn/cmd/client/storage"
-	"github.com/itxtoledo/govpn/libs/models"
-	signaling "github.com/itxtoledo/govpn/libs/signaling"
+	sclient "github.com/itxtoledo/govpn/libs/signaling/client"
+	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
 // NetworkInterface define a interface mínima para a rede virtual
@@ -17,8 +17,6 @@ type NetworkInterface interface {
 	GetLocalIP() string
 	GetComputerCount() int
 }
-
-
 
 // ConnectionState represents the state of the connection
 type ConnectionState int
@@ -32,9 +30,9 @@ const (
 // NetworkManager handles the VPN network
 type NetworkManager struct {
 	VirtualNetwork    NetworkInterface
-	SignalingServer   *signaling.SignalingClient
+	SignalingServer   *sclient.SignalingClient
 	NetworkID         string
-	Computers         []signaling.Computer
+	Computers         []smodels.Computer
 	connectionState   ConnectionState
 	ReconnectAttempts int
 	MaxReconnects     int
@@ -77,9 +75,9 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	publicKey, _ := nm.ConfigManager.GetKeyPair()
 
 	// Create a handler function for signaling client messages
-	signalingHandler := func(messageType models.MessageType, payload []byte) {
+	signalingHandler := func(messageType smodels.MessageType, payload []byte) {
 		switch messageType {
-		case models.TypeError:
+		case smodels.TypeError:
 			var errorPayload map[string]string
 			if err := json.Unmarshal(payload, &errorPayload); err == nil {
 				if errorMsg, ok := errorPayload["error"]; ok {
@@ -87,44 +85,45 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 					nm.RealtimeData.EmitEvent(data.EventError, errorMsg, nil)
 				}
 			}
-		case models.TypeNetworkDisconnected:
+		case smodels.TypeNetworkDisconnected:
 			nm.refreshNetworkList()
-		case models.TypeNetworkJoined:
+		case smodels.TypeNetworkJoined:
 			nm.refreshNetworkList()
-		case models.TypeNetworkCreated:
+		case smodels.TypeNetworkCreated:
 			nm.refreshNetworkList()
-		case models.TypeLeaveNetwork:
+		case smodels.TypeLeaveNetwork:
 			nm.refreshNetworkList()
-		case models.TypeKicked:
+		case smodels.TypeKicked:
 			nm.refreshNetworkList()
-		case models.TypeComputerJoined:
+		case smodels.TypeComputerJoined:
 			nm.refreshNetworkList()
-		case models.TypeComputerLeft:
+		case smodels.TypeComputerLeft:
 			nm.refreshNetworkList()
-		case models.TypeComputerNetworks:
+		case smodels.TypeComputerNetworks:
 			// For TypeComputerNetworks, we need to unmarshal the payload to update the networks list
-			var computerNetworksResponse models.ComputerNetworksResponse
+			var computerNetworksResponse smodels.ComputerNetworksResponse
 			if err := json.Unmarshal(payload, &computerNetworksResponse); err != nil {
 				log.Printf("Failed to unmarshal computer networks response in handler: %v", err)
 				return
 			}
 
-			// Convert models.Network to storage.Network
+			// Convert smodels.Network to storage.Network
 			updatedNetworks := make([]*st.Network, 0, len(computerNetworksResponse.Networks))
 			for _, network := range computerNetworksResponse.Networks {
 				storageNetwork := &st.Network{
 					ID:            network.NetworkID,
 					Name:          network.NetworkName,
 					LastConnected: network.LastConnected,
+					PeerIP:        network.PeerIP,
 				}
 				updatedNetworks = append(updatedNetworks, storageNetwork)
 			}
 			// Update the RealtimeDataLayer with the new networks list
 			nm.RealtimeData.SetNetworks(updatedNetworks)
 			nm.refreshNetworkList()
-		case models.TypeClientIPInfo:
+		case smodels.TypeClientIPInfo:
 			// Handle client IP information
-			var ipInfo models.ClientIPInfoResponse
+			var ipInfo smodels.ClientIPInfoResponse
 			if err := json.Unmarshal(payload, &ipInfo); err != nil {
 				log.Printf("Failed to unmarshal client IP info in handler: %v", err)
 				return
@@ -150,7 +149,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			nm.RealtimeData.SetComputerIP(ipDisplay)
 		}
 	}
-	nm.SignalingServer = signaling.NewSignalingClient(publicKey, signalingHandler)
+	nm.SignalingServer = sclient.NewSignalingClient(publicKey, signalingHandler)
 
 	// Connect to signaling server
 	err := nm.SignalingServer.Connect(serverAddress)
@@ -245,7 +244,7 @@ func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 	} else {
 		// If the computer list is empty or the current computer is not found,
 		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []signaling.Computer{
+		nm.Computers = []smodels.Computer{
 			{
 				ID:       nm.ConfigManager.GetConfig().PublicKey,
 				Name:     nm.ConfigManager.GetConfig().ComputerName,
@@ -294,7 +293,7 @@ func (nm *NetworkManager) JoinNetwork(networkID string, pin string, computername
 	} else {
 		// If the computer list is empty or the current computer is not found,
 		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []signaling.Computer{
+		nm.Computers = []smodels.Computer{
 			{
 				ID:       nm.ConfigManager.GetConfig().PublicKey,
 				Name:     nm.ConfigManager.GetConfig().ComputerName,
@@ -360,7 +359,7 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 	} else {
 		// If the computer list is empty or the current computer is not found,
 		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []signaling.Computer{
+		nm.Computers = []smodels.Computer{
 			{
 				ID:       nm.ConfigManager.GetConfig().PublicKey,
 				Name:     nm.ConfigManager.GetConfig().ComputerName,
@@ -411,7 +410,7 @@ func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 	}
 
 	// Clear the computers list
-	nm.Computers = []signaling.Computer{}
+	nm.Computers = []smodels.Computer{}
 
 	// Refresh the network list UI
 	nm.refreshNetworkList()
@@ -445,6 +444,9 @@ func (nm *NetworkManager) LeaveNetwork() error {
 
 	// Clear network information
 	nm.NetworkID = ""
+
+	// Clear the computers list
+	nm.Computers = []smodels.Computer{}
 
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo("Not connected")
@@ -482,6 +484,9 @@ func (nm *NetworkManager) LeaveNetworkById(networkID string) error {
 	if nm.NetworkID == networkID {
 		nm.NetworkID = ""
 
+		// Clear the computers list
+		nm.Computers = []smodels.Computer{}
+
 		// Update data layer
 		nm.RealtimeData.SetNetworkInfo("Not connected")
 	}
@@ -505,6 +510,9 @@ func (nm *NetworkManager) HandleNetworkDeleted(networkID string) error {
 	// If we're in this network, clear our network data
 	if nm.NetworkID == networkID {
 		nm.NetworkID = ""
+
+		// Clear the computers list
+		nm.Computers = []smodels.Computer{}
 
 		// Update data layer
 		nm.RealtimeData.SetNetworkInfo("Not connected")
