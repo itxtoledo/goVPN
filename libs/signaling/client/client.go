@@ -145,9 +145,9 @@ func (s *SignalingClient) Disconnect() error {
 	return nil
 }
 
-// sendPackagedMessage empacota e envia mensagem para o backend e espera pela resposta
-// Cria BaseRequest com a chave pública do cliente,
-// gera ID da mensagem, empacota na struct SignalingMessage e envia via WebSocket
+// sendPackagedMessage packages and sends a message to the backend and waits for a response.
+// Creates a BaseRequest with the client's public key,
+// generates a message ID, packages it into the SignalingMessage struct, and sends it via WebSocket.
 func (s *SignalingClient) sendPackagedMessage(msgType signaling_models.MessageType, payload interface{}) (interface{}, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
