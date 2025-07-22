@@ -19,7 +19,7 @@ The GoVPN client follows a modular architecture with the following main componen
 
 3. **SignalingClient**: Manages WebSocket communication with the server.
    - Sends and receives signaling messages
-   - Processes event notifications (new peers, peer departures)
+   - Processes event notifications (new computers, computer departures)
    - Implements the communication protocol defined in `models`
 
 ### Data Storage

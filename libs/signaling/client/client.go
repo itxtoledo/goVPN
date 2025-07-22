@@ -1,4 +1,3 @@
-
 package client
 
 import (
@@ -12,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/itxtoledo/govpn/libs/utils"
 	signaling_models "github.com/itxtoledo/govpn/libs/signaling/models"
+	"github.com/itxtoledo/govpn/libs/utils"
 )
 
 // SignalingMessageHandler is a function type used to handle signaling messages received by the client.
@@ -695,7 +694,7 @@ func (s *SignalingClient) listenForMessages() {
 					if computerName == "" {
 						computerName = "Unknown computer"
 					}
-					log.Printf("New computer joined network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.PeerIP)
+					log.Printf("New computer joined network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.ComputerIP)
 
 					// Notify the handler about the computer joined event
 					if s.MessageHandler != nil {
@@ -714,7 +713,7 @@ func (s *SignalingClient) listenForMessages() {
 					if computerName == "" {
 						computerName = "Unknown computer"
 					}
-					log.Printf("Computer connected to network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.PeerIP)
+					log.Printf("Computer connected to network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.ComputerIP)
 
 					// Notify the handler about the computer connected event
 					if s.MessageHandler != nil {
@@ -763,6 +762,7 @@ func (s *SignalingClient) listenForMessages() {
 						log.Printf("Network %d: %s (ID: %s)", i+1, network.NetworkName, network.NetworkID)
 						log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
 						log.Printf("  Last connected: %s", network.LastConnected.Format(time.RFC1123))
+						log.Printf("  IP: %s", network.ComputerIP)
 						log.Printf("  ---")
 					}
 
@@ -773,20 +773,6 @@ func (s *SignalingClient) listenForMessages() {
 				}
 			}
 
-		case signaling_models.TypeClientIPInfo:
-			{
-				var ipInfo signaling_models.ClientIPInfoResponse
-				if err := json.Unmarshal(sigMsg.Payload, &ipInfo); err != nil {
-					log.Printf("Failed to unmarshal client IP info: %v", err)
-				} else {
-					log.Printf("Received client IP info - IPv4: %s, IPv6: %s", ipInfo.IPv4, ipInfo.IPv6)
-
-					// Notify the handler about the IP info
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeClientIPInfo, sigMsg.Payload)
-					}
-				}
-			}
 		}
 	}
 }

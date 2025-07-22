@@ -69,7 +69,7 @@ WebSocket Client → WebSocketServer → [Message Processing]
 2. **Network Joining**:
    - Credential validation
    - Limit verification
-   - Notification to existing peers
+   - Notification to existing computers
    - Connection tracking
    - Network activity update
 

@@ -248,18 +248,18 @@ type ComputerNetwork struct {
 	ComputerName  string    `json:"computername"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
-	PeerIP        string    `json:"peer_ip"`
+	ComputerIP    string    `json:"peer_ip"`
 }
 
 // AddComputerToNetwork adds a computer to a network in the computer_networks table
-func (sm *SupabaseManager) AddComputerToNetwork(networkID, publicKey, computerName, peerIP string) error {
+func (sm *SupabaseManager) AddComputerToNetwork(networkID, publicKey, computerName, peerIp string) error {
 	computerNetworkData := map[string]interface{}{
 		"network_id":     networkID,
 		"public_key":     publicKey,
 		"computername":   computerName,
 		"joined_at":      time.Now().Format(time.RFC3339),
 		"last_connected": time.Now().Format(time.RFC3339),
-		"peer_ip":        peerIP,
+		"peer_ip":        peerIp,
 	}
 
 	if sm.logLevel == "debug" {
@@ -321,10 +321,24 @@ func (sm *SupabaseManager) GetNetworkComputers(networkID string) ([]ComputerNetw
 	return computerNetworks, nil
 }
 
+func (sm *SupabaseManager) GetComputersInNetwork(networkID string) ([]ComputerNetwork, error) {
+	var computerNetworks []ComputerNetwork
+	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("network_id", networkID).Execute()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get computers in network: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		return nil, fmt.Errorf("failed to parse computer network data: %w", err)
+	}
+
+	return computerNetworks, nil
+}
+
 // GetUsedIPsForNetwork fetches all used IPs for a specific network
 func (sm *SupabaseManager) GetUsedIPsForNetwork(networkID string) ([]string, error) {
 	var computerNetworks []struct {
-		PeerIP string `json:"peer_ip"`
+		Computerip string `json:"peer_ip"`
 	}
 	data, _, err := sm.client.From("computer_networks").Select("peer_ip", "", false).Eq("network_id", networkID).Execute()
 	if err != nil {
@@ -337,8 +351,8 @@ func (sm *SupabaseManager) GetUsedIPsForNetwork(networkID string) ([]string, err
 
 	ips := make([]string, 0, len(computerNetworks))
 	for _, cn := range computerNetworks {
-		if cn.PeerIP != "" {
-			ips = append(ips, cn.PeerIP)
+		if cn.Computerip != "" {
+			ips = append(ips, cn.Computerip)
 		}
 	}
 

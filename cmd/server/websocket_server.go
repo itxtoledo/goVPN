@@ -5,32 +5,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/itxtoledo/govpn/cmd/server/logger"
-	"github.com/itxtoledo/govpn/libs/utils"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
+	"github.com/itxtoledo/govpn/libs/utils"
 )
 
 // ServerNetwork extends the basic Network model with server-specific fields
 
 // WebSocketServer manages the WebSocket connections and network handling
 type WebSocketServer struct {
-	clients           map[*websocket.Conn]string   // Maps connection to networkID
-	networks          map[string][]*websocket.Conn // Maps networkID to list of connections
-	clientToPublicKey map[*websocket.Conn]string   // Maps connection to public key
-	connectedPeers    map[string]map[string]bool   // Maps networkID to map of publicKey to connected status
-	mu                sync.RWMutex
-	config            Config
-	supabaseManager   *SupabaseManager
-	upgrader          websocket.Upgrader
-	pinRegex          *regexp.Regexp
+	clients            map[*websocket.Conn]string   // Maps connection to networkID
+	networks           map[string][]*websocket.Conn // Maps networkID to list of connections
+	clientToPublicKey  map[*websocket.Conn]string   // Maps connection to public key
+	connectedComputers map[string]map[string]bool   // Maps networkID to map of publicKey to connected status
+	mu                 sync.RWMutex
+	config             Config
+	supabaseManager    *SupabaseManager
+	upgrader           websocket.Upgrader
+	pinRegex           *regexp.Regexp
 
 	// Server statistics
 	statsManager *StatsManager
@@ -63,18 +61,18 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 	statsManager := NewStatsManager(cfg)
 
 	return &WebSocketServer{
-		clients:           make(map[*websocket.Conn]string),
-		networks:          make(map[string][]*websocket.Conn),
-		clientToPublicKey: make(map[*websocket.Conn]string),
-		connectedPeers:    make(map[string]map[string]bool),
-		config:            cfg,
-		supabaseManager:   supaMgr,
-		upgrader:          upgrader,
-		pinRegex:          pinRegex,
-		statsManager:      statsManager,
-		shutdownChan:      make(chan struct{}),
-		httpServer:        &http.Server{},
-		isShutdown:        false,
+		clients:            make(map[*websocket.Conn]string),
+		networks:           make(map[string][]*websocket.Conn),
+		clientToPublicKey:  make(map[*websocket.Conn]string),
+		connectedComputers: make(map[string]map[string]bool),
+		config:             cfg,
+		supabaseManager:    supaMgr,
+		upgrader:           upgrader,
+		pinRegex:           pinRegex,
+		statsManager:       statsManager,
+		shutdownChan:       make(chan struct{}),
+		httpServer:         &http.Server{},
+		isShutdown:         false,
 	}, nil
 }
 
@@ -123,7 +121,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 			},
 		}
 
-		go s.handleGetComputerNetworksWithIP(conn, req, msgID, r)
+		go s.handleGetComputerNetworksWithIP(conn, req, msgID)
 	}
 
 	for {
@@ -326,7 +324,7 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 		"network_name": req.NetworkName,
 		"pin":          req.PIN,
 		"public_key":   req.PublicKey,
-		"peer_ip":      creatorIP,
+		"computer_ip":  creatorIP,
 	}
 
 	s.sendSignal(conn, smodels.TypeNetworkCreated, responsePayload, originalID)
@@ -389,13 +387,13 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 			s.sendErrorSignal(conn, "Error retrieving existing IP", originalID)
 			return
 		}
-		assignedIP = computer.PeerIP
+		assignedIP = computer.ComputerIP
 
 		// Update connection status in memory
-		if _, ok := s.connectedPeers[req.NetworkID]; !ok {
-			s.connectedPeers[req.NetworkID] = make(map[string]bool)
+		if _, ok := s.connectedComputers[req.NetworkID]; !ok {
+			s.connectedComputers[req.NetworkID] = make(map[string]bool)
 		}
-		s.connectedPeers[req.NetworkID][req.PublicKey] = true
+		s.connectedComputers[req.NetworkID][req.PublicKey] = true
 	}
 
 	s.clientToPublicKey[conn] = req.PublicKey
@@ -426,24 +424,24 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
 		"network_name": network.Network.Name,
-		"peer_ip":      assignedIP,
+		"computer_ip":  assignedIP,
 	}
 	s.sendSignal(conn, smodels.TypeNetworkJoined, responsePayload, originalID)
 
-	// Notify other clients in the network about the new peer
+	// Notify other clients in the network about the new computer
 	for _, computer := range s.networks[req.NetworkID] {
 		if computer != conn {
 			computerJoinedPayload := map[string]interface{}{
 				"network_id":   req.NetworkID,
 				"public_key":   req.PublicKey,
 				"computername": req.ComputerName,
-				"peer_ip":      assignedIP,
+				"computer_ip":  assignedIP,
 			}
 			s.sendSignal(computer, smodels.TypeComputerJoined, computerJoinedPayload, "")
 		}
 	}
 
-	// Send existing peers' info to the newly joined client
+	// Send existing computers' info to the newly joined client
 	for _, existingConn := range s.networks[req.NetworkID] {
 		if existingConn != conn {
 			existingPublicKey, hasExistingKey := s.clientToPublicKey[existingConn]
@@ -454,7 +452,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 						"network_id":   req.NetworkID,
 						"public_key":   existingPublicKey,
 						"computername": existingComputer.ComputerName,
-						"peer_ip":      existingComputer.PeerIP,
+						"computer_ip":  existingComputer.ComputerIP,
 					}
 					s.sendSignal(conn, smodels.TypeComputerJoined, existingComputerPayload, "")
 				}
@@ -492,10 +490,10 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	}
 
 	// Update connection status in memory
-	if _, ok := s.connectedPeers[req.NetworkID]; !ok {
-		s.connectedPeers[req.NetworkID] = make(map[string]bool)
+	if _, ok := s.connectedComputers[req.NetworkID]; !ok {
+		s.connectedComputers[req.NetworkID] = make(map[string]bool)
 	}
-	s.connectedPeers[req.NetworkID][req.PublicKey] = true
+	s.connectedComputers[req.NetworkID][req.PublicKey] = true
 
 	s.clientToPublicKey[conn] = req.PublicKey
 
@@ -515,7 +513,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 			"clientAddr", conn.RemoteAddr().String(),
 			"networkID", req.NetworkID,
 			"activeClients", len(s.networks[req.NetworkID]),
-			"assignedIP", computer.PeerIP)
+			"assignedIP", computer.ComputerIP)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
@@ -523,24 +521,24 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
 		"network_name": network.Network.Name,
-		"peer_ip":      computer.PeerIP,
+		"computer_ip":  computer.ComputerIP,
 	}
 	s.sendSignal(conn, smodels.TypeNetworkConnected, responsePayload, originalID)
 
-	// Notify other clients in the network about the new peer
+	// Notify other clients in the network about the new computer
 	for _, computerConn := range s.networks[req.NetworkID] {
 		if computerConn != conn {
 			computerConnectedPayload := map[string]interface{}{
 				"network_id":   req.NetworkID,
 				"public_key":   req.PublicKey,
 				"computername": req.ComputerName,
-				"peer_ip":      computer.PeerIP,
+				"computer_ip":  computer.ComputerIP,
 			}
 			s.sendSignal(computerConn, smodels.TypeComputerConnected, computerConnectedPayload, "")
 		}
 	}
 
-	// Send existing peers' info to the newly connected client
+	// Send existing computers' info to the newly connected client
 	for _, existingConn := range s.networks[req.NetworkID] {
 		if existingConn != conn {
 			existingPublicKey, hasExistingKey := s.clientToPublicKey[existingConn]
@@ -551,7 +549,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 						"network_id":   req.NetworkID,
 						"public_key":   existingPublicKey,
 						"computername": existingComputer.ComputerName,
-						"peer_ip":      existingComputer.PeerIP,
+						"computer_ip":  existingComputer.ComputerIP,
 					}
 					s.sendSignal(conn, smodels.TypeComputerConnected, existingComputerPayload, "")
 				}
@@ -601,10 +599,10 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req smod
 	}
 
 	// Update connection status in memory
-	if peers, ok := s.connectedPeers[networkID]; ok {
-		delete(peers, publicKey)
-		if len(peers) == 0 {
-			delete(s.connectedPeers, networkID)
+	if computers, ok := s.connectedComputers[networkID]; ok {
+		delete(computers, publicKey)
+		if len(computers) == 0 {
+			delete(s.connectedComputers, networkID)
 		}
 	}
 
@@ -854,10 +852,10 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		delete(s.clientToPublicKey, conn)
 
 		// Update connection status in memory
-		if peers, ok := s.connectedPeers[networkID]; ok {
-			delete(peers, publicKey)
-			if len(peers) == 0 {
-				delete(s.connectedPeers, networkID)
+		if computers, ok := s.connectedComputers[networkID]; ok {
+			delete(computers, publicKey)
+			if len(computers) == 0 {
+				delete(s.connectedComputers, networkID)
 			}
 		}
 
@@ -1107,11 +1105,11 @@ func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Req
 
 // handleGetComputerNetworks processes a request to get all networks a computer has joined
 func (s *WebSocketServer) handleGetComputerNetworks(conn *websocket.Conn, req smodels.GetComputerNetworksRequest, originalID string) {
-	s.handleGetComputerNetworksWithIP(conn, req, originalID, nil)
+	s.handleGetComputerNetworksWithIP(conn, req, originalID)
 }
 
 // handleGetComputerNetworksWithIP processes a request to get all networks a computer has joined and optionally sends IP info
-func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req smodels.GetComputerNetworksRequest, originalID string, httpReq *http.Request) {
+func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req smodels.GetComputerNetworksRequest, originalID string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1142,12 +1140,28 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 			continue
 		}
 
+		// Get all computers (computers) in this network
+		computersInNetwork, err := s.supabaseManager.GetComputersInNetwork(computerNetwork.NetworkID)
+		if err != nil {
+			logger.Error("Error fetching computers for network", "error", err, "networkID", computerNetwork.NetworkID)
+			// Continue without computers for this network, or handle as an error
+		}
+
+		var computerInfos []smodels.ComputerInfo
+		for _, computer := range computersInNetwork {
+			computerInfos = append(computerInfos, smodels.ComputerInfo{
+				Name:       computer.ComputerName,
+				ComputerIP: computer.ComputerIP,
+			})
+		}
+
 		networkInfo := smodels.ComputerNetworkInfo{
 			NetworkID:     computerNetwork.NetworkID,
 			NetworkName:   network.Name,
 			JoinedAt:      computerNetwork.JoinedAt,
 			LastConnected: computerNetwork.LastConnected,
-			PeerIP:        computerNetwork.PeerIP,
+			ComputerIP:    computerNetwork.ComputerIP,
+			Computers:     computerInfos,
 		}
 		response.Networks = append(response.Networks, networkInfo)
 	}
@@ -1160,14 +1174,6 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 
 	// Send networks response
 	s.sendSignal(conn, smodels.TypeComputerNetworks, response, originalID)
-
-	// If HTTP request is provided, also send client IP information
-	if httpReq != nil {
-		ipInfo := s.getClientIPInfo(httpReq)
-		// Generate a new message ID for the IP info
-		ipMsgID, _ := utils.GenerateMessageID()
-		s.sendSignal(conn, smodels.TypeClientIPInfo, ipInfo, ipMsgID)
-	}
 }
 
 // InitiateGracefulShutdown starts the graceful shutdown process
@@ -1261,48 +1267,4 @@ func (s *WebSocketServer) persistStateForRestart() {
 // WaitForShutdown blocks until the server has shut down
 func (s *WebSocketServer) WaitForShutdown() {
 	<-s.shutdownChan
-}
-
-// extractIP extracts the client's IP address from the request
-// getClientIPInfo extracts IPv4 and IPv6 addresses from the client request
-func (s *WebSocketServer) getClientIPInfo(r *http.Request) smodels.ClientIPInfoResponse {
-	ipInfo := smodels.ClientIPInfoResponse{}
-
-	// Get the client's remote address
-	remoteAddr := r.RemoteAddr
-
-	// Check for X-Forwarded-For header (common in proxied environments)
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		// X-Forwarded-For can contain multiple IPs, take the first one
-		ips := strings.Split(forwarded, ",")
-		if len(ips) > 0 {
-			remoteAddr = strings.TrimSpace(ips[0])
-		}
-	}
-
-	// Check for X-Real-IP header (another common proxy header)
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		remoteAddr = realIP
-	}
-
-	// Parse the IP address
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		// If SplitHostPort fails, assume the remoteAddr is just an IP
-		host = remoteAddr
-	}
-
-	// Parse the IP to determine if it's IPv4 or IPv6
-	ip := net.ParseIP(host)
-	if ip != nil {
-		if ip.To4() != nil {
-			// It's an IPv4 address
-			ipInfo.IPv4 = ip.String()
-		} else {
-			// It's an IPv6 address
-			ipInfo.IPv6 = ip.String()
-		}
-	}
-
-	return ipInfo
 }

@@ -3,9 +3,9 @@ package data
 import (
 	"log"
 	"sync"
+	"time"
 
 	"fyne.io/fyne/v2/data/binding"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 )
 
 // ConnectionState representa o estado da conexão
@@ -37,6 +37,22 @@ const (
 	// EventError é emitido quando ocorre um erro
 	EventError EventType = "error"
 )
+
+// ComputerInfo represents information about a computer in a network
+type ComputerInfo struct {
+	Name      string `json:"name"`
+	ComputerIP string `json:"computer_ip"`
+	PublicKey string `json:"public_key"`
+}
+
+// Network represents a VPN network
+type Network struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	LastConnected time.Time `json:"last_connected"`
+	ComputerIP        string    `json:"computer_ip,omitempty"`
+	Computers         []ComputerInfo `json:"computers"`
+}
 
 // Event representa um evento da camada de dados
 type Event struct {
@@ -168,13 +184,13 @@ func (rdl *RealtimeDataLayer) SetNetworkInfo(name string) {
 }
 
 // SetNetworks define a lista completa de salas
-func (rdl *RealtimeDataLayer) SetNetworks(networks []*storage.Network) {
+func (rdl *RealtimeDataLayer) SetNetworks(networks []*Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
 	log.Printf("SetNetworks: Setting %d networks", len(networks))
 
-	// Convert []*storage.Network to []interface{}
+	// Convert []*Network to []interface{}
 	var untypedNetworks []interface{}
 	for _, network := range networks {
 		untypedNetworks = append(untypedNetworks, network)
@@ -183,13 +199,13 @@ func (rdl *RealtimeDataLayer) SetNetworks(networks []*storage.Network) {
 }
 
 // AddNetwork adiciona uma nova sala à lista
-func (rdl *RealtimeDataLayer) AddNetwork(network *storage.Network) {
+func (rdl *RealtimeDataLayer) AddNetwork(network *Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
 	currentNetworks, _ := rdl.Networks.Get()
 	for _, existing := range currentNetworks {
-		if n, ok := existing.(*storage.Network); ok && n.ID == network.ID {
+		if n, ok := existing.(*Network); ok && n.ID == network.ID {
 			// Network already exists, do not add
 			return
 		}
@@ -205,7 +221,7 @@ func (rdl *RealtimeDataLayer) RemoveNetwork(networkID string) {
 	currentNetworks, _ := rdl.Networks.Get()
 	var updatedNetworks []interface{}
 	for _, r := range currentNetworks {
-		if network, ok := r.(*storage.Network); ok && network.ID != networkID {
+				if network, ok := r.(*Network); ok && network.ID != networkID {
 			updatedNetworks = append(updatedNetworks, network)
 		}
 	}
@@ -213,7 +229,7 @@ func (rdl *RealtimeDataLayer) RemoveNetwork(networkID string) {
 }
 
 // UpdateNetwork atualiza uma sala existente na lista
-func (rdl *RealtimeDataLayer) UpdateNetwork(index int, network *storage.Network) {
+func (rdl *RealtimeDataLayer) UpdateNetwork(index int, network *Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
@@ -225,15 +241,15 @@ func (rdl *RealtimeDataLayer) UpdateNetwork(index int, network *storage.Network)
 }
 
 // GetNetworks retorna a lista atual de salas
-func (rdl *RealtimeDataLayer) GetNetworks() []*storage.Network {
+func (rdl *RealtimeDataLayer) GetNetworks() []*Network {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
 	currentNetworks, _ := rdl.Networks.Get()
 	log.Printf("GetNetworks: Retrieved %d networks", len(currentNetworks))
-	networks := make([]*storage.Network, len(currentNetworks))
+	networks := make([]*Network, len(currentNetworks))
 	for i, r := range currentNetworks {
-		if network, ok := r.(*storage.Network); ok {
+		if network, ok := r.(*Network); ok {
 			networks[i] = network
 		} else {
 			log.Printf("GetNetworks: Type assertion failed for network at index %d", i)

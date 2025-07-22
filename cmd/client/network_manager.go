@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	st "github.com/itxtoledo/govpn/cmd/client/storage"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 	sclient "github.com/itxtoledo/govpn/libs/signaling/client"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
@@ -32,20 +32,19 @@ type NetworkManager struct {
 	VirtualNetwork    NetworkInterface
 	SignalingServer   *sclient.SignalingClient
 	NetworkID         string
-	Computers         []smodels.Computer
 	connectionState   ConnectionState
 	ReconnectAttempts int
 	MaxReconnects     int
 
 	// Dependencies
 	RealtimeData       *data.RealtimeDataLayer
-	ConfigManager      *st.ConfigManager
+	ConfigManager      *storage.ConfigManager
 	refreshNetworkList func()
 	refreshUI          func()
 }
 
 // NewNetworkManager creates a new instance of NetworkManager
-func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *st.ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
+func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *storage.ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
 	nm := &NetworkManager{
 		connectionState:    ConnectionStateDisconnected,
 		ReconnectAttempts:  0,
@@ -96,8 +95,66 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 		case smodels.TypeKicked:
 			nm.refreshNetworkList()
 		case smodels.TypeComputerJoined:
+			var computerJoinedNotification smodels.ComputerJoinedNotification
+			if err := json.Unmarshal(payload, &computerJoinedNotification); err != nil {
+				log.Printf("Failed to unmarshal computer joined notification: %v", err)
+				return
+			}
+
+			log.Printf("Computer %s (IP: %s) joined network %s", computerJoinedNotification.ComputerName, computerJoinedNotification.ComputerIP, computerJoinedNotification.NetworkID)
+
+			// Find the network and add the new computer
+			networks := nm.RealtimeData.GetNetworks()
+			for i, network := range networks {
+				if network.ID == computerJoinedNotification.NetworkID {
+					// Check if computer already exists to avoid duplicates
+					computerExists := false
+					for _, computer := range network.Computers {
+						if computer.PublicKey == computerJoinedNotification.PublicKey {
+							computerExists = true
+							break
+						}
+					}
+
+					if !computerExists {
+						newComputer := data.ComputerInfo{
+							Name:       computerJoinedNotification.ComputerName,
+							ComputerIP: computerJoinedNotification.ComputerIP,
+							PublicKey:  computerJoinedNotification.PublicKey,
+						}
+						network.Computers = append(network.Computers, newComputer)
+						nm.RealtimeData.UpdateNetwork(i, network)
+						log.Printf("Added computer %s to network %s", newComputer.Name, network.Name)
+					}
+					break
+				}
+			}
 			nm.refreshNetworkList()
 		case smodels.TypeComputerLeft:
+			var computerLeftNotification smodels.ComputerLeftNotification
+			if err := json.Unmarshal(payload, &computerLeftNotification); err != nil {
+				log.Printf("Failed to unmarshal computer left notification: %v", err)
+				return
+			}
+
+			log.Printf("Computer with public key %s left network %s", computerLeftNotification.PublicKey, computerLeftNotification.NetworkID)
+
+			// Find the network and remove the computer
+			networks := nm.RealtimeData.GetNetworks()
+			for i, network := range networks {
+				if network.ID == computerLeftNotification.NetworkID {
+					updatedComputers := []data.ComputerInfo{}
+					for _, computer := range network.Computers {
+						if computer.PublicKey != computerLeftNotification.PublicKey {
+							updatedComputers = append(updatedComputers, computer)
+						}
+					}
+					network.Computers = updatedComputers
+					nm.RealtimeData.UpdateNetwork(i, network)
+					log.Printf("Removed computer with public key %s from network %s", computerLeftNotification.PublicKey, network.Name)
+					break
+				}
+			}
 			nm.refreshNetworkList()
 		case smodels.TypeComputerNetworks:
 			// For TypeComputerNetworks, we need to unmarshal the payload to update the networks list
@@ -107,46 +164,39 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				return
 			}
 
-			// Convert smodels.Network to storage.Network
-			updatedNetworks := make([]*st.Network, 0, len(computerNetworksResponse.Networks))
+			log.Println("Received ComputerNetworks update:")
 			for _, network := range computerNetworksResponse.Networks {
-				storageNetwork := &st.Network{
+				log.Printf("  Network: %s (ID: %s)", network.NetworkName, network.NetworkID)
+				for _, computer := range network.Computers {
+					log.Printf("    Computer: %s (IP: %s)", computer.Name, computer.ComputerIP)
+				}
+			}
+
+			// Convert smodels.Network to data.Network
+			updatedNetworks := make([]*data.Network, 0, len(computerNetworksResponse.Networks))
+			for _, network := range computerNetworksResponse.Networks {
+				// Convert smodels.ComputerInfo to storage.ComputerInfo
+				computers := make([]data.ComputerInfo, 0, len(network.Computers))
+				for _, computer := range network.Computers {
+					computers = append(computers, data.ComputerInfo{
+						Name:       computer.Name,
+						ComputerIP: computer.ComputerIP,
+						PublicKey:  computer.PublicKey,
+					})
+				}
+
+				dataNetwork := &data.Network{
 					ID:            network.NetworkID,
 					Name:          network.NetworkName,
 					LastConnected: network.LastConnected,
-					PeerIP:        network.PeerIP,
+					ComputerIP:    network.ComputerIP,
+					Computers:     computers,
 				}
-				updatedNetworks = append(updatedNetworks, storageNetwork)
+				updatedNetworks = append(updatedNetworks, dataNetwork)
 			}
 			// Update the RealtimeDataLayer with the new networks list
 			nm.RealtimeData.SetNetworks(updatedNetworks)
 			nm.refreshNetworkList()
-		case smodels.TypeClientIPInfo:
-			// Handle client IP information
-			var ipInfo smodels.ClientIPInfoResponse
-			if err := json.Unmarshal(payload, &ipInfo); err != nil {
-				log.Printf("Failed to unmarshal client IP info in handler: %v", err)
-				return
-			}
-
-			// Format the IP information for display
-			ipDisplay := ""
-			if ipInfo.IPv4 != "" {
-				ipDisplay = ipInfo.IPv4
-			}
-			if ipInfo.IPv6 != "" {
-				if ipDisplay != "" {
-					ipDisplay += " / " + ipInfo.IPv6
-				} else {
-					ipDisplay = ipInfo.IPv6
-				}
-			}
-			if ipDisplay == "" {
-				ipDisplay = "N/A"
-			}
-
-			// Update the computer IP in the realtime data
-			nm.RealtimeData.SetComputerIP(ipDisplay)
 		}
 	}
 	nm.SignalingServer = sclient.NewSignalingClient(publicKey, signalingHandler)
@@ -237,27 +287,9 @@ func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 	// Store network information for current connection
 	nm.NetworkID = res.NetworkID
 
-	// Update the current computer's PeerIP in the NetworkManager's Computers list
-	// This assumes the creator is automatically connected and their IP is returned
-	if len(nm.Computers) > 0 && nm.Computers[0].ID == nm.ConfigManager.GetConfig().PublicKey {
-		nm.Computers[0].PeerIP = res.PeerIP
-	} else {
-		// If the computer list is empty or the current computer is not found,
-		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []smodels.Computer{
-			{
-				ID:       nm.ConfigManager.GetConfig().PublicKey,
-				Name:     nm.ConfigManager.GetConfig().ComputerName,
-				OwnerID:  nm.ConfigManager.GetConfig().PublicKey,
-				IsOnline: true,
-				PeerIP:   res.PeerIP,
-			},
-		}
-	}
-
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo(res.NetworkID)
-	nm.RealtimeData.SetComputerIP(res.PeerIP)
+	nm.RealtimeData.SetComputerIP(res.ComputerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, res.NetworkID, nil)
 
 	// Update UI
@@ -286,27 +318,9 @@ func (nm *NetworkManager) JoinNetwork(networkID string, pin string, computername
 	// Store network information for current connection
 	nm.NetworkID = networkID
 
-	// Update the current computer's PeerIP in the NetworkManager's Computers list
-	// This assumes the joined user's IP is returned
-	if len(nm.Computers) > 0 && nm.Computers[0].ID == nm.ConfigManager.GetConfig().PublicKey {
-		nm.Computers[0].PeerIP = res.PeerIP
-	} else {
-		// If the computer list is empty or the current computer is not found,
-		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []smodels.Computer{
-			{
-				ID:       nm.ConfigManager.GetConfig().PublicKey,
-				Name:     nm.ConfigManager.GetConfig().ComputerName,
-				OwnerID:  nm.ConfigManager.GetConfig().PublicKey,
-				IsOnline: true,
-				PeerIP:   res.PeerIP,
-			},
-		}
-	}
-
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo(networkID)
-	nm.RealtimeData.SetComputerIP(res.PeerIP)
+	nm.RealtimeData.SetComputerIP(res.ComputerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
 
 	// Update UI
@@ -352,27 +366,9 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 	// Store network information for current connection
 	nm.NetworkID = networkID
 
-	// Update the current computer's PeerIP in the NetworkManager's Computers list
-	// This assumes the connected user's IP is returned
-	if len(nm.Computers) > 0 && nm.Computers[0].ID == nm.ConfigManager.GetConfig().PublicKey {
-		nm.Computers[0].PeerIP = res.PeerIP
-	} else {
-		// If the computer list is empty or the current computer is not found,
-		// initialize it with the current computer's info including the PeerIP
-		nm.Computers = []smodels.Computer{
-			{
-				ID:       nm.ConfigManager.GetConfig().PublicKey,
-				Name:     nm.ConfigManager.GetConfig().ComputerName,
-				OwnerID:  nm.ConfigManager.GetConfig().PublicKey,
-				IsOnline: true,
-				PeerIP:   res.PeerIP,
-			},
-		}
-	}
-
 	// Update data layer (without password since we don't store it)
 	nm.RealtimeData.SetNetworkInfo(networkID)
-	nm.RealtimeData.SetComputerIP(res.PeerIP)
+	nm.RealtimeData.SetComputerIP(res.ComputerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, networkID, nil)
 
 	// Refresh network list now that we have re-connected to the network
@@ -409,9 +405,6 @@ func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 		nm.RealtimeData.EmitEvent(data.EventNetworkDisconnected, networkID, nil)
 	}
 
-	// Clear the computers list
-	nm.Computers = []smodels.Computer{}
-
 	// Refresh the network list UI
 	nm.refreshNetworkList()
 
@@ -444,9 +437,6 @@ func (nm *NetworkManager) LeaveNetwork() error {
 
 	// Clear network information
 	nm.NetworkID = ""
-
-	// Clear the computers list
-	nm.Computers = []smodels.Computer{}
 
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo("Not connected")
@@ -484,9 +474,6 @@ func (nm *NetworkManager) LeaveNetworkById(networkID string) error {
 	if nm.NetworkID == networkID {
 		nm.NetworkID = ""
 
-		// Clear the computers list
-		nm.Computers = []smodels.Computer{}
-
 		// Update data layer
 		nm.RealtimeData.SetNetworkInfo("Not connected")
 	}
@@ -510,9 +497,6 @@ func (nm *NetworkManager) HandleNetworkDeleted(networkID string) error {
 	// If we're in this network, clear our network data
 	if nm.NetworkID == networkID {
 		nm.NetworkID = ""
-
-		// Clear the computers list
-		nm.Computers = []smodels.Computer{}
 
 		// Update data layer
 		nm.RealtimeData.SetNetworkInfo("Not connected")

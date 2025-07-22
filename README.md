@@ -35,7 +35,7 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
   - ClientInfo: Information about connected clients
 
 - **libs/network**: Manages the virtual network interfaces and packet handling, including:
-  - VirtualNetwork: Main class that coordinates peer communication
+  - VirtualNetwork: Main class that coordinates computer communication
   - Virtual IP address mapping
   - Encapsulation and routing of packets between clients
 - **libs/signaling**: Provides the client-side signaling logic and data models for WebSocket communication with the server, including:
@@ -81,12 +81,12 @@ sequenceDiagram
     Server-->>ClientB: Authentication Success
 
     ClientA->>Server: Create/Join Network Request
-    Server->>ClientA: Network Confirmation / Peer List
+    Server->>ClientA: Network Confirmation / Computer List
     Note over Server: Server updates its in-memory state and database with network info.
 
     ClientB->>Server: Join Network Request
-    Server->>ClientB: Network Confirmation / Peer List
-    Note over Server: Server relays peer information to facilitate P2P setup.
+    Server->>ClientB: Network Confirmation / Computer List
+    Note over Server: Server relays computer information to facilitate P2P setup.
 
     ClientA->>Server: Send Offer (WebRTC SDP) to ClientB
     Server-->>ClientB: Relay Offer from ClientA
@@ -118,8 +118,8 @@ sequenceDiagram
 
 1. **Signaling Phase**:
    - The server acts as a crucial intermediary for initial connection establishment and coordination.
-   - Clients connect to the server via WebSockets, authenticate using Ed25519 keys, and exchange metadata about available networks and peers.
-   - The server maintains an in-memory representation of active networks and connected peers, ensuring real-time updates.
+   - Clients connect to the server via WebSockets, authenticate using Ed25519 keys, and exchange metadata about available networks and computers.
+   - The server maintains an in-memory representation of active networks and connected computers, ensuring real-time updates.
    
 2. **P2P Connection Establishment**:
    - Once clients are authenticated and aware of each other, they use the server to exchange WebRTC signaling messages (SDP offers/answers and ICE candidates).
@@ -178,7 +178,7 @@ README.md                        # Main documentation
 - **WebSocketServer**: The core of the server, responsible for:
     - Managing all active WebSocket connections.
     - Handling incoming signaling messages from clients.
-    - Maintaining in-memory state of networks and connected peers.
+    - Maintaining in-memory state of networks and connected computers.
     - Relaying WebRTC signaling messages between clients.
 - **SupabaseManager**: A dedicated module for interacting with the Supabase backend, handling:
     - Network creation, retrieval, and deletion.
@@ -187,12 +187,12 @@ README.md                        # Main documentation
 - **Network Management**: Encompasses the logic for:
     - Creating new virtual networks with unique IDs and passwords.
     - Allowing clients to join existing networks.
-    - Assigning unique virtual IP addresses to connected peers within a network.
+    - Assigning unique virtual IP addresses to connected computers within a network.
     - Handling network activity updates and cleanup of stale networks.
 - **Authentication**: Implements secure client authentication based on Ed25519 public keys, ensuring only authorized clients can interact with the server.
 - **Connection Management**: Manages the lifecycle of client connections, including:
-    - Tracking connected peers in memory (`connectedPeers` map).
-    - Handling disconnections and notifying other peers in the network.
+    - Tracking connected computers in memory (`connectedComputers` map).
+    - Handling disconnections and notifying other computers in the network.
     - Ensuring proper cleanup of resources when clients disconnect or leave networks.
     - Implementing graceful shutdown procedures.
 - **StatsManager**: Collects and provides real-time statistics about server performance, active connections, and network usage.
@@ -215,8 +215,8 @@ The server implements a robust WebSocket API for communication with clients. Ful
 - **Server to Client**:
   - `NetworkCreated`: Network creation confirmation
   - `NetworkJoined`: Network join confirmation
-  - `PeerJoined`: Notification of a new peer in the network
-  - `PeerLeft`: Notification of a peer leaving the network
+  - `ComputerJoined`: Notification of a new computer in the network
+  - `ComputerLeft`: Notification of a computer leaving the network
   - `NetworkDeleted`: Notification of network deletion
 
 ## Server Environment Variables

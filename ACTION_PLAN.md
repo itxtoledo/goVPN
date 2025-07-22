@@ -1,6 +1,6 @@
 # goVPN - Full VPN Implementation Plan
 
-This document outlines the necessary steps to evolve goVPN from a signaling/discovery application into a full peer-to-peer VPN client, similar to Hamachi, using WebRTC and a virtual network interface (TUN).
+This document outlines the necessary steps to evolve goVPN from a signaling/discovery application into a full computer-to-computer VPN client, similar to Hamachi, using WebRTC and a virtual network interface (TUN).
 
 ---
 
@@ -27,52 +27,52 @@ This section focuses on creating the virtual network adapter that the operating 
 
 ## Section 2: P2P WebRTC Connectivity
 
-This section details the establishment of direct WebRTC data channels between all peers in a network.
+This section details the establishment of direct WebRTC data channels between all computers in a network.
 
 - [ ] **2.1: Enhance Signaling Protocol**
     - **Component**: Server & Client (`libs/models/models.go`, `cmd/server/websocket_server.go`)
     - **Details**: The current signaling protocol needs to be extended to support WebRTC negotiation (SDP and ICE candidates).
     - **Action**:
         - Add new `MessageType` values to `models.go` for `SdpOffer`, `SdpAnswer`, and `IceCandidate`.
-        - Create corresponding structs for these messages. They should include a `TargetID` field to route the message to the correct peer.
+        - Create corresponding structs for these messages. They should include a `TargetID` field to route the message to the correct computer.
         - The server must be updated to parse these new messages and forward them to the specified `TargetID` within the same network.
 
-- [ ] **2.2: Implement Full-Mesh PeerConnection Logic**
+- [ ] **2.2: Implement Full-Mesh ComputerConnection Logic**
     - **Component**: Client
     - **Details**: Each client in a network must establish a direct WebRTC connection with every other client in that network.
     - **Action**:
-        - When a `PeerJoined` notification is received, the existing client should initiate a new `webrtc.PeerConnection` for the new peer.
-        - Create an SDP offer and send it to the new peer via the signaling server (`SdpOffer` message).
-        - Implement handlers to process `SdpOffer`, `SdpAnswer`, and `IceCandidate` messages from other peers to complete the connection lifecycle.
+        - When a `ComputerJoined` notification is received, the existing client should initiate a new `webrtc.ComputerConnection` for the new computer.
+        - Create an SDP offer and send it to the new computer via the signaling server (`SdpOffer` message).
+        - Implement handlers to process `SdpOffer`, `SdpAnswer`, and `IceCandidate` messages from other computers to complete the connection lifecycle.
         - Use the `github.com/pion/webrtc/v3` library, which you likely already have as a dependency through Fyne.
 
-- [ ] **2.3: Manage Peer Connections & Data Channels**
+- [ ] **2.3: Manage Computer Connections & Data Channels**
     - **Component**: Client
     - **Details**: We need a way to manage the collection of active P2P connections.
     - **Action**:
-        - Create a map to store active connections, for instance: `connections := make(map[string]*webrtc.DataChannel)`. The key should be the peer's public key.
-        - When a `PeerLeft` notification is received, find the corresponding `PeerConnection` in the map, close it, and remove it.
+        - Create a map to store active connections, for instance: `connections := make(map[string]*webrtc.DataChannel)`. The key should be the computer's public key.
+        - When a `ComputerLeft` notification is received, find the corresponding `ComputerConnection` in the map, close it, and remove it.
         - When a Data Channel's `OnOpen` event fires, it is ready for routing packets.
 
 ---
 
 ## Section 3: Packet Routing
 
-This is the heart of the VPN: reading real IP packets, sending them to the correct peer, and writing received packets back to the system.
+This is the heart of the VPN: reading real IP packets, sending them to the correct computer, and writing received packets back to the system.
 
 - [ ] **3.1: Implement Packet Forwarding: TUN -> WebRTC**
     - **Component**: Client
-    - **Details**: Capture outgoing IP packets from the OS (via the TUN interface) and forward them to the correct peer over WebRTC.
+    - **Details**: Capture outgoing IP packets from the OS (via the TUN interface) and forward them to the correct computer over WebRTC.
     - **Action**:
         - Create a dedicated goroutine that runs in a loop: `ifce.Read(packetBuffer)`.
         - For each packet read, parse its header to determine the destination IP address.
-        - Look up the destination IP in a routing table (which maps virtual IPs to peer public keys) to find the target peer.
-        - Retrieve the correct peer's `DataChannel` from the map created in 2.3.
+        - Look up the destination IP in a routing table (which maps virtual IPs to computer public keys) to find the target computer.
+        - Retrieve the correct computer's `DataChannel` from the map created in 2.3.
         - Send the raw `packetBuffer` bytes directly over the Data Channel.
 
 - [ ] **3.2: Implement Packet Forwarding: WebRTC -> TUN**
     - **Component**: Client
-    - **Details**: Receive IP packets from peers over WebRTC and write them to the TUN interface so the OS can process them.
+    - **Details**: Receive IP packets from computers over WebRTC and write them to the TUN interface so the OS can process them.
     - **Action**:
         - The `OnMessage` handler for each Data Channel will receive raw IP packet data.
         - Take the received byte slice (`message.Data`) and write it directly to the TUN interface: `ifce.Write(message.Data)`.
