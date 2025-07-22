@@ -248,7 +248,7 @@ type ComputerNetwork struct {
 	ComputerName  string    `json:"computername"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
-	ComputerIP    string    `json:"peer_ip"`
+	PeerIP        string    `json:"peer_ip"`
 }
 
 // AddComputerToNetwork adds a computer to a network in the computer_networks table

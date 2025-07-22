@@ -228,17 +228,11 @@ type ComputerNetworksResponse struct {
 	Networks []ComputerNetworkInfo `json:"networks"`
 }
 
-// ClientIPInfoResponse represents client IP address information
-type ClientIPInfoResponse struct {
-	IPv4 string `json:"ipv4"`
-	IPv6 string `json:"ipv6"`
-}
-
 // Computer represents a computer connected to a network
 type Computer struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	OwnerID    string `json:"owner_id"`
-	IsOnline   bool   `json:"is_online"`
-	ComputerIP string `json:"computer_ip,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	OwnerID  string `json:"owner_id"`
+	IsOnline bool   `json:"is_online"`
+	PeerIP   string `json:"computer_ip,omitempty"`
 }

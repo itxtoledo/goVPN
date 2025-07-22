@@ -119,32 +119,34 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				computersContainer.Add(currentComputerItem)
 
 				// Add other computers in the network
-				if network.Computers != nil && len(network.Computers) > 0 {
-						for _, computer := range network.Computers {
-							// Skip our own computer if it's already added
-							if computer.ComputerIP == myComputerIP {
-								continue
-							}
-
-							// For now, assume all computers from the server are "online"
-							// In a real scenario, you might have a separate mechanism to check computer liveness
-							var activity = icon.ConnectionOn 
-
-							var displayComputerName string
-							if len(computer.Name) > 5 {
-								displayComputerName = computer.Name[:5] + "..."
-							} else {
-								displayComputerName = computer.Name
-							}
-							computerItem := container.NewHBox(
-								widget.NewIcon(activity),
-								widget.NewLabelWithStyle(displayComputerName, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
-								layout.NewSpacer(),
-								widget.NewLabelWithStyle(computer.ComputerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
-							)
-							computersContainer.Add(computerItem)
+				if len(network.Computers) > 0 {
+					for _, computer := range network.Computers {
+						// Skip our own computer if it's already added
+						if computer.ComputerIP == myComputerIP {
+							continue
 						}
+
+						// Create activity indicator based on online status
+						var activity = icon.ConnectionOff
+						if computer.IsOnline {
+							activity = icon.ConnectionOn
+						}
+
+						var displayComputerName string
+						if len(computer.Name) > 5 {
+							displayComputerName = computer.Name[:5] + "..."
+						} else {
+							displayComputerName = computer.Name
+						}
+						computerItem := container.NewHBox(
+							widget.NewIcon(activity),
+							widget.NewLabelWithStyle(displayComputerName, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}),
+							layout.NewSpacer(),
+							widget.NewLabelWithStyle(computer.ComputerIP, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true}),
+						)
+						computersContainer.Add(computerItem)
 					}
+				}
 
 				// Create computers section
 				computersBox := computersContainer

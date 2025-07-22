@@ -40,18 +40,19 @@ const (
 
 // ComputerInfo represents information about a computer in a network
 type ComputerInfo struct {
-	Name      string `json:"name"`
+	Name       string `json:"name"`
 	ComputerIP string `json:"computer_ip"`
-	PublicKey string `json:"public_key"`
+	PublicKey  string `json:"public_key"`
+	IsOnline   bool   `json:"is_online"`
 }
 
 // Network represents a VPN network
 type Network struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	LastConnected time.Time `json:"last_connected"`
-	ComputerIP        string    `json:"computer_ip,omitempty"`
-	Computers         []ComputerInfo `json:"computers"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	LastConnected time.Time      `json:"last_connected"`
+	ComputerIP    string         `json:"computer_ip,omitempty"`
+	Computers     []ComputerInfo `json:"computers"`
 }
 
 // Event representa um evento da camada de dados
@@ -221,7 +222,7 @@ func (rdl *RealtimeDataLayer) RemoveNetwork(networkID string) {
 	currentNetworks, _ := rdl.Networks.Get()
 	var updatedNetworks []interface{}
 	for _, r := range currentNetworks {
-				if network, ok := r.(*Network); ok && network.ID != networkID {
+		if network, ok := r.(*Network); ok && network.ID != networkID {
 			updatedNetworks = append(updatedNetworks, network)
 		}
 	}

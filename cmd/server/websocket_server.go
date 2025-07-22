@@ -387,7 +387,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 			s.sendErrorSignal(conn, "Error retrieving existing IP", originalID)
 			return
 		}
-		assignedIP = computer.ComputerIP
+		assignedIP = computer.PeerIP
 
 		// Update connection status in memory
 		if _, ok := s.connectedComputers[req.NetworkID]; !ok {
@@ -452,7 +452,7 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 						"network_id":   req.NetworkID,
 						"public_key":   existingPublicKey,
 						"computername": existingComputer.ComputerName,
-						"computer_ip":  existingComputer.ComputerIP,
+						"computer_ip":  existingComputer.PeerIP,
 					}
 					s.sendSignal(conn, smodels.TypeComputerJoined, existingComputerPayload, "")
 				}
@@ -513,7 +513,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 			"clientAddr", conn.RemoteAddr().String(),
 			"networkID", req.NetworkID,
 			"activeClients", len(s.networks[req.NetworkID]),
-			"assignedIP", computer.ComputerIP)
+			"assignedIP", computer.PeerIP)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
@@ -521,7 +521,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	responsePayload := map[string]interface{}{
 		"network_id":   req.NetworkID,
 		"network_name": network.Network.Name,
-		"computer_ip":  computer.ComputerIP,
+		"computer_ip":  computer.PeerIP,
 	}
 	s.sendSignal(conn, smodels.TypeNetworkConnected, responsePayload, originalID)
 
@@ -532,7 +532,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 				"network_id":   req.NetworkID,
 				"public_key":   req.PublicKey,
 				"computername": req.ComputerName,
-				"computer_ip":  computer.ComputerIP,
+				"computer_ip":  computer.PeerIP,
 			}
 			s.sendSignal(computerConn, smodels.TypeComputerConnected, computerConnectedPayload, "")
 		}
@@ -549,7 +549,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 						"network_id":   req.NetworkID,
 						"public_key":   existingPublicKey,
 						"computername": existingComputer.ComputerName,
-						"computer_ip":  existingComputer.ComputerIP,
+						"computer_ip":  existingComputer.PeerIP,
 					}
 					s.sendSignal(conn, smodels.TypeComputerConnected, existingComputerPayload, "")
 				}
@@ -1151,7 +1151,7 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 		for _, computer := range computersInNetwork {
 			computerInfos = append(computerInfos, smodels.ComputerInfo{
 				Name:       computer.ComputerName,
-				ComputerIP: computer.ComputerIP,
+				ComputerIP: computer.PeerIP,
 			})
 		}
 
@@ -1160,7 +1160,7 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 			NetworkName:   network.Name,
 			JoinedAt:      computerNetwork.JoinedAt,
 			LastConnected: computerNetwork.LastConnected,
-			ComputerIP:    computerNetwork.ComputerIP,
+			ComputerIP:    computerNetwork.PeerIP,
 			Computers:     computerInfos,
 		}
 		response.Networks = append(response.Networks, networkInfo)
