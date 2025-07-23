@@ -15,6 +15,7 @@ This document describes the WebSocket API for the GoVPN server, allowing develop
    - [Deleting a Network](#deleting-a-network)
    - [Connecting to a Previously Joined Network](#connecting-to-a-previously-joined-network)
    - [Disconnecting from a Network](#disconnecting-from-a-network)
+   - [Updating Client Information](#updating-client-information)
 5. [Computer Management](#computer-management)
    - [Kicking a Computer](#kicking-a-computer)
 6. [Connection Management](#connection-management)
@@ -73,6 +74,7 @@ The GoVPN system uses a message format that encapsulates all communications:
 - `Candidate`: Send an ICE candidate to a computer
 - `Kick`: Kick a computer from a network (network owner only)
 - `Rename`: Rename a network (network owner only)
+- `UpdateClientInfo`: Update the client's name on the server
 
 ### Server to Client Message Types
 
@@ -87,6 +89,7 @@ The GoVPN system uses a message format that encapsulates all communications:
 - `ComputerLeft`: A computer left the network
 - `ComputerConnected`: A computer connected to the network (after previously joining)
 - `ComputerDisconnected`: A computer disconnected from the network (without leaving)
+- `ComputerRenamed`: A computer in the network has been renamed
 - `Kicked`: You were kicked from a network
 - `KickSuccess`: Successfully kicked a computer
 - `RenameSuccess`: Successfully renamed a network
@@ -390,7 +393,7 @@ Common error messages include:
   "type": "DisconnectNetwork",
   "payload": {
     "network_id": "abc123",
-    "public_key": "<base64-encoded-public-key>"
+    "public_key": "<base64-encoded-public_key>"
   }
 }
 ```
@@ -421,6 +424,59 @@ Common error messages include:
   }
 }
 ```
+
+### Updating Client Information
+
+This message is sent by the client to update its `computername` across all networks it has joined. The server will update the database and then send an updated list of networks to the client.
+
+**Request (ClientMessage):**
+
+```json
+{
+  "message_id": "<unique-message-id>",
+  "type": "UpdateClientInfo",
+  "payload": {
+    "public_key": "<base64-encoded-public-key>",
+    "client_name": "NewClientName"
+  }
+}
+```
+
+- `public_key`: Base64-encoded Ed25519 public key of the client.
+- `client_name`: The new name for the client.
+
+**Response (Success - ServerMessage):**
+
+Upon successful update, the server will send a `ComputerNetworks` message back to the client with the updated information.
+
+```json
+{
+  "message_id": "<same-message-id-from-request>",
+  "type": "ComputerNetworks",
+  "payload": {
+    "networks": [
+      // ... updated list of networks with the new client name
+    ]
+  }
+}
+```
+
+**Response (Error - ServerMessage):**
+
+```json
+{
+  "message_id": "<same-message-id-from-request>",
+  "type": "Error",
+  "payload": {
+    "error": "Error message here"
+  }
+}
+```
+
+Common error messages include:
+- "Public key is required for updating client info"
+- "Client name is required"
+- "Error updating client name"
 
 ## Computer Management
 

@@ -197,6 +197,31 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			// Update the RealtimeDataLayer with the new networks list
 			nm.RealtimeData.SetNetworks(updatedNetworks)
 			nm.refreshNetworkList()
+		case smodels.TypeComputerRenamed:
+			var notification smodels.ComputerRenamedNotification
+			if err := json.Unmarshal(payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal computer renamed notification: %v", err)
+				return
+			}
+
+			log.Printf("Computer %s in network %s renamed to %s", notification.PublicKey, notification.NetworkID, notification.NewComputerName)
+
+			// Find the network and update the computer's name
+			networks := nm.RealtimeData.GetNetworks()
+			for i, network := range networks {
+				if network.ID == notification.NetworkID {
+					for j, computer := range network.Computers {
+						if computer.PublicKey == notification.PublicKey {
+							network.Computers[j].Name = notification.NewComputerName
+							nm.RealtimeData.UpdateNetwork(i, network)
+							log.Printf("Updated computer name in UI for network %s", network.Name)
+							break
+						}
+					}
+					break
+				}
+			}
+			nm.refreshNetworkList()
 		}
 	}
 	nm.SignalingServer = sclient.NewSignalingClient(publicKey, signalingHandler)
@@ -263,6 +288,30 @@ func (nm *NetworkManager) handleDisconnection() {
 // GetConnectionState returns the connection state
 func (nm *NetworkManager) GetConnectionState() ConnectionState {
 	return nm.connectionState
+}
+
+// UpdateClientInfo envia as informações do cliente para o servidor
+func (nm *NetworkManager) UpdateClientInfo() {
+	if nm.connectionState != ConnectionStateConnected {
+		log.Println("Cannot update client info: not connected to server")
+		return
+	}
+
+	config := nm.ConfigManager.GetConfig()
+	clientName := config.ComputerName
+
+	log.Printf("Sending client info to server: %s", clientName)
+
+	// Criar a mensagem
+	msg := smodels.UpdateClientInfoRequest{
+		ClientName: clientName,
+	}
+
+	// Enviar a mensagem
+	_, err := nm.SignalingServer.SendMessage(smodels.TypeUpdateClientInfo, msg)
+	if err != nil {
+		log.Printf("Failed to send client info: %v", err)
+	}
 }
 
 // CreateNetwork creates a new network

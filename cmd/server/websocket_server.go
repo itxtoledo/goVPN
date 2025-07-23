@@ -210,10 +210,87 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleGetComputerNetworks(conn, req, originalID)
 
+		case smodels.TypeUpdateClientInfo:
+			var req smodels.UpdateClientInfoRequest
+			if err := json.Unmarshal(sigMsg.Payload, &req); err != nil {
+				s.sendErrorSignal(conn, "Invalid update client info request format", originalID)
+				continue
+			}
+
+			s.handleUpdateClientInfo(conn, req, originalID)
+
 		default:
 			logger.Warn("Unknown message type", "type", sigMsg.Type)
 			if originalID != "" {
 				s.sendErrorSignal(conn, "Unknown message type", originalID)
+			}
+		}
+	}
+}
+
+func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smodels.UpdateClientInfoRequest, originalID string) {
+	s.mu.Lock()
+
+	publicKey := req.PublicKey
+	if publicKey == "" {
+		s.mu.Unlock()
+		s.sendErrorSignal(conn, "Public key is required for updating client info", originalID)
+		return
+	}
+
+	// Associate public key with connection if not already present
+	if _, ok := s.clientToPublicKey[conn]; !ok {
+		s.clientToPublicKey[conn] = publicKey
+	}
+
+	if req.ClientName == "" {
+		s.mu.Unlock()
+		s.sendErrorSignal(conn, "Client name is required", originalID)
+		return
+	}
+	s.mu.Unlock() // Unlock before DB call
+
+	// Update client name in all networks
+	err := s.supabaseManager.UpdateClientNameInNetworks(publicKey, req.ClientName)
+	if err != nil {
+		logger.Error("Error updating client name in networks", "error", err)
+		s.sendErrorSignal(conn, "Error updating client name", originalID)
+		return
+	}
+
+	logger.Info("Client name updated", "publicKey", publicKey, "newName", req.ClientName)
+
+	// Send updated network list back to the client
+	getNetworksReq := smodels.GetComputerNetworksRequest{
+		BaseRequest: smodels.BaseRequest{
+			PublicKey: publicKey,
+		},
+	}
+	s.handleGetComputerNetworks(conn, getNetworksReq, originalID)
+
+	// Notify other clients in the networks about the name change
+	computerNetworks, err := s.supabaseManager.GetComputerNetworks(publicKey)
+	if err != nil {
+		logger.Error("Error getting computer networks for notification", "error", err)
+		return
+	}
+
+	for _, cn := range computerNetworks {
+		networkID := cn.NetworkID
+		s.mu.RLock()
+		connectionsInNetwork := s.networks[networkID]
+		s.mu.RUnlock()
+
+		for _, clientConn := range connectionsInNetwork {
+			clientPublicKey, ok := s.clientToPublicKey[clientConn]
+			if ok && clientPublicKey != publicKey {
+				// Send notification to other clients in the same network
+				notification := smodels.ComputerRenamedNotification{
+					NetworkID:    networkID,
+					PublicKey:    publicKey,
+					NewComputerName: req.ClientName,
+				}
+				s.sendSignal(clientConn, smodels.TypeComputerRenamed, notification, "")
 			}
 		}
 	}

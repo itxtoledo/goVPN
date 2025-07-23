@@ -144,7 +144,6 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				content := container.NewHBox(
 					container.NewVBox(
 						computersBox,
-						widget.NewSeparator(),
 						actionsBox,
 					),
 				)
