@@ -147,6 +147,9 @@ func (v *VPNClient) Run(defaultWebsocketURL string, realtimeData *data.RealtimeD
 			log.Println("Successfully connected to backend server in background")
 			realtimeData.SetStatusMessage("Connected")
 
+			// Enviar informações do cliente para o servidor
+			v.NetworkManager.UpdateClientInfo()
+
 			// Atualizar a lista de salas
 			refreshNetworkList()
 		}

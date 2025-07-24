@@ -361,3 +361,21 @@ func (sm *SupabaseManager) IsComputerInNetwork(networkID, publicKey string) (boo
 
 	return len(computerNetworks) > 0, nil
 }
+
+// UpdateClientNameInNetworks atualiza o nome do computador para uma determinada chave pública em todas as redes.
+func (sm *SupabaseManager) UpdateClientNameInNetworks(publicKey, newName string) error {
+	updateData := map[string]interface{}{
+		"computername": newName,
+	}
+
+	if sm.logLevel == "debug" {
+		logger.Debug("Updating client name in all networks", "publicKey", publicKey, "newName", newName)
+	}
+
+	_, _, err := sm.client.From("computer_networks").Update(updateData, "", "").Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return fmt.Errorf("failed to update client name in Supabase: %w", err)
+	}
+
+	return nil
+}

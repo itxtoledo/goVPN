@@ -17,6 +17,7 @@ const (
 	TypeRename              MessageType = "Rename"
 	TypePing                MessageType = "Ping"
 	TypeGetComputerNetworks MessageType = "GetComputerNetworks"
+	TypeUpdateClientInfo    MessageType = "UpdateClientInfo"
 
 	// Server to client message types
 	TypeError                MessageType = "Error"
@@ -30,6 +31,7 @@ const (
 	TypeComputerLeft         MessageType = "ComputerLeft"
 	TypeComputerConnected    MessageType = "ComputerConnected"
 	TypeComputerDisconnected MessageType = "ComputerDisconnected"
+	TypeComputerRenamed      MessageType = "ComputerRenamed"
 	TypeKicked               MessageType = "Kicked"
 	TypeKickSuccess          MessageType = "KickSuccess"
 	TypeRenameSuccess        MessageType = "RenameSuccess"
@@ -182,6 +184,13 @@ type ComputerDisconnectedNotification struct {
 	PublicKey string `json:"public_key"`
 }
 
+// ComputerRenamedNotification notifies that a computer has been renamed
+type ComputerRenamedNotification struct {
+	NetworkID    string `json:"network_id"`
+	PublicKey    string `json:"public_key"`
+	NewComputerName string `json:"new_computer_name"`
+}
+
 // NetworkDeletedNotification notifies that a network has been deleted
 type NetworkDeletedNotification struct {
 	NetworkID string `json:"network_id"`
@@ -203,6 +212,12 @@ type ServerShutdownNotification struct {
 // GetComputerNetworksRequest represents a request to get all networks a computer has joined
 type GetComputerNetworksRequest struct {
 	BaseRequest
+}
+
+// UpdateClientInfoRequest represents a request to update the client's name
+type UpdateClientInfoRequest struct {
+	BaseRequest
+	ClientName string `json:"client_name"`
 }
 
 // ComputerInfo represents information about a computer in a network

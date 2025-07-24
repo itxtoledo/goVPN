@@ -211,6 +211,7 @@ The server implements a robust WebSocket API for communication with clients. Ful
   - `LeaveNetwork`: Leaves a network
   - `Kick`: Kicks a computer from a network
   - `Rename`: Renames a network
+  - `UpdateClientInfo`: Updates the client's name on the server
 
 - **Server to Client**:
   - `NetworkCreated`: Network creation confirmation
@@ -218,6 +219,7 @@ The server implements a robust WebSocket API for communication with clients. Ful
   - `ComputerJoined`: Notification of a new computer in the network
   - `ComputerLeft`: Notification of a computer leaving the network
   - `NetworkDeleted`: Notification of network deletion
+  - `ComputerRenamed`: Notification that a computer in the network has been renamed
 
 ## Server Environment Variables
 

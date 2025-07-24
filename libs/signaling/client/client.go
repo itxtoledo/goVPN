@@ -532,19 +532,13 @@ func (s *SignalingClient) KickComputer(networkID string, targetID string) (*sign
 }
 
 // SendMessage envia uma mensagem para o servidor
-func (s *SignalingClient) SendMessage(messageType string, payload map[string]interface{}) (interface{}, error) {
+func (s *SignalingClient) SendMessage(messageType signaling_models.MessageType, payload interface{}) (interface{}, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
 
-	// Adicionar a chave pública ao payload
-	payload["publicKey"] = s.PublicKeyStr
-
-	// Converter o messageType para o tipo apropriado
-	msgType := signaling_models.MessageType(messageType)
-
 	// Enviar a mensagem usando a função de empacotamento
-	return s.sendPackagedMessage(msgType, payload)
+	return s.sendPackagedMessage(messageType, payload)
 }
 
 // IsConnected retorna se está conectado ao servidor

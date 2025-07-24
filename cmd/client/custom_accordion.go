@@ -186,7 +186,7 @@ func (item *CustomAccordionItem) updateContainer() {
 	})
 
 	// Create a container for the title row
-	titleContainer := container.NewPadded(tappableTitleContent)
+	titleContainer := tappableTitleContent
 
 	// Clear and rebuild container
 	if item.container != nil {
@@ -200,7 +200,9 @@ func (item *CustomAccordionItem) updateContainer() {
 
 	// Add content if open
 	if item.IsOpen && item.Content != nil {
-		item.container.Add(item.Content)
+		// Add padding to the content
+		paddedContent := container.NewPadded(item.Content)
+		item.container.Add(paddedContent)
 	}
 }
 
