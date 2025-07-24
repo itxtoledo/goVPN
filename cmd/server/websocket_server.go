@@ -219,12 +219,79 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 			s.handleUpdateClientInfo(conn, req, originalID)
 
+		case smodels.TypeSdpOffer:
+			var sdpOffer smodels.SdpOffer
+			if err := json.Unmarshal(sigMsg.Payload, &sdpOffer); err != nil {
+				s.sendErrorSignal(conn, "Invalid SDP offer format", originalID)
+				continue
+			}
+			s.handleWebRTCSignal(conn, sigMsg.Type, sdpOffer.TargetPublicKey, sigMsg.Payload, originalID)
+
+		case smodels.TypeSdpAnswer:
+			var sdpAnswer smodels.SdpAnswer
+			if err := json.Unmarshal(sigMsg.Payload, &sdpAnswer); err != nil {
+				s.sendErrorSignal(conn, "Invalid SDP answer format", originalID)
+				continue
+			}
+			s.handleWebRTCSignal(conn, sigMsg.Type, sdpAnswer.TargetPublicKey, sigMsg.Payload, originalID)
+
+		case smodels.TypeIceCandidate:
+			var iceCandidate smodels.IceCandidate
+			if err := json.Unmarshal(sigMsg.Payload, &iceCandidate); err != nil {
+				s.sendErrorSignal(conn, "Invalid ICE candidate format", originalID)
+				continue
+			}
+			s.handleWebRTCSignal(conn, sigMsg.Type, iceCandidate.TargetPublicKey, sigMsg.Payload, originalID)
+
 		default:
 			logger.Warn("Unknown message type", "type", sigMsg.Type)
 			if originalID != "" {
 				s.sendErrorSignal(conn, "Unknown message type", originalID)
 			}
 		}
+	}
+}
+
+// handleWebRTCSignal forwards WebRTC signaling messages to the target client
+func (s *WebSocketServer) handleWebRTCSignal(senderConn *websocket.Conn, msgType smodels.MessageType, targetPublicKey string, payload []byte, originalID string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	senderPublicKey, ok := s.clientToPublicKey[senderConn]
+	if !ok {
+		s.sendErrorSignal(senderConn, "Sender public key not found", originalID)
+		return
+	}
+
+	senderNetworkID, ok := s.clients[senderConn]
+	if !ok {
+		s.sendErrorSignal(senderConn, "Sender not in any network", originalID)
+		return
+	}
+
+	targetConn := (*websocket.Conn)(nil)
+	for conn, pk := range s.clientToPublicKey {
+		if pk == targetPublicKey {
+			// Check if target is in the same network as sender
+			if s.clients[conn] == senderNetworkID {
+				targetConn = conn
+				break
+			}
+		}
+	}
+
+	if targetConn == nil {
+		s.sendErrorSignal(senderConn, fmt.Sprintf("Target client %s not found or not in the same network", targetPublicKey), originalID)
+		return
+	}
+
+	// Forward the original signaling message to the target
+	err := s.sendSignal(targetConn, msgType, json.RawMessage(payload), originalID)
+	if err != nil {
+		logger.Error("Failed to forward WebRTC signal", "error", err, "sender", senderPublicKey, "target", targetPublicKey, "type", msgType)
+		s.sendErrorSignal(senderConn, "Failed to forward WebRTC signal", originalID)
+	} else {
+		logger.Debug("WebRTC signal forwarded", "sender", senderPublicKey, "target", targetPublicKey, "type", msgType)
 	}
 }
 

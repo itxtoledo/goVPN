@@ -38,6 +38,11 @@ const (
 	TypeDeleteSuccess        MessageType = "DeleteSuccess"
 	TypeServerShutdown       MessageType = "ServerShutdown"
 	TypeComputerNetworks     MessageType = "ComputerNetworks"
+
+	// WebRTC signaling message types
+	TypeSdpOffer    MessageType = "SdpOffer"
+	TypeSdpAnswer   MessageType = "SdpAnswer"
+	TypeIceCandidate MessageType = "IceCandidate"
 )
 
 // SignalingMessage represents the wrapper structure for WebSocket communication
@@ -45,6 +50,26 @@ type SignalingMessage struct {
 	ID      string      `json:"message_id"`
 	Type    MessageType `json:"type"`
 	Payload []byte      `json:"payload"`
+}
+
+// SdpOffer represents a WebRTC SDP offer message
+type SdpOffer struct {
+	TargetPublicKey string `json:"target_public_key"`
+	SDP             string `json:"sdp"`
+}
+
+// SdpAnswer represents a WebRTC SDP answer message
+type SdpAnswer struct {
+	TargetPublicKey string `json:"target_public_key"`
+	SDP             string `json:"sdp"`
+}
+
+// IceCandidate represents a WebRTC ICE candidate message
+type IceCandidate struct {
+	TargetPublicKey string `json:"target_public_key"`
+	Candidate       string `json:"candidate"`
+	SDPMid          string `json:"sdp_mid"`
+	SDPMLineIndex   uint16 `json:"sdp_m_line_index"`
 }
 
 // BaseRequest contains common fields used in all messages from client to server
