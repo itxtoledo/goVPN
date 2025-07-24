@@ -23,7 +23,7 @@ type UIManager struct {
 	VPN                 *VPNClient
 	ConfigManager       *st.ConfigManager
 	NetworkListComp     *NetworkListComponent
-	HomeTabComponent    *HomeTabComponent
+	HomeScreenComponent    *HomeScreenComponent
 	HeaderComponent     *HeaderComponent
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
@@ -112,7 +112,7 @@ func (ui *UIManager) setupComponents() {
 	// Create components
 	ui.HeaderComponent = NewHeaderComponent(ui, ui.defaultWebsocketURL)
 	ui.NetworkListComp = NewNetworkListComponent(ui)
-	ui.HomeTabComponent = NewHomeTabComponent(ui.ConfigManager, ui.RealtimeData, ui.NetworkListComp, ui)
+	ui.HomeScreenComponent = NewHomeScreenComponent(ui.ConfigManager, ui.RealtimeData, ui.NetworkListComp, ui)
 
 	// Create main container
 	headerContainer := ui.HeaderComponent.CreateHeaderContainer()
@@ -123,7 +123,7 @@ func (ui *UIManager) setupComponents() {
 		nil,
 		nil,
 		nil,
-		ui.HomeTabComponent.CreateHomeTabContainer(),
+				ui.HomeScreenComponent.CreateHomeScreenContainer(),
 	)
 
 	// Set content

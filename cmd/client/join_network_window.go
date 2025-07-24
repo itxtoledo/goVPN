@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 	"github.com/itxtoledo/govpn/libs/utils"
+	"github.com/itxtoledo/govpn/cmd/client/ui"
 )
 
 // Global variable to ensure only one join window can be open
@@ -18,11 +19,10 @@ var globalJoinWindow *JoinWindow
 
 // JoinWindow manages the network joining interface as a window
 type JoinWindow struct {
-	*BaseWindow
+	*ui.BaseWindow
 	JoinNetwork  func(string, string, string) (*smodels.JoinNetworkResponse, error)
 	ComputerName string
 
-	ConfigurePINEntry func(*widget.Entry)
 	OnNetworkJoined   func(networkID, pin string)
 }
 
@@ -31,14 +31,12 @@ func NewJoinWindow(
 	app fyne.App,
 	joinNetwork func(string, string, string) (*smodels.JoinNetworkResponse, error),
 	computername string,
-	configurePINEntry func(*widget.Entry),
 	onNetworkJoined func(networkID, pin string),
 ) *JoinWindow {
 	jw := &JoinWindow{
-		BaseWindow:        NewBaseWindow(app, "Join Network", 320, 260),
+		BaseWindow:        ui.NewBaseWindow(app, "Join Network", 320, 260),
 		JoinNetwork:       joinNetwork,
 		ComputerName:      computername,
-		ConfigurePINEntry: configurePINEntry,
 		OnNetworkJoined:   onNetworkJoined,
 	}
 
@@ -66,7 +64,7 @@ func (jw *JoinWindow) Show() {
 
 	pinEntry := widget.NewPasswordEntry()
 	pinEntry.PlaceHolder = "4-digit PIN"
-	jw.ConfigurePINEntry(pinEntry)
+	ui.ConfigurePINEntry(pinEntry)
 
 	// Add keyboard shortcuts
 	networkIDEntry.OnSubmitted = func(text string) {
@@ -149,7 +147,7 @@ func (jw *JoinWindow) Show() {
 		container.NewPadded(buttonContainer),
 	)
 
-	jw.BaseWindow.SetContent(content)
+		jw.BaseWindow.SetContent(content)
 	jw.BaseWindow.Show()
 
 	// Set focus on the network ID field when window opens

@@ -61,8 +61,8 @@ func (nma *NetworkManagerAdapter) GetRealtimeData() *data.RealtimeDataLayer {
 	return nma.NetworkManager.RealtimeData
 }
 
-// HomeTabComponent representa o componente da aba principal
-type HomeTabComponent struct {
+// HomeScreenComponent representa o componente da tela principal
+type HomeScreenComponent struct {
 	NetworksContainer *fyne.Container
 
 	// Dependencies
@@ -72,9 +72,9 @@ type HomeTabComponent struct {
 	UI              *UIManager
 }
 
-// NewHomeTabComponent cria uma nova instância do componente da aba principal
-func NewHomeTabComponent(configManager *st.ConfigManager, realtimeData *data.RealtimeDataLayer, networkListComp *NetworkListComponent, ui *UIManager) *HomeTabComponent {
-	htc := &HomeTabComponent{
+// NewHomeScreenComponent cria uma nova instância do componente da tela principal
+func NewHomeScreenComponent(configManager *st.ConfigManager, realtimeData *data.RealtimeDataLayer, networkListComp *NetworkListComponent, ui *UIManager) *HomeScreenComponent {
+	htc := &HomeScreenComponent{
 		ConfigManager:   configManager,
 		RealtimeData:    realtimeData,
 		NetworkListComp: networkListComp,
@@ -85,7 +85,7 @@ func NewHomeTabComponent(configManager *st.ConfigManager, realtimeData *data.Rea
 }
 
 // CreateHomeTabContainer cria o container principal da aba inicial
-func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
+func (htc *HomeScreenComponent) CreateHomeScreenContainer() *fyne.Container {
 	// Criar o container de salas disponíveis
 	networksContainer := htc.NetworkListComp.GetContainer()
 	htc.NetworksContainer = networksContainer
@@ -121,7 +121,6 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			adapter.CreateNetwork,
 			adapter.GetNetworkID,
 			computername,
-			ConfigurePINEntry,
 			func(networkID, networkName, pin string) {
 				htc.UI.HandleNetworkCreated(networkID, networkName, pin)
 			},
@@ -159,7 +158,6 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			htc.UI.App,
 			adapter.JoinNetwork,
 			computername,
-			ConfigurePINEntry,
 			func(networkID, pin string) {
 				htc.UI.HandleNetworkJoined(networkID, pin)
 			},

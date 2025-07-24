@@ -14,13 +14,14 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
+	"github.com/itxtoledo/govpn/cmd/client/ui"
 )
 
 // NetworkListComponent representa o componente da árvore de rede
 type NetworkListComponent struct {
 	UI               *UIManager
 	Container        *fyne.Container
-	NetworkAccordion *CustomAccordion
+	NetworkAccordion *ui.CustomAccordion
 	contentContainer *fyne.Container // New field to hold dynamic content
 	updateMutex      sync.Mutex
 }
@@ -37,7 +38,7 @@ func NewNetworkListComponent(ui *UIManager) *NetworkListComponent {
 // init inicializa o componente
 func (ntc *NetworkListComponent) init() {
 	// Criar um accordion personalizado vazio
-	ntc.NetworkAccordion = NewCustomAccordion()
+	ntc.NetworkAccordion = ui.NewCustomAccordion()
 	// Initialize the dynamic content container
 	ntc.contentContainer = container.NewStack()
 
@@ -170,7 +171,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 				)
 
 				// Create custom accordion item with context menu support and computer count
-				accordionItem := NewCustomAccordionItemWithEndContentAndCallbacks(customTitle, content, computerCountLabel, nil, func(pe *fyne.PointEvent) {
+				accordionItem := ui.NewCustomAccordionItemWithEndContentAndCallbacks(customTitle, content, computerCountLabel, nil, func(pe *fyne.PointEvent) {
 					leaveItem := fyne.NewMenuItem("Leave Network", func() {
 						// Delegate deletion to NetworkManager
 						if ntc.UI.VPN.NetworkManager != nil {

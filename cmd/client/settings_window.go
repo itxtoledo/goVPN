@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
+	"github.com/itxtoledo/govpn/cmd/client/ui"
 )
 
 // Global variable to ensure only one settings window can be open
@@ -14,7 +15,7 @@ var globalSettingsWindow *SettingsWindow
 
 // SettingsWindow represents the settings window
 type SettingsWindow struct {
-	*BaseWindow
+	*ui.BaseWindow
 	ComputerNameEntry  *widget.Entry
 	ServerAddressEntry *widget.Entry
 	ThemeSelect        *widget.Select
@@ -31,7 +32,7 @@ func NewSettingsWindow(app fyne.App, currentConfig storage.Config, onSettingsSav
 	}
 
 	sw := &SettingsWindow{
-		BaseWindow:      NewBaseWindow(app, "Settings", 320, 260),
+		BaseWindow:      ui.NewBaseWindow(app, "Settings", 320, 260),
 		OnSettingsSaved: onSettingsSaved,
 	}
 
@@ -135,6 +136,6 @@ func (sw *SettingsWindow) Show() {
 		container.NewPadded(buttonContainer),
 	)
 
-	sw.SetContent(content)
+	sw.BaseWindow.SetContent(content)
 	sw.BaseWindow.Show()
 }

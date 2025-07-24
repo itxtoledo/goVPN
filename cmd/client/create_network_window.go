@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 	"github.com/itxtoledo/govpn/libs/utils"
+	"github.com/itxtoledo/govpn/cmd/client/ui"
 )
 
 // Global variable to ensure only one network window can be open
@@ -18,12 +19,11 @@ var globalNetworkWindow *NetworkWindow
 
 // NetworkWindow manages the network (network) creation interface as a window
 type NetworkWindow struct {
-	*BaseWindow
+	*ui.BaseWindow
 	CreateNetwork func(string, string) (*smodels.CreateNetworkResponse, error)
 	GetNetworkID  func() string
 	ComputerName  string
 
-	ConfigurePINEntry func(*widget.Entry)
 	OnNetworkCreated  func(networkID, networkName, pin string)
 }
 
@@ -33,15 +33,13 @@ func NewNetworkWindow(
 	createNetwork func(string, string) (*smodels.CreateNetworkResponse, error),
 	getNetworkID func() string,
 	computername string,
-	configurePINEntry func(*widget.Entry),
 	onNetworkCreated func(networkID, networkName, pin string),
 ) *NetworkWindow {
 	rw := &NetworkWindow{
-		BaseWindow:        NewBaseWindow(app, "Create Network", 320, 260),
+		BaseWindow:        ui.NewBaseWindow(app, "Create Network", 320, 260),
 		CreateNetwork:     createNetwork,
 		GetNetworkID:      getNetworkID,
 		ComputerName:      computername,
-		ConfigurePINEntry: configurePINEntry,
 		OnNetworkCreated:  onNetworkCreated,
 	}
 
@@ -70,11 +68,11 @@ func (rw *NetworkWindow) Show() {
 
 	pinEntry := widget.NewPasswordEntry()
 	pinEntry.PlaceHolder = "4-digit PIN"
-	rw.ConfigurePINEntry(pinEntry)
+	ui.ConfigurePINEntry(pinEntry)
 
 	confirmPINEntry := widget.NewPasswordEntry()
 	confirmPINEntry.PlaceHolder = "Repeat 4-digit PIN"
-	rw.ConfigurePINEntry(confirmPINEntry)
+	ui.ConfigurePINEntry(confirmPINEntry)
 
 	// Add keyboard shortcuts
 	nameEntry.OnSubmitted = func(text string) {
@@ -111,19 +109,19 @@ func (rw *NetworkWindow) Show() {
 
 		// Validate name
 		if name == "" {
-			dialog.ShowError(errors.New("network name cannot be empty"), rw.BaseWindow.Window)
+							dialog.ShowError(errors.New("network name cannot be empty"), rw.BaseWindow.Window)
 			return
 		}
 
 		// Validate pin using the abstract function
 		if !utils.ValidatePIN(pin) {
-			dialog.ShowError(errors.New("PIN must be exactly 4 digits"), rw.BaseWindow.Window)
+							dialog.ShowError(errors.New("PIN must be exactly 4 digits"), rw.BaseWindow.Window)
 			return
 		}
 
 		// Validate pin confirmation
 		if pin != confirmPIN {
-			dialog.ShowError(errors.New("PINs do not match"), rw.BaseWindow.Window)
+							dialog.ShowError(errors.New("PINs do not match"), rw.BaseWindow.Window)
 			return
 		}
 
@@ -181,7 +179,7 @@ func (rw *NetworkWindow) Show() {
 		container.NewPadded(buttonContainer),
 	)
 
-	rw.BaseWindow.SetContent(content)
+		rw.BaseWindow.SetContent(content)
 	rw.BaseWindow.Show()
 
 	// Set focus on the name field when window opens

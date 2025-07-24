@@ -9,17 +9,18 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
+	"github.com/itxtoledo/govpn/cmd/client/ui"
 )
 
 // AboutWindow representa a janela de informações sobre o aplicativo
 type AboutWindow struct {
-	*BaseWindow
+	*ui.BaseWindow
 }
 
 // NewAboutWindow cria uma nova janela de informações sobre o aplicativo
 func NewAboutWindow(app fyne.App, publicKey string) *AboutWindow {
 	aw := &AboutWindow{
-		BaseWindow: NewBaseWindow(app, "About "+AppName, 400, 400),
+		BaseWindow: ui.NewBaseWindow(app, "About "+AppName, 400, 400),
 	}
 
 	// Configurar o conteúdo da janela
@@ -96,7 +97,7 @@ func NewAboutWindow(app fyne.App, publicKey string) *AboutWindow {
 	paddedContent := container.NewPadded(content)
 
 	// Definir o conteúdo da janela
-	aw.SetContent(paddedContent)
+	aw.BaseWindow.SetContent(paddedContent)
 
 	return aw
 }

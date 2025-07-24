@@ -47,7 +47,7 @@ The GoVPN client follows a modular architecture with the following main componen
 
 2. **UI Components**:
    - **HeaderComponent**: Displays the header with connection status
-   - **HomeTabComponent**: Main screen with network list and options
+   - **HomeScreenComponent**: Main screen with network list and options
    - **SettingsTabComponent**: Application settings
    - **NetworkListComponent**: List of available networks
 
