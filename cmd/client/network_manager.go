@@ -85,6 +85,21 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				}
 			}
 		case smodels.TypeNetworkDisconnected:
+			var networkDisconnectedResponse smodels.DisconnectNetworkResponse
+			if err := json.Unmarshal(payload, &networkDisconnectedResponse); err != nil {
+				log.Printf("Failed to unmarshal network disconnected response: %v", err)
+				return
+			}
+
+			// Find the network in RealtimeData and update its LastConnected time
+			networks := nm.RealtimeData.GetNetworks()
+			for i, network := range networks {
+				if network.NetworkID == networkDisconnectedResponse.NetworkID {
+					network.LastConnected = time.Now() // Update last connected time
+					nm.RealtimeData.UpdateNetwork(i, network)
+					break
+				}
+			}
 			nm.refreshNetworkList()
 		case smodels.TypeNetworkJoined:
 			nm.refreshNetworkList()
@@ -298,7 +313,7 @@ func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 	}
 
 	// Create network
-	res, err := nm.SignalingServer.CreateNetwork(name, pin)
+	res, err := nm.SignalingServer.CreateNetwork(name, pin, nm.ConfigManager.GetConfig().ComputerName)
 	if err != nil {
 		return fmt.Errorf("failed to create network: %v", err)
 	}
@@ -308,14 +323,13 @@ func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 		return fmt.Errorf("failed to create network: invalid server response")
 	}
 
-	log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
+		log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
 
 	// Store network information for current connection
 	nm.NetworkID = res.NetworkID
 
 	// Update data layer
 	nm.RealtimeData.SetNetworkInfo(res.NetworkID)
-	nm.RealtimeData.SetComputerIP(res.ComputerIP)
 	nm.RealtimeData.EmitEvent(data.EventNetworkJoined, res.NetworkID, nil)
 
 	// Update UI

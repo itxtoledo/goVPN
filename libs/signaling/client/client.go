@@ -320,7 +320,7 @@ func (s *SignalingClient) parseResponse(requestType signaling_models.MessageType
 }
 
 // CreateNetwork cria uma nova sala no servidor
-func (s *SignalingClient) CreateNetwork(name string, pin string) (*signaling_models.CreateNetworkResponse, error) {
+func (s *SignalingClient) CreateNetwork(name string, pin string, computerName string) (*signaling_models.CreateNetworkResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
@@ -332,6 +332,7 @@ func (s *SignalingClient) CreateNetwork(name string, pin string) (*signaling_mod
 		BaseRequest: signaling_models.BaseRequest{},
 		NetworkName: name,
 		PIN:         pin,
+		ComputerName: computerName,
 	}
 
 	// Enviar solicitação de criação de sala usando a função de empacotamento

@@ -89,15 +89,15 @@ type CreateNetworkRequest struct {
 	BaseRequest
 	NetworkName string `json:"network_name"`
 	PIN         string `json:"pin"`
+	ComputerName string `json:"computer_name,omitempty"`
 }
 
 // CreateNetworkResponse represents a response to a network creation request
 type CreateNetworkResponse struct {
-	NetworkID   string `json:"network_id"`
-	NetworkName string `json:"network_name"`
-	PIN         string `json:"pin"`
-	PublicKey   string `json:"public_key"`
-	ComputerIP  string `json:"computer_ip"`
+	NetworkID   string         `json:"network_id"`
+	NetworkName string         `json:"network_name"`
+	PublicKey   string         `json:"public_key"`
+	Computers   []ComputerInfo `json:"computers"`
 }
 
 // JoinNetworkRequest represents a request to join an existing network

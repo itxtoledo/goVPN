@@ -32,7 +32,6 @@ func (nma *NetworkManagerAdapter) CreateNetwork(name, pin string) (*smodels.Crea
 	return &smodels.CreateNetworkResponse{
 		NetworkID:   nma.NetworkManager.NetworkID,
 		NetworkName: name,
-		PIN:         pin,
 	}, nil
 }
 

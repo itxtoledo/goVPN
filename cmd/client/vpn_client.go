@@ -47,7 +47,7 @@ func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, c
 		publicKey = ed25519.PublicKey(publicKeyBytes)
 	}
 
-	// Decode private key from base64
+	// Decode private key from base66
 	privateKeyBytes, err := base64.StdEncoding.DecodeString(privateKeyStr)
 	if err != nil {
 		log.Printf("Error decoding private key, generating new one: %v", err)

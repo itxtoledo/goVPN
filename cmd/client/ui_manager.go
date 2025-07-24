@@ -12,7 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	dialogs "github.com/itxtoledo/govpn/cmd/client/dialogs"
-	st "github.com/itxtoledo/govpn/cmd/client/storage"
+	"github.com/itxtoledo/govpn/cmd/client/storage"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
@@ -21,7 +21,7 @@ type UIManager struct {
 	App                 fyne.App
 	MainWindow          fyne.Window
 	VPN                 *VPNClient
-	ConfigManager       *st.ConfigManager
+	ConfigManager       *storage.ConfigManager
 	NetworkListComp     *NetworkListComponent
 	HomeScreenComponent    *HomeScreenComponent
 	HeaderComponent     *HeaderComponent
@@ -48,7 +48,7 @@ func NewUIManager(websocketURL string, computername string) *UIManager {
 	ui.App = app.NewWithID("com.itxtoledo.govpn")
 
 	// Initialize configuration manager
-	ui.ConfigManager = st.NewConfigManager()
+	ui.ConfigManager = storage.NewConfigManager()
 
 	// Create main window
 	ui.MainWindow = ui.App.NewWindow("GoVPN")
@@ -269,7 +269,7 @@ func (ui *UIManager) HandleNetworkJoined(networkID, pin string) {
 }
 
 // Run runs the application
-func (ui *UIManager) HandleSettingsSaved(config st.Config) {
+func (ui *UIManager) HandleSettingsSaved(config storage.Config) {
 	// Save new settings
 	err := ui.ConfigManager.UpdateConfig(config)
 	if err != nil {
@@ -281,7 +281,7 @@ func (ui *UIManager) HandleSettingsSaved(config st.Config) {
 }
 
 // applySettings applies the settings
-func (ui *UIManager) applySettings(config st.Config) {
+func (ui *UIManager) applySettings(config storage.Config) {
 	// Update theme
 	switch config.Theme {
 	case "light":

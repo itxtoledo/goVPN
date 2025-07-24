@@ -436,7 +436,7 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 	}
 
 	creatorIP := "10.10.0.1"
-	err = s.supabaseManager.AddComputerToNetwork(networkID, req.PublicKey, "Owner", creatorIP)
+	err = s.supabaseManager.AddComputerToNetwork(networkID, req.PublicKey, req.ComputerName, creatorIP)
 	if err != nil {
 		logger.Error("Error adding network owner to computer_networks", "error", err)
 	}
@@ -454,17 +454,24 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 		logger.Info("Network created",
 			"networkID", networkID,
 			"networkName", req.NetworkName,
-			"clientAddr", conn.RemoteAddr().String())
+			"clientAddr", conn.RemoteAddr().String(),
+			"computerName", req.ComputerName)
 	}
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
-	responsePayload := map[string]interface{}{
-		"network_id":   networkID,
-		"network_name": req.NetworkName,
-		"pin":          req.PIN,
-		"public_key":   req.PublicKey,
-		"computer_ip":  creatorIP,
+	responsePayload := smodels.CreateNetworkResponse{
+		NetworkID:   networkID,
+		NetworkName: req.NetworkName,
+		PublicKey:   req.PublicKey,
+		Computers: []smodels.ComputerInfo{
+			{
+				Name:       req.ComputerName,
+				ComputerIP: creatorIP,
+				PublicKey:  req.PublicKey,
+				IsOnline:   true,
+			},
+		},
 	}
 
 	s.sendSignal(conn, smodels.TypeNetworkCreated, responsePayload, originalID)

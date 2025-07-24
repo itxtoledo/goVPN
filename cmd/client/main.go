@@ -24,7 +24,7 @@ func main() {
 
 	configManager := storage.NewConfigManager()
 	computername := configManager.GetConfig().ComputerName
-	ui := NewUIManager(DefaultServerAddress, computername)
+		ui := NewUIManager(DefaultServerAddress, computername)
 
 	// Set up system tray
 	if desk, ok := ui.App.(desktop.App); ok {
