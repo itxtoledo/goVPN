@@ -254,7 +254,8 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 	err := s.supabaseManager.UpdateClientNameInNetworks(publicKey, req.ClientName)
 	if err != nil {
 		logger.Error("Error updating client name in networks", "error", err)
-		s.sendErrorSignal(conn, "Error updating client name", originalID)
+		clientErrorMessage := fmt.Sprintf("Failed to update client name: %s", err.Error())
+		s.sendErrorSignal(conn, clientErrorMessage, originalID)
 		return
 	}
 
