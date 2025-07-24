@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
+	"github.com/itxtoledo/govpn/libs/utils"
 )
 
 // Global variable to ensure only one network window can be open
@@ -18,12 +19,12 @@ var globalNetworkWindow *NetworkWindow
 // NetworkWindow manages the network (network) creation interface as a window
 type NetworkWindow struct {
 	*BaseWindow
-	CreateNetwork          func(string, string) (*smodels.CreateNetworkResponse, error)
-	GetNetworkID           func() string
-	ComputerName           string
-	ValidatePIN       func(string) bool
+	CreateNetwork func(string, string) (*smodels.CreateNetworkResponse, error)
+	GetNetworkID  func() string
+	ComputerName  string
+
 	ConfigurePINEntry func(*widget.Entry)
-	OnNetworkCreated       func(networkID, networkName, pin string)
+	OnNetworkCreated  func(networkID, networkName, pin string)
 }
 
 // NewNetworkWindow creates a new network creation window
@@ -32,18 +33,16 @@ func NewNetworkWindow(
 	createNetwork func(string, string) (*smodels.CreateNetworkResponse, error),
 	getNetworkID func() string,
 	computername string,
-	validatePIN func(string) bool,
 	configurePINEntry func(*widget.Entry),
 	onNetworkCreated func(networkID, networkName, pin string),
 ) *NetworkWindow {
 	rw := &NetworkWindow{
-		BaseWindow:             NewBaseWindow(app, "Create Network", 320, 260),
-		CreateNetwork:          createNetwork,
-		GetNetworkID:           getNetworkID,
-		ComputerName:           computername,
-		ValidatePIN:       validatePIN,
+		BaseWindow:        NewBaseWindow(app, "Create Network", 320, 260),
+		CreateNetwork:     createNetwork,
+		GetNetworkID:      getNetworkID,
+		ComputerName:      computername,
 		ConfigurePINEntry: configurePINEntry,
-		OnNetworkCreated:       onNetworkCreated,
+		OnNetworkCreated:  onNetworkCreated,
 	}
 
 	// Set close callback to reset the global instance when window closes
@@ -88,7 +87,7 @@ func (rw *NetworkWindow) Show() {
 
 	confirmPINEntry.OnSubmitted = func(text string) {
 		// Trigger create button when Enter is pressed on pin field
-		if nameEntry.Text != "" && rw.ValidatePIN(text) {
+		if nameEntry.Text != "" && utils.ValidatePIN(text) {
 			// Will be triggered by the create button logic
 		}
 	}
@@ -117,7 +116,7 @@ func (rw *NetworkWindow) Show() {
 		}
 
 		// Validate pin using the abstract function
-		if !rw.ValidatePIN(pin) {
+		if !utils.ValidatePIN(pin) {
 			dialog.ShowError(errors.New("PIN must be exactly 4 digits"), rw.BaseWindow.Window)
 			return
 		}

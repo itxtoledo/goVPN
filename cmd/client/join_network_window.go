@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
+	"github.com/itxtoledo/govpn/libs/utils"
 )
 
 // Global variable to ensure only one join window can be open
@@ -18,11 +19,11 @@ var globalJoinWindow *JoinWindow
 // JoinWindow manages the network joining interface as a window
 type JoinWindow struct {
 	*BaseWindow
-	JoinNetwork            func(string, string, string) (*smodels.JoinNetworkResponse, error)
-	ComputerName           string
-	ValidatePIN       func(string) bool
+	JoinNetwork  func(string, string, string) (*smodels.JoinNetworkResponse, error)
+	ComputerName string
+
 	ConfigurePINEntry func(*widget.Entry)
-	OnNetworkJoined        func(networkID, pin string)
+	OnNetworkJoined   func(networkID, pin string)
 }
 
 // NewJoinWindow creates a new network joining window
@@ -30,17 +31,15 @@ func NewJoinWindow(
 	app fyne.App,
 	joinNetwork func(string, string, string) (*smodels.JoinNetworkResponse, error),
 	computername string,
-	validatePIN func(string) bool,
 	configurePINEntry func(*widget.Entry),
 	onNetworkJoined func(networkID, pin string),
 ) *JoinWindow {
 	jw := &JoinWindow{
-		BaseWindow:             NewBaseWindow(app, "Join Network", 320, 260),
-		JoinNetwork:            joinNetwork,
-		ComputerName:           computername,
-		ValidatePIN:       validatePIN,
+		BaseWindow:        NewBaseWindow(app, "Join Network", 320, 260),
+		JoinNetwork:       joinNetwork,
+		ComputerName:      computername,
 		ConfigurePINEntry: configurePINEntry,
-		OnNetworkJoined:        onNetworkJoined,
+		OnNetworkJoined:   onNetworkJoined,
 	}
 
 	// Set close callback to reset the global instance when window closes
@@ -76,7 +75,7 @@ func (jw *JoinWindow) Show() {
 
 	pinEntry.OnSubmitted = func(text string) {
 		// Trigger join button when Enter is pressed on pin field
-		if networkIDEntry.Text != "" && jw.ValidatePIN(text) {
+		if networkIDEntry.Text != "" && utils.ValidatePIN(text) {
 			// Will be triggered by the join button logic
 		}
 	}
@@ -100,7 +99,7 @@ func (jw *JoinWindow) Show() {
 			return
 		}
 
-		if !jw.ValidatePIN(pin) {
+		if !utils.ValidatePIN(pin) {
 			dialog.ShowError(errors.New("PIN must be exactly 4 digits"), jw.BaseWindow.Window)
 			return
 		}

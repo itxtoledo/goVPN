@@ -36,8 +36,3 @@ func ConfigurePINEntry(pinEntry *widget.Entry) {
 		}
 	}
 }
-
-// ValidatePIN verifica se um PIN atende ao padrão definido no pacote models
-func ValidatePIN(pin string) bool {
-	return utils.ValidatePIN(pin)
-}

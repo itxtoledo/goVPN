@@ -39,7 +39,7 @@ func (cd *ConnectDialog) Show() {
 		return
 	}
 
-	networkID := network.ID
+	networkID := network.NetworkID
 
 	// Criar o diálogo
 	cd.Dialog = dialog.NewCustomConfirm(

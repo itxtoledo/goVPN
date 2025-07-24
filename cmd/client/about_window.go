@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
-	)
+)
 
 // AboutWindow representa a janela de informações sobre o aplicativo
 type AboutWindow struct {

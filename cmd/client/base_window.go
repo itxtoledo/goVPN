@@ -6,12 +6,12 @@ import (
 
 // BaseWindow representa uma janela base para outras janelas do aplicativo
 type BaseWindow struct {
-	App          fyne.App
-	Window       fyne.Window
-	Content      *fyne.Container
-	Title        string
-	width        float32
-	height       float32
+	App     fyne.App
+	Window  fyne.Window
+	Content *fyne.Container
+	Title   string
+	width   float32
+	height  float32
 }
 
 // NewBaseWindow cria uma nova janela base

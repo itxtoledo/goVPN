@@ -121,7 +121,6 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			adapter.CreateNetwork,
 			adapter.GetNetworkID,
 			computername,
-			ValidatePIN,
 			ConfigurePINEntry,
 			func(networkID, networkName, pin string) {
 				htc.UI.HandleNetworkCreated(networkID, networkName, pin)
@@ -160,7 +159,6 @@ func (htc *HomeTabComponent) CreateHomeTabContainer() *fyne.Container {
 			htc.UI.App,
 			adapter.JoinNetwork,
 			computername,
-			ValidatePIN,
 			ConfigurePINEntry,
 			func(networkID, pin string) {
 				htc.UI.HandleNetworkJoined(networkID, pin)

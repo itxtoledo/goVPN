@@ -106,7 +106,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			// Find the network and add the new computer
 			networks := nm.RealtimeData.GetNetworks()
 			for i, network := range networks {
-				if network.ID == computerJoinedNotification.NetworkID {
+				if network.NetworkID == computerJoinedNotification.NetworkID {
 					// Check if computer already exists to avoid duplicates
 					computerExists := false
 					for _, computer := range network.Computers {
@@ -117,14 +117,13 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 					}
 
 					if !computerExists {
-						newComputer := data.ComputerInfo{
+						network.Computers = append(network.Computers, smodels.ComputerInfo{
 							Name:       computerJoinedNotification.ComputerName,
 							ComputerIP: computerJoinedNotification.ComputerIP,
 							PublicKey:  computerJoinedNotification.PublicKey,
-						}
-						network.Computers = append(network.Computers, newComputer)
+						})
 						nm.RealtimeData.UpdateNetwork(i, network)
-						log.Printf("Added computer %s to network %s", newComputer.Name, network.Name)
+						log.Printf("Added computer %s to network %s", computerJoinedNotification.ComputerName, network.NetworkName)
 					}
 					break
 				}
@@ -142,8 +141,8 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			// Find the network and remove the computer
 			networks := nm.RealtimeData.GetNetworks()
 			for i, network := range networks {
-				if network.ID == computerLeftNotification.NetworkID {
-					updatedComputers := []data.ComputerInfo{}
+				if network.NetworkID == computerLeftNotification.NetworkID {
+					updatedComputers := []smodels.ComputerInfo{}
 					for _, computer := range network.Computers {
 						if computer.PublicKey != computerLeftNotification.PublicKey {
 							updatedComputers = append(updatedComputers, computer)
@@ -151,7 +150,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 					}
 					network.Computers = updatedComputers
 					nm.RealtimeData.UpdateNetwork(i, network)
-					log.Printf("Removed computer with public key %s from network %s", computerLeftNotification.PublicKey, network.Name)
+					log.Printf("Removed computer with public key %s from network %s", computerLeftNotification.PublicKey, network.NetworkName)
 					break
 				}
 			}
@@ -172,30 +171,8 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				}
 			}
 
-			// Convert smodels.Network to data.Network
-			updatedNetworks := make([]*data.Network, 0, len(computerNetworksResponse.Networks))
-			for _, network := range computerNetworksResponse.Networks {
-				// Convert smodels.ComputerInfo to storage.ComputerInfo
-				computers := make([]data.ComputerInfo, 0, len(network.Computers))
-				for _, computer := range network.Computers {
-					computers = append(computers, data.ComputerInfo{
-						Name:       computer.Name,
-						ComputerIP: computer.ComputerIP,
-						PublicKey:  computer.PublicKey,
-					})
-				}
-
-				dataNetwork := &data.Network{
-					ID:            network.NetworkID,
-					Name:          network.NetworkName,
-					LastConnected: network.LastConnected,
-					ComputerIP:    network.ComputerIP,
-					Computers:     computers,
-				}
-				updatedNetworks = append(updatedNetworks, dataNetwork)
-			}
 			// Update the RealtimeDataLayer with the new networks list
-			nm.RealtimeData.SetNetworks(updatedNetworks)
+			nm.RealtimeData.SetNetworks(computerNetworksResponse.Networks)
 			nm.refreshNetworkList()
 		case smodels.TypeComputerRenamed:
 			var notification smodels.ComputerRenamedNotification
@@ -209,12 +186,12 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			// Find the network and update the computer's name
 			networks := nm.RealtimeData.GetNetworks()
 			for i, network := range networks {
-				if network.ID == notification.NetworkID {
+				if network.NetworkID == notification.NetworkID {
 					for j, computer := range network.Computers {
 						if computer.PublicKey == notification.PublicKey {
 							network.Computers[j].Name = notification.NewComputerName
 							nm.RealtimeData.UpdateNetwork(i, network)
-							log.Printf("Updated computer name in UI for network %s", network.Name)
+							log.Printf("Updated computer name in UI for network %s", network.NetworkName)
 							break
 						}
 					}
@@ -396,7 +373,7 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 	// Find the network in memory to update lastConnected time
 	networkExists := false
 	for i, existingNetwork := range nm.RealtimeData.GetNetworks() {
-		if existingNetwork.ID == networkID {
+		if existingNetwork.NetworkID == networkID {
 			networkExists = true
 
 			// Update lastConnected time

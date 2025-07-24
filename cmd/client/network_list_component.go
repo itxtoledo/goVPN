@@ -65,7 +65,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 		networks := ntc.UI.RealtimeData.GetNetworks()
 		if networks != nil {
 			sort.Slice(networks, func(i, j int) bool {
-				return networks[i].Name < networks[j].Name
+				return networks[i].NetworkName < networks[j].NetworkName
 			})
 		}
 
@@ -89,9 +89,9 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 
 			// Add each network as an accordion item
 			for _, network := range networks {
-				log.Printf("Processing network: %s (ID=%s)", network.Name, network.ID)
+				log.Printf("Processing network: %s (ID=%s)", network.NetworkName, network.NetworkID)
 				// Check if this network is the one we're currently connected to
-				isConnected := network.ID == currentNetworkID
+				isConnected := network.NetworkID == currentNetworkID
 
 				// Create connected computers list
 				computersContainer := container.NewVBox()
@@ -162,7 +162,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 						}
 					}
 				}
-				titleLabel := widget.NewLabelWithStyle(network.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+				titleLabel := widget.NewLabelWithStyle(network.NetworkName, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 				computerCountLabel := widget.NewLabelWithStyle(fmt.Sprintf("(%d/10)", connectedComputers), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
 				customTitle := container.NewHBox(
@@ -175,7 +175,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 						// Delegate deletion to NetworkManager
 						if ntc.UI.VPN.NetworkManager != nil {
 							go func() {
-								err := ntc.UI.VPN.NetworkManager.LeaveNetworkById(network.ID)
+								err := ntc.UI.VPN.NetworkManager.LeaveNetworkById(network.NetworkID)
 								if err != nil {
 									log.Printf("Error deleting network: %v", err)
 									fyne.CurrentApp().SendNotification(&fyne.Notification{
@@ -183,14 +183,14 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 										Content: "Failed to leave network: " + err.Error(),
 									})
 								} else {
-									log.Println("Successfully left network:", network.Name)
+									log.Println("Successfully left network:", network.NetworkName)
 									fyne.CurrentApp().SendNotification(&fyne.Notification{
 										Title:   "Success",
-										Content: "Successfully left network: " + network.Name,
+										Content: "Successfully left network: " + network.NetworkName,
 									})
 
 									// Show success dialog on the main thread
-									dialog.ShowInformation("Success", "Successfully left network: "+network.Name, ntc.UI.MainWindow)
+									dialog.ShowInformation("Success", "Successfully left network: "+network.NetworkName, ntc.UI.MainWindow)
 								}
 							}()
 						}
@@ -201,13 +201,13 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 						connectItemLabel = "Disconnect"
 					}
 					connectItem := fyne.NewMenuItem(connectItemLabel, func() {
-						ntc.UI.SelectedNetwork = network
+						ntc.UI.SelectedNetwork = &network
 
 						if isConnected {
 							// If already connected, disconnect
-							log.Println("Disconnecting from network:", network.Name)
+							log.Println("Disconnecting from network:", network.NetworkName)
 							go func() {
-								err := ntc.UI.VPN.NetworkManager.DisconnectNetwork(network.ID)
+								err := ntc.UI.VPN.NetworkManager.DisconnectNetwork(network.NetworkID)
 								if err != nil {
 									log.Printf("Error disconnecting from network: %v", err)
 									dialog.ShowError(fmt.Errorf("failed to disconnect from network: %v", err), ntc.UI.MainWindow)
@@ -225,7 +225,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 						}
 					})
 
-					menu := fyne.NewMenu(network.Name, connectItem, leaveItem)
+					menu := fyne.NewMenu(network.NetworkName, connectItem, leaveItem)
 					popUp := widget.NewPopUpMenu(menu, ntc.UI.MainWindow.Canvas())
 					popUp.ShowAtPosition(pe.AbsolutePosition)
 				})

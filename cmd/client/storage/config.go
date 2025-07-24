@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	
 )
 
 // Config representa as configurações da aplicação
@@ -20,12 +19,9 @@ type Config struct {
 	Language      string `json:"language"`
 	PublicKey     string `json:"public_key"`
 	PrivateKey    string `json:"private_key"`
-	
 }
 
 // Network represents a VPN network
-
-
 
 // ConfigManager gerencia as configurações da aplicação
 type ConfigManager struct {
@@ -127,8 +123,6 @@ func (cm *ConfigManager) GetKeyPair() (string, string) {
 
 	return cm.config.PublicKey, cm.config.PrivateKey
 }
-
-
 
 // LoadConfig carrega as configurações do arquivo
 func (cm *ConfigManager) LoadConfig() {

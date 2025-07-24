@@ -247,11 +247,11 @@ func (ui *UIManager) refreshNetworkList() {
 // HandleNetworkCreated is the callback for when a network is created
 func (ui *UIManager) HandleNetworkCreated(networkID, networkName, pin string) {
 	network := data.Network{
-		ID:            networkID,
-		Name:          networkName,
+		NetworkID:     networkID,
+		NetworkName:   networkName,
 		LastConnected: time.Now(),
 	}
-	ui.RealtimeData.AddNetwork(&network)
+	ui.RealtimeData.AddNetwork(network)
 
 	dialog.ShowInformation("Success", "Network created and saved!", ui.MainWindow)
 }
@@ -259,11 +259,11 @@ func (ui *UIManager) HandleNetworkCreated(networkID, networkName, pin string) {
 // HandleNetworkJoined is the callback for when a network is joined
 func (ui *UIManager) HandleNetworkJoined(networkID, pin string) {
 	network := data.Network{
-		ID:            networkID,
-		Name:          networkID, // Name is the ID for joined networks
+		NetworkID:     networkID,
+		NetworkName:   networkID, // Name is the ID for joined networks
 		LastConnected: time.Now(),
 	}
-	ui.RealtimeData.AddNetwork(&network)
+	ui.RealtimeData.AddNetwork(network)
 
 	dialog.ShowInformation("Success!", "Successfully joined the network!", ui.MainWindow)
 }
