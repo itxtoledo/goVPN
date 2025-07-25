@@ -218,6 +218,7 @@ type ComputerNetwork struct {
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
 	PeerIP        string    `json:"peer_ip"`
+	IsOnline      bool      `json:"is_online"`
 }
 
 // AddComputerToNetwork adds a computer to a network in the computer_networks table
@@ -256,6 +257,24 @@ func (sm *SupabaseManager) UpdateComputerNetworkConnection(networkID, publicKey 
 	_, _, err := sm.client.From("computer_networks").Update(updateData, "", "").Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
 	if err != nil {
 		return fmt.Errorf("failed to update computer network connection: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateComputerOnlineStatus updates the online status of a computer in a network
+func (sm *SupabaseManager) UpdateComputerOnlineStatus(networkID, publicKey string, isOnline bool) error {
+	updateData := map[string]interface{}{
+		"is_online": isOnline,
+	}
+
+	if sm.logLevel == "debug" {
+		logger.Debug("Updating computer online status", "networkID", networkID, "publicKey", publicKey, "isOnline", isOnline)
+	}
+
+	_, _, err := sm.client.From("computer_networks").Update(updateData, "", "").Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
+	if err != nil {
+		return fmt.Errorf("failed to update computer online status: %w", err)
 	}
 
 	return nil

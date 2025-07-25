@@ -271,8 +271,20 @@ func (rdl *RealtimeDataLayer) UpdateNetwork(index int, network Network) {
 
 	currentNetworks, _ := rdl.Networks.Get()
 	if index >= 0 && index < len(currentNetworks) {
-		currentNetworks[index] = &network
-		rdl.Networks.Set(currentNetworks)
+		if existingNetworkPtr, ok := currentNetworks[index].(*Network); ok {
+			// Update the fields of the existing network struct
+			existingNetworkPtr.NetworkID = network.NetworkID
+			existingNetworkPtr.NetworkName = network.NetworkName
+			existingNetworkPtr.JoinedAt = network.JoinedAt
+			existingNetworkPtr.LastConnected = network.LastConnected
+			existingNetworkPtr.ComputerIP = network.ComputerIP
+			existingNetworkPtr.AdminPublicKey = network.AdminPublicKey
+			existingNetworkPtr.Computers = network.Computers // This will replace the entire slice
+			// Notify the binding that the item has changed
+			rdl.Networks.Set(currentNetworks) // Re-setting the list to trigger UI refresh
+		} else {
+			log.Printf("UpdateNetwork: Type assertion failed for network at index %d", index)
+		}
 	}
 }
 

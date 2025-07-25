@@ -22,6 +22,7 @@ type UIManager struct {
 	MainWindow          fyne.Window
 	VPN                 *VPNClient
 	ConfigManager       *storage.ConfigManager
+	DatabaseManager     *storage.DatabaseManager
 	NetworkListComp     *NetworkListComponent
 	HomeScreenComponent    *HomeScreenComponent
 	HeaderComponent     *HeaderComponent
@@ -36,7 +37,7 @@ type UIManager struct {
 }
 
 // NewUIManager creates a new instance of UIManager
-func NewUIManager(websocketURL string, computername string) *UIManager {
+func NewUIManager(websocketURL string, computername string, configPath string) *UIManager {
 	ui := &UIManager{
 		defaultWebsocketURL: websocketURL,
 	}
@@ -48,7 +49,14 @@ func NewUIManager(websocketURL string, computername string) *UIManager {
 	ui.App = app.NewWithID("com.itxtoledo.govpn")
 
 	// Initialize configuration manager
-	ui.ConfigManager = storage.NewConfigManager()
+	ui.ConfigManager = storage.NewConfigManager(configPath)
+
+	// Initialize database manager
+	ui.DatabaseManager = storage.NewDatabaseManager(configPath)
+	err := ui.DatabaseManager.Open()
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
 
 	// Create main window
 	ui.MainWindow = ui.App.NewWindow("GoVPN")
@@ -134,6 +142,25 @@ func (ui *UIManager) setupComponents() {
 }
 
 // ShowSettingsWindow creates and shows the settings window
+// OpenChatWindow creates and shows the chat window
+func (ui *UIManager) OpenChatWindow(network *data.Network) {
+	// Create and show the chat window (singleton pattern per network)
+	// For simplicity, let's assume only one chat window can be open at a time for now.
+	// In a real application, you might want a map of chat windows per network ID.
+	if globalChatWindow != nil && globalChatWindow.BaseWindow.Window != nil {
+		// Focus on existing window if already open
+		globalChatWindow.BaseWindow.Window.RequestFocus()
+		return
+	}
+
+	globalChatWindow = NewChatWindow(
+		ui.App,
+		network,
+		ui.VPN.WebRTCManager, // Pass the WebRTCManager
+	)
+	globalChatWindow.Show()
+}
+
 func (ui *UIManager) ShowAboutWindow() {
 	// Create and show the about window (singleton pattern)
 	if ui.AboutWindow != nil && ui.AboutWindow.BaseWindow.Window != nil {
@@ -173,6 +200,12 @@ func (ui *UIManager) ShowSettingsWindow() {
 // handleAppQuit handles application quit
 func (ui *UIManager) handleAppQuit() {
 	log.Println("Quitting app...")
+	if ui.DatabaseManager != nil {
+		err := ui.DatabaseManager.Close()
+		if err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+	}
 }
 
 // refreshUI refreshes the UI components

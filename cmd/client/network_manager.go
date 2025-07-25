@@ -31,6 +31,10 @@ const (
 )
 
 // NetworkManager handles the VPN network
+// OnWebRTCMessageReceived is a callback function for incoming WebRTC messages
+type OnWebRTCMessageReceived func(peerPublicKey string, message string)
+
+// NetworkManager handles the VPN network
 type NetworkManager struct {
 	peerConnections map[string]*clientwebrtc_impl.WebRTCManager // Map of peer public key to their WebRTC manager
 
@@ -42,14 +46,15 @@ type NetworkManager struct {
 	MaxReconnects     int
 
 	// Dependencies
-	RealtimeData       *data.RealtimeDataLayer
-	ConfigManager      *storage.ConfigManager
-	refreshNetworkList func()
-	refreshUI          func()
+	RealtimeData            *data.RealtimeDataLayer
+	ConfigManager           *storage.ConfigManager
+	refreshNetworkList      func()
+	refreshUI               func()
+	onWebRTCMessageReceived OnWebRTCMessageReceived
 }
 
 // NewNetworkManager creates a new instance of NetworkManager
-func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *storage.ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
+func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *storage.ConfigManager, refreshNetworkList func(), refreshUI func(), onWebRTCMessageReceived OnWebRTCMessageReceived) *NetworkManager {
 	nm := &NetworkManager{
 		peerConnections:    make(map[string]*clientwebrtc_impl.WebRTCManager),
 		connectionState:    ConnectionStateDisconnected,
@@ -59,6 +64,7 @@ func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *stor
 		ConfigManager:      configManager,
 		refreshNetworkList: refreshNetworkList,
 		refreshUI:          refreshUI,
+		onWebRTCMessageReceived: onWebRTCMessageReceived,
 	}
 
 	return nm
@@ -207,6 +213,56 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 
 			// Update the RealtimeDataLayer with the new networks list
 			nm.RealtimeData.SetNetworks(computerNetworksResponse.Networks)
+			nm.refreshNetworkList()
+		case smodels.TypeComputerConnected:
+			var notification smodels.ComputerConnectedNotification
+			if err := json.Unmarshal(payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal computer connected notification: %v", err)
+				return
+			}
+
+			log.Printf("Computer %s (IP: %s) connected to network %s", notification.ComputerName, notification.ComputerIP, notification.NetworkID)
+
+			// Find the network and update the computer's online status
+			networks := nm.RealtimeData.GetNetworks()
+			for i, network := range networks {
+				if network.NetworkID == notification.NetworkID {
+					for j, computer := range network.Computers {
+						if computer.PublicKey == notification.PublicKey {
+							network.Computers[j].IsOnline = true
+							nm.RealtimeData.UpdateNetwork(i, network)
+							log.Printf("Updated computer online status in UI for network %s", network.NetworkName)
+							break
+						}
+					}
+					break
+				}
+			}
+			nm.refreshNetworkList()
+		case smodels.TypeComputerDisconnected:
+			var notification smodels.ComputerDisconnectedNotification
+			if err := json.Unmarshal(payload, &notification); err != nil {
+				log.Printf("Failed to unmarshal computer disconnected notification: %v", err)
+				return
+			}
+
+			log.Printf("Computer with public key %s disconnected from network %s", notification.PublicKey, notification.NetworkID)
+
+			// Find the network and update the computer's online status
+			networks := nm.RealtimeData.GetNetworks()
+			for i, network := range networks {
+				if network.NetworkID == notification.NetworkID {
+					for j, computer := range network.Computers {
+						if computer.PublicKey == notification.PublicKey {
+							network.Computers[j].IsOnline = false
+							nm.RealtimeData.UpdateNetwork(i, network)
+							log.Printf("Updated computer online status in UI for network %s", network.NetworkName)
+							break
+						}
+					}
+					break
+				}
+			}
 			nm.refreshNetworkList()
 		case smodels.TypeComputerRenamed:
 			var notification smodels.ComputerRenamedNotification
@@ -718,7 +774,9 @@ func (nm *NetworkManager) handlePeerDataChannelOpen(peerPublicKey string) {
 // handlePeerDataChannelMessage handles incoming data channel messages from a peer
 func (nm *NetworkManager) handlePeerDataChannelMessage(peerPublicKey string, msg []byte) {
 	log.Printf("Message from peer %s: %s", peerPublicKey, string(msg))
-	// TODO: Process incoming data channel message
+	if nm.onWebRTCMessageReceived != nil {
+		nm.onWebRTCMessageReceived(peerPublicKey, string(msg))
+	}
 }
 
 // ConnectToPeer initiates a WebRTC connection with a peer
@@ -811,6 +869,7 @@ func (nm *NetworkManager) Disconnect() error {
 	nm.RealtimeData.SetStatusMessage("Disconnected")
 	nm.RealtimeData.SetComputerIP("0.0.0.0") // Clear the IP when disconnected
 	nm.ReconnectAttempts = 0
+	nm.RealtimeData.SetNetworks([]smodels.ComputerNetworkInfo{}) // Clear the network list
 
 	// Update UI
 	nm.refreshUI()

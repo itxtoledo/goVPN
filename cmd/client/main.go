@@ -1,10 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"log"
 	"os"
-	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
@@ -20,11 +19,13 @@ func main() {
 		// log.SetOutput(logFile)
 	}
 
-	setupDataPath()
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "Path to custom configuration directory")
+	flag.Parse()
 
-	configManager := storage.NewConfigManager()
+	configManager := storage.NewConfigManager(configPath)
 	computername := configManager.GetConfig().ComputerName
-		ui := NewUIManager(DefaultServerAddress, computername)
+		ui := NewUIManager(DefaultServerAddress, computername, configPath)
 
 	// Set up system tray
 	if desk, ok := ui.App.(desktop.App); ok {
@@ -96,21 +97,6 @@ func main() {
 
 	ui.Run(DefaultServerAddress)
 	tidyUp()
-}
-
-// setupDataPath creates necessary directories for the application
-func setupDataPath() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("Failed to get user home directory: %v", err)
-	}
-
-	// Create data directory if it doesn't exist
-	dataPath := filepath.Join(homeDir, ".govpn")
-	err = os.MkdirAll(dataPath, 0755)
-	if err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
-	}
 }
 
 func tidyUp() {

@@ -31,14 +31,20 @@ type ConfigManager struct {
 }
 
 // NewConfigManager cria uma nova instância do gerenciador de configurações
-func NewConfigManager() *ConfigManager {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Printf("Error getting user home directory: %v", err)
-		homeDir = "."
+func NewConfigManager(customConfigPath string) *ConfigManager {
+	var dataPath string
+
+	if customConfigPath != "" {
+		dataPath = customConfigPath
+	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("Error getting user home directory: %v", err)
+			homeDir = "."
+		}
+		dataPath = filepath.Join(homeDir, ".govpn")
 	}
 
-	dataPath := filepath.Join(homeDir, ".govpn")
 	configPath := filepath.Join(dataPath, "config.json")
 
 	cm := &ConfigManager{
@@ -52,7 +58,7 @@ func NewConfigManager() *ConfigManager {
 	}
 
 	// Cria o diretório de dados se não existir
-	err = os.MkdirAll(dataPath, 0755)
+	err := os.MkdirAll(dataPath, 0755)
 	if err != nil {
 		log.Printf("Error creating data directory: %v", err)
 	}
