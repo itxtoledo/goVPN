@@ -313,10 +313,10 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 
 			if err := peerWebRTCManager.AddICECandidate(webrtc.ICECandidateInit{
-				Candidate:     candidate.Candidate,
-				SDPMid:        &candidate.SDPMid,
-				SDPMLineIndex: &candidate.SDPMLineIndex,
-			}); err != nil {
+					Candidate:     candidate.Candidate,
+					SDPMid:        &candidate.SDPMid,
+					SDPMLineIndex: &candidate.SDPMLineIndex,
+				}); err != nil {
 				log.Printf("failed to add ICE candidate for peer %s: %v", candidate.SenderPublicKey, err)
 				return
 			}
