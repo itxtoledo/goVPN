@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 	sclient "github.com/itxtoledo/govpn/libs/signaling/client"
@@ -109,7 +110,20 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 		case smodels.TypeNetworkJoined:
 			nm.refreshNetworkList()
 		case smodels.TypeNetworkCreated:
-			nm.refreshNetworkList()
+			var createNetworkResponse smodels.CreateNetworkResponse
+			if err := json.Unmarshal(payload, &createNetworkResponse); err != nil {
+				log.Printf("Failed to unmarshal create network response: %v", err)
+				return
+			}
+			fyne.Do(func() {
+				network := data.Network{
+					NetworkID:   createNetworkResponse.NetworkID,
+					NetworkName: createNetworkResponse.NetworkName,
+					Computers:   createNetworkResponse.Computers,
+					LastConnected: time.Now(),
+				}
+				nm.RealtimeData.AddNetwork(network)
+			})
 		case smodels.TypeLeaveNetwork:
 			nm.refreshNetworkList()
 		case smodels.TypeKicked:

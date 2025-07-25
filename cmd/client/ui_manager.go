@@ -97,6 +97,9 @@ func (ui *UIManager) listenForDataEvents() {
 		case data.EventNetworkDeleted:
 			// Atualizar a UI quando uma sala for excluída
 			ui.refreshNetworkList()
+		case data.EventNetworksChanged:
+			// Atualizar a UI quando a lista de redes for alterada
+			ui.refreshNetworkList()
 		case data.EventSettingsChanged:
 			// Atualizar configurações quando forem alteradas
 			ui.refreshUI()
@@ -253,6 +256,7 @@ func (ui *UIManager) HandleNetworkCreated(networkID, networkName, pin string) {
 		LastConnected: time.Now(),
 	}
 	ui.RealtimeData.AddNetwork(network)
+	ui.RealtimeData.EmitEvent(data.EventNetworkCreated, "Network created", network)
 
 	dialog.ShowInformation("Success", "Network created and saved!", ui.MainWindow)
 }

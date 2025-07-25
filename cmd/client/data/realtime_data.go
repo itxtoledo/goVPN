@@ -32,7 +32,9 @@ const (
 	EventNetworkLeft EventType = "network_left"
 	// EventNetworkDisconnected é emitido quando desconecta de uma sala sem sair dela
 	EventNetworkDisconnected EventType = "network_disconnected"
+	EventNetworkCreated      EventType = "network_created" // Add this constant for network creation event
 	EventNetworkDeleted      EventType = "network_deleted" // Add this constant for network deletion event
+	EventNetworksChanged     EventType = "networks_changed" // Add this constant for networks list changed event
 	EventSettingsChanged     EventType = "settings_changed"
 	// EventError é emitido quando ocorre um erro
 	EventError EventType = "error"
@@ -180,12 +182,13 @@ func (rdl *RealtimeDataLayer) SetNetworks(networks []Network) {
 
 	log.Printf("SetNetworks: Setting %d networks", len(networks))
 
-	// Convert []*Network to []interface{}
+	// Convert []Network to []interface{} of *Network
 	var untypedNetworks []interface{}
-	for _, network := range networks {
-		untypedNetworks = append(untypedNetworks, network)
+	for i := range networks {
+		untypedNetworks = append(untypedNetworks, &networks[i])
 	}
 	rdl.Networks.Set(untypedNetworks)
+	rdl.EmitEvent(EventNetworksChanged, "Networks list updated", nil)
 }
 
 // AddNetwork adiciona uma nova sala à lista
@@ -200,7 +203,11 @@ func (rdl *RealtimeDataLayer) AddNetwork(network Network) {
 			return
 		}
 	}
-	rdl.Networks.Set(append(currentNetworks, network))
+	
+	newNetworks := append(currentNetworks, &network)
+	rdl.Networks.Set(newNetworks)
+	rdl.EmitEvent(EventNetworksChanged, "Network added", nil)
+	log.Printf("AddNetwork: Networks binding length after Set: %d", rdl.Networks.Length())
 }
 
 // RemoveNetwork remove uma sala da lista pelo ID
@@ -211,11 +218,12 @@ func (rdl *RealtimeDataLayer) RemoveNetwork(networkID string) {
 	currentNetworks, _ := rdl.Networks.Get()
 	var updatedNetworks []interface{}
 	for _, r := range currentNetworks {
-		if network, ok := r.(*Network); ok && network.NetworkID != networkID {
-			updatedNetworks = append(updatedNetworks, network)
+		if networkPtr, ok := r.(*Network); ok && networkPtr.NetworkID != networkID {
+			updatedNetworks = append(updatedNetworks, networkPtr)
 		}
 	}
 	rdl.Networks.Set(updatedNetworks)
+	rdl.EmitEvent(EventNetworksChanged, "Network removed", nil)
 }
 
 // UpdateNetwork atualiza uma sala existente na lista
@@ -225,7 +233,7 @@ func (rdl *RealtimeDataLayer) UpdateNetwork(index int, network Network) {
 
 	currentNetworks, _ := rdl.Networks.Get()
 	if index >= 0 && index < len(currentNetworks) {
-		currentNetworks[index] = network
+		currentNetworks[index] = &network
 		rdl.Networks.Set(currentNetworks)
 	}
 }
@@ -239,8 +247,8 @@ func (rdl *RealtimeDataLayer) GetNetworks() []Network {
 	log.Printf("GetNetworks: Retrieved %d networks", len(currentNetworks))
 	networks := make([]Network, len(currentNetworks))
 	for i, r := range currentNetworks {
-		if network, ok := r.(Network); ok {
-			networks[i] = network
+		if networkPtr, ok := r.(*Network); ok {
+			networks[i] = *networkPtr
 		} else {
 			log.Printf("GetNetworks: Type assertion failed for network at index %d", i)
 		}
