@@ -160,6 +160,7 @@ func (ui *UIManager) ShowSettingsWindow() {
 
 	globalSettingsWindow = NewSettingsWindow(
 		ui.App,
+		ui.ConfigManager,
 		config,
 		ui.HandleSettingsSaved,
 	)
