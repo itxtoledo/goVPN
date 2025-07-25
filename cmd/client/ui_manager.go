@@ -303,6 +303,11 @@ func (ui *UIManager) applySettings(config storage.Config) {
 	// Update server address
 	ui.RealtimeData.SetServerAddress(config.ServerAddress)
 
+	// Send updated client info to the server
+	if ui.VPN != nil && ui.VPN.NetworkManager != nil {
+		ui.VPN.NetworkManager.UpdateClientInfo()
+	}
+
 	// Emit settings changed event
 	ui.RealtimeData.EmitEvent(data.EventSettingsChanged, "Settings updated", nil)
 

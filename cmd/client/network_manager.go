@@ -417,6 +417,9 @@ func (nm *NetworkManager) UpdateClientInfo() {
 	// Criar a mensagem
 	msg := smodels.UpdateClientInfoRequest{
 		ClientName: clientName,
+		BaseRequest: smodels.BaseRequest{
+			PublicKey: config.PublicKey,
+		},
 	}
 
 	// Enviar a mensagem

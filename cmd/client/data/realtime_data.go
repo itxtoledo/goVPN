@@ -145,6 +145,44 @@ func (rdl *RealtimeDataLayer) SetStatusMessage(message string) {
 // SetComputerName define o nome de usuário
 func (rdl *RealtimeDataLayer) SetComputerName(computername string) {
 	rdl.ComputerName.Set(computername)
+
+	// Update the computer name in the Networks list for the local client
+	localPublicKey, _ := rdl.PublicKey.Get()
+	if localPublicKey == "" {
+		log.Println("SetComputerName: Local public key not set, cannot update network list.")
+		return
+	}
+
+	currentNetworks, _ := rdl.Networks.Get()
+	updatedNetworks := make([]interface{}, len(currentNetworks))
+	changed := false
+
+	for i, r := range currentNetworks {
+		if networkPtr, ok := r.(*Network); ok {
+			// Create a copy to modify
+			tempNetwork := *networkPtr
+			tempComputers := make([]ComputerInfo, len(tempNetwork.Computers))
+			copy(tempComputers, tempNetwork.Computers)
+
+			for j, computer := range tempComputers {
+				if computer.PublicKey == localPublicKey {
+					if computer.Name != computername {
+						tempComputers[j].Name = computername
+						changed = true
+					}
+				}
+			}
+			tempNetwork.Computers = tempComputers
+			updatedNetworks[i] = &tempNetwork
+		} else {
+			updatedNetworks[i] = r // Keep as is if type assertion fails
+		}
+	}
+
+	if changed {
+		rdl.Networks.Set(updatedNetworks)
+		rdl.EmitEvent(EventNetworksChanged, "Local computer name updated in networks", nil)
+	}
 }
 
 // SetComputerIP define o IP do usuário

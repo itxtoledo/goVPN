@@ -95,13 +95,16 @@ func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer) {
 	// Atualiza o endereço do servidor na camada de dados em tempo real
 	realtimeData.SetServerAddress(config.ServerAddress)
 
+	// Atualiza a chave pública na camada de dados em tempo real
+	realtimeData.PublicKey.Set(v.PublicKeyStr)
+
 	// Configura o idioma (se implementado)
 	if config.Language != "" {
 		realtimeData.SetLanguage(config.Language)
 	}
 
-	log.Printf("Settings loaded: ComputerName=%s, Theme=%s, Language=%s, Server=%s",
-		config.ComputerName, config.Theme, config.Language, config.ServerAddress)
+	log.Printf("Settings loaded: ComputerName=%s, Theme=%s, Language=%s, Server=%s, PublicKey=%s",
+		config.ComputerName, config.Theme, config.Language, config.ServerAddress, v.PublicKeyStr)
 }
 
 // Run inicia o cliente VPN
