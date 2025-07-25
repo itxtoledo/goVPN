@@ -10,6 +10,8 @@ import (
 	"github.com/itxtoledo/govpn/cmd/client/storage"
 	sclient "github.com/itxtoledo/govpn/libs/signaling/client"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
+	"github.com/pion/webrtc/v4"
+	clientwebrtc_impl "github.com/itxtoledo/govpn/cmd/client/webrtc"
 )
 
 // NetworkInterface define a interface mínima para a rede virtual
@@ -29,6 +31,8 @@ const (
 
 // NetworkManager handles the VPN network
 type NetworkManager struct {
+	peerConnections map[string]*clientwebrtc_impl.WebRTCManager // Map of peer public key to their WebRTC manager
+
 	VirtualNetwork    NetworkInterface
 	SignalingServer   *sclient.SignalingClient
 	NetworkID         string
@@ -46,6 +50,7 @@ type NetworkManager struct {
 // NewNetworkManager creates a new instance of NetworkManager
 func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *storage.ConfigManager, refreshNetworkList func(), refreshUI func()) *NetworkManager {
 	nm := &NetworkManager{
+		peerConnections:    make(map[string]*clientwebrtc_impl.WebRTCManager),
 		connectionState:    ConnectionStateDisconnected,
 		ReconnectAttempts:  0,
 		MaxReconnects:      5,
@@ -214,6 +219,107 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				}
 			}
 			nm.refreshNetworkList()
+		case smodels.TypeSdpOffer:
+			var offer smodels.SdpOffer
+			if err := json.Unmarshal(payload, &offer); err != nil {
+				log.Printf("failed to unmarshal sdp offer: %v", err)
+				return
+			}
+
+			// Get or create WebRTCManager for this peer
+			peerWebRTCManager, ok := nm.peerConnections[offer.SenderPublicKey]
+			if !ok {
+				log.Printf("Creating new WebRTCManager for peer %s on receiving offer.", offer.SenderPublicKey)
+				var err error // Declare err here
+				peerWebRTCManager, err = clientwebrtc_impl.NewWebRTCManager()
+				if err != nil {
+					log.Printf("failed to create WebRTC manager for peer %s: %v", offer.SenderPublicKey, err)
+					return
+				}
+				nm.peerConnections[offer.SenderPublicKey] = peerWebRTCManager
+
+				// Set up callbacks for this specific peer connection
+				peerWebRTCManager.SetOnICECandidate(func(c *webrtc.ICECandidate) {
+					nm.handleICECandidate(c, offer.SenderPublicKey)
+				})
+				peerWebRTCManager.SetOnConnectionStateChange(func(s webrtc.PeerConnectionState) {
+					nm.handlePeerConnectionStateChange(offer.SenderPublicKey, s)
+				})
+				peerWebRTCManager.SetOnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
+					nm.handlePeerICEConnectionStateChange(offer.SenderPublicKey, s)
+				})
+				peerWebRTCManager.SetOnDataChannelOpen(func() {
+					nm.handlePeerDataChannelOpen(offer.SenderPublicKey)
+				})
+				peerWebRTCManager.SetOnDataChannelMessage(func(msg []byte) {
+					nm.handlePeerDataChannelMessage(offer.SenderPublicKey, msg)
+				})
+
+				// Create Data Channel for this peer if it's the answerer
+				if err := peerWebRTCManager.CreateDataChannel(); err != nil {
+					log.Printf("failed to create data channel for peer %s: %v", offer.SenderPublicKey, err)
+					return
+				}
+			}
+
+			answer, err := peerWebRTCManager.HandleOfferAndCreateAnswer(webrtc.SessionDescription{
+				Type: webrtc.SDPTypeOffer,
+				SDP:  offer.SDP,
+			})
+			if err != nil {
+				log.Printf("failed to handle offer and create answer for peer %s: %v", offer.SenderPublicKey, err)
+				return
+			}
+
+			_, err = nm.SignalingServer.SendMessage(smodels.TypeSdpAnswer, smodels.SdpAnswer{
+				TargetPublicKey: offer.SenderPublicKey,
+				SDP:             answer.SDP,
+			})
+			if err != nil {
+				log.Printf("failed to send sdp answer for peer %s: %v", offer.SenderPublicKey, err)
+				return
+			}
+		case smodels.TypeSdpAnswer:
+			var answer smodels.SdpAnswer
+			if err := json.Unmarshal(payload, &answer); err != nil {
+				log.Printf("failed to unmarshal sdp answer: %v", err)
+				return
+			}
+
+			peerWebRTCManager, ok := nm.peerConnections[answer.SenderPublicKey]
+			if !ok {
+				log.Printf("No WebRTCManager found for peer %s on receiving answer.", answer.SenderPublicKey)
+				return
+			}
+
+			if err := peerWebRTCManager.HandleAnswer(webrtc.SessionDescription{
+				Type: webrtc.SDPTypeAnswer,
+				SDP:  answer.SDP,
+			}); err != nil {
+				log.Printf("failed to set remote description for peer %s: %v", answer.SenderPublicKey, err)
+				return
+			}
+		case smodels.TypeIceCandidate:
+			var candidate smodels.IceCandidate
+			if err := json.Unmarshal(payload, &candidate); err != nil {
+				log.Printf("failed to unmarshal ice candidate: %v", err)
+				return
+			}
+
+			peerWebRTCManager, ok := nm.peerConnections[candidate.SenderPublicKey]
+			if !ok {
+				log.Printf("No WebRTCManager found for peer %s on receiving ICE candidate.", candidate.SenderPublicKey)
+				return
+			}
+
+			if err := peerWebRTCManager.AddICECandidate(webrtc.ICECandidateInit{
+					Candidate:     candidate.Candidate,
+					SDPMid:        &candidate.SDPMid,
+					SDPMLineIndex: &candidate.SDPMLineIndex,
+				}); err != nil {
+				log.Printf("failed to add ICE candidate for peer %s: %v", candidate.SenderPublicKey, err)
+				return
+			}
 		}
 	}
 	nm.SignalingServer = sclient.NewSignalingClient(publicKey, signalingHandler)
@@ -323,7 +429,7 @@ func (nm *NetworkManager) CreateNetwork(name string, pin string) error {
 		return fmt.Errorf("failed to create network: invalid server response")
 	}
 
-		log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
+	log.Printf("Network created: ID=%s, Name=%s", res.NetworkID, name)
 
 	// Store network information for current connection
 	nm.NetworkID = res.NetworkID
@@ -557,6 +663,104 @@ func (nm *NetworkManager) HandleNetworkDeleted(networkID string) error {
 	return nil
 }
 
+// handleICECandidate handles a new ICE candidate
+func (nm *NetworkManager) handleICECandidate(c *webrtc.ICECandidate, targetPublicKey string) {
+	if c == nil {
+		return
+	}
+
+	_, err := nm.SignalingServer.SendMessage(smodels.TypeIceCandidate, smodels.IceCandidate{
+		TargetPublicKey: targetPublicKey,
+		Candidate:       c.ToJSON().Candidate,
+		SDPMid:          *c.ToJSON().SDPMid,
+		SDPMLineIndex:   *c.ToJSON().SDPMLineIndex,
+	})
+	if err != nil {
+		log.Printf("failed to send ice candidate: %v", err)
+	}
+}
+
+// handlePeerConnectionStateChange handles changes in a peer's WebRTC connection state
+func (nm *NetworkManager) handlePeerConnectionStateChange(peerPublicKey string, s webrtc.PeerConnectionState) {
+	log.Printf("Peer %s Connection State has changed: %s", peerPublicKey, s.String())
+	// TODO: Update UI or take action based on connection state
+}
+
+// handlePeerICEConnectionStateChange handles changes in a peer's ICE connection state
+func (nm *NetworkManager) handlePeerICEConnectionStateChange(peerPublicKey string, s webrtc.ICEConnectionState) {
+	log.Printf("Peer %s ICE Connection State has changed: %s", peerPublicKey, s.String())
+	// TODO: Update UI or take action based on ICE connection state
+}
+
+// handlePeerDataChannelOpen handles the event when a data channel opens for a peer
+func (nm *NetworkManager) handlePeerDataChannelOpen(peerPublicKey string) {
+	log.Printf("Data channel opened for peer: %s", peerPublicKey)
+	// TODO: Send initial messages or update UI
+}
+
+// handlePeerDataChannelMessage handles incoming data channel messages from a peer
+func (nm *NetworkManager) handlePeerDataChannelMessage(peerPublicKey string, msg []byte) {
+	log.Printf("Message from peer %s: %s", peerPublicKey, string(msg))
+	// TODO: Process incoming data channel message
+}
+
+// ConnectToPeer initiates a WebRTC connection with a peer
+func (nm *NetworkManager) ConnectToPeer(peerPublicKey string) error {
+	// Check if a connection already exists for this peer
+	if _, ok := nm.peerConnections[peerPublicKey]; ok {
+		log.Printf("Connection to peer %s already exists.", peerPublicKey)
+		return nil
+	}
+
+	// Create a new WebRTCManager for this peer
+	peerWebRTCManager, err := clientwebrtc_impl.NewWebRTCManager()
+	if err != nil {
+		return fmt.Errorf("failed to create WebRTC manager for peer %s: %w", peerPublicKey, err)
+	}
+
+	nm.peerConnections[peerPublicKey] = peerWebRTCManager
+
+	// Set up callbacks for this specific peer connection
+	peerWebRTCManager.SetOnICECandidate(func(c *webrtc.ICECandidate) {
+		nm.handleICECandidate(c, peerPublicKey)
+	})
+	peerWebRTCManager.SetOnConnectionStateChange(func(s webrtc.PeerConnectionState) {
+		nm.handlePeerConnectionStateChange(peerPublicKey, s)
+	})
+	peerWebRTCManager.SetOnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
+		nm.handlePeerICEConnectionStateChange(peerPublicKey, s)
+	})
+	peerWebRTCManager.SetOnDataChannelOpen(func() {
+		nm.handlePeerDataChannelOpen(peerPublicKey)
+	})
+	peerWebRTCManager.SetOnDataChannelMessage(func(msg []byte) {
+		nm.handlePeerDataChannelMessage(peerPublicKey, msg)
+	})
+
+	// Create Data Channel for this peer
+	if err := peerWebRTCManager.CreateDataChannel(); err != nil {
+		return fmt.Errorf("failed to create data channel for peer %s: %w", peerPublicKey, err)
+	}
+
+	// Create offer for this peer
+	offer, err := peerWebRTCManager.CreateOffer(false)
+	if err != nil {
+		return fmt.Errorf("failed to create offer for peer %s: %w", peerPublicKey, err)
+	}
+
+	// Send offer via signaling server
+	_, err = nm.SignalingServer.SendMessage(smodels.TypeSdpOffer, smodels.SdpOffer{
+		TargetPublicKey: peerPublicKey,
+		SDP:             offer.SDP,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to send sdp offer for peer %s: %w", peerPublicKey, err)
+	}
+
+	log.Printf("Initiated WebRTC connection with peer: %s", peerPublicKey)
+	return nil
+}
+
 // Disconnect disconnects from the VPN network
 func (nm *NetworkManager) Disconnect() error {
 	if nm.connectionState == ConnectionStateDisconnected {
@@ -576,6 +780,14 @@ func (nm *NetworkManager) Disconnect() error {
 		nm.VirtualNetwork = nil
 	}
 
+	// Close all WebRTC connections
+	for peerPublicKey, peerWebRTCManager := range nm.peerConnections {
+		if err := peerWebRTCManager.Close(); err != nil {
+			log.Printf("Error closing WebRTC manager for peer %s: %v", peerPublicKey, err)
+		}
+		delete(nm.peerConnections, peerPublicKey)
+	}
+
 	// Set state to disconnected
 	nm.connectionState = ConnectionStateDisconnected
 	nm.RealtimeData.SetConnectionState(data.StateDisconnected)
@@ -588,3 +800,7 @@ func (nm *NetworkManager) Disconnect() error {
 
 	return nil
 }
+
+
+
+

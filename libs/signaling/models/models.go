@@ -54,18 +54,21 @@ type SignalingMessage struct {
 
 // SdpOffer represents a WebRTC SDP offer message
 type SdpOffer struct {
+	SenderPublicKey string `json:"sender_public_key"`
 	TargetPublicKey string `json:"target_public_key"`
 	SDP             string `json:"sdp"`
 }
 
 // SdpAnswer represents a WebRTC SDP answer message
 type SdpAnswer struct {
+	SenderPublicKey string `json:"sender_public_key"`
 	TargetPublicKey string `json:"target_public_key"`
 	SDP             string `json:"sdp"`
 }
 
 // IceCandidate represents a WebRTC ICE candidate message
 type IceCandidate struct {
+	SenderPublicKey string `json:"sender_public_key"`
 	TargetPublicKey string `json:"target_public_key"`
 	Candidate       string `json:"candidate"`
 	SDPMid          string `json:"sdp_mid"`

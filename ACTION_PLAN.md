@@ -118,12 +118,12 @@ This section details the establishment of direct WebRTC data channels between al
         - Create corresponding structs for these messages. They should include a `TargetPublicKey` field to route the message to the correct computer.
         - The server has been updated to parse these new messages and forward them to the specified `TargetPublicKey` within the same network.
 
-- [ ] **2.2: Implement Full-Mesh ComputerConnection Logic**
+- [x] **2.2: Implement Full-Mesh ComputerConnection Logic**
     - **Component**: Client (`cmd/client/vpn_connection_manager.go`)
     - **Details**: Each client in a network must establish a direct WebRTC connection with every other client in that network. This involves initiating peer connections and handling the SDP offer/answer exchange.
     - **Action**:
-        - **2.2.1: Add `pion/webrtc` dependency**: In `cmd/client/go.mod`, add `github.com/pion/webrtc/v3` as a direct dependency. Run `go mod tidy`.
-        - **2.2.2: Initialize PeerConnection**: In `VPNConnectionManager`, when a `models.ComputerJoined` notification is received (via `HandleSignalingMessage`):
+        - [x] **2.2.1: Add `pion/webrtc` dependency**: In `cmd/client/go.mod`, add `github.com/pion/webrtc/v3` as a direct dependency. Run `go mod tidy`.
+        - [x] **2.2.2: Initialize PeerConnection**: In `VPNConnectionManager`, when a `models.ComputerJoined` notification is received (via `HandleSignalingMessage`):
             - Create a new `webrtc.PeerConnection` instance for the new computer.
             - Configure ICE servers (e.g., Google's STUN server: `stun:stun.l.google.com:19302`).
             - Set up `OnICECandidate` callback to send ICE candidates to the remote peer via the signaling server (`models.MessageTypeIceCandidate`).
@@ -131,20 +131,20 @@ This section details the establishment of direct WebRTC data channels between al
             - Set up `OnDataChannel` callback to handle incoming data channels from the remote peer.
             - Create a data channel (e.g., `peerConnection.CreateDataChannel("vpn", nil)`) for sending VPN packets.
             - Store the `PeerConnection` in the `peerConnections` map using the remote computer's public key as the key.
-        - **2.2.3: Create and Send SDP Offer**: For the newly created `PeerConnection`:
+        - [x] **2.2.3: Create and Send SDP Offer**: For the newly created `PeerConnection`:
             - Create an SDP offer (`peerConnection.CreateOffer(nil)`).
             - Set the local description (`peerConnection.SetLocalDescription(offer)`).
             - Send the SDP offer to the new computer via the signaling server using a `models.MessageTypeSdpOffer` message. The message should include the offer's SDP and the `TargetPublicKey` of the new computer.
-        - **2.2.4: Handle Incoming SDP Offer**: In `VPNConnectionManager.HandleSignalingMessage`, when a `models.MessageTypeSdpOffer` is received:
+        - [x] **2.2.4: Handle Incoming SDP Offer**: In `VPNConnectionManager.HandleSignalingMessage`, when a `models.MessageTypeSdpOffer` is received:
             - Create a new `webrtc.PeerConnection` (if one doesn't already exist for the sender).
             - Set the remote description (`peerConnection.SetRemoteDescription(offer)`).
             - Create an SDP answer (`peerConnection.CreateAnswer(nil)`).
             - Set the local description (`peerConnection.SetLocalDescription(answer)`).
             - Send the SDP answer back to the sender via the signaling server using a `models.MessageTypeSdpAnswer` message.
-        - **2.2.5: Handle Incoming SDP Answer**: In `VPNConnectionManager.HandleSignalingMessage`, when a `models.MessageTypeSdpAnswer` is received:
+        - [x] **2.2.5: Handle Incoming SDP Answer**: In `VPNConnectionManager.HandleSignalingMessage`, when a `models.MessageTypeSdpAnswer` is received:
             - Retrieve the corresponding `PeerConnection` from the `peerConnections` map.
             - Set the remote description (`peerConnection.SetRemoteDescription(answer)`).
-        - **2.2.6: Handle Incoming ICE Candidate**: In `VPNConnectionManager.HandleSignalingMessage`, when a `models.MessageTypeIceCandidate` is received:
+        - [x] **2.2.6: Handle Incoming ICE Candidate**: In `VPNConnectionManager.HandleSignalingMessage`, when a `models.MessageTypeIceCandidate` is received:
             - Retrieve the corresponding `PeerConnection` from the `peerConnections` map.
             - Add the ICE candidate to the peer connection (`peerConnection.AddICECandidate(candidate)`).
 
@@ -206,7 +206,7 @@ This section covers the logistics of IP address assignment and system routing co
     - **Component**: Client (`cmd/client/vpn_connection_manager.go`)
     - **Details**: For the OS to know which traffic should go through the VPN, a route must be added to its routing table. This is a critical step to ensure that traffic destined for the VPN network is correctly routed through the TUN interface.
     - **Action**:
-        - **4.2.1: Determine OS-Specific Commands**: Identify the appropriate shell commands for adding and deleting routes on Linux, macOS, and Windows. These commands typically involve `ip route` (Linux), `route add` (macOS/Windows), or `netsh interface ip add route` (Windows).
+        - **4.2.1: Determine OS-Specific Commands**: Identify the appropriate shell commands for adding and deleting routes on Linux, macOS, and Windows. These commands typically involve `ip route` (Linux), `route add` (macOS/Windows), or `netsh interface ip set address` (Windows).
         - **4.2.2: Implement Route Addition**: In `VPNConnectionManager`, after the TUN interface is successfully created and configured with its IP (in task 1.2.5), implement a method (e.g., `addVPNRoute()`) that:
             - Constructs the correct OS-specific command to add a route for the entire VPN subnet (e.g., `10.10.0.0/24`) through the TUN interface.
             - Executes this command using `os/exec.Command()`. This will require elevated privileges.

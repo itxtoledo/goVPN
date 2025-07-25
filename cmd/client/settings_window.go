@@ -21,12 +21,14 @@ type SettingsWindow struct {
 	ThemeSelect        *widget.Select
 	SaveButton         *widget.Button
 
+	configManager *storage.ConfigManager // Add ConfigManager field
+
 	// Callback
 	OnSettingsSaved func(config storage.Config)
 }
 
 // NewSettingsWindow creates a new settings window
-func NewSettingsWindow(app fyne.App, currentConfig storage.Config, onSettingsSaved func(config storage.Config)) *SettingsWindow {
+func NewSettingsWindow(app fyne.App, configManager *storage.ConfigManager, currentConfig storage.Config, onSettingsSaved func(config storage.Config)) *SettingsWindow {
 	if globalSettingsWindow != nil {
 		return globalSettingsWindow
 	}
@@ -34,6 +36,7 @@ func NewSettingsWindow(app fyne.App, currentConfig storage.Config, onSettingsSav
 	sw := &SettingsWindow{
 		BaseWindow:      ui.NewBaseWindow(app, "Settings", 320, 260),
 		OnSettingsSaved: onSettingsSaved,
+		configManager:   configManager,
 	}
 
 	// Set close callback to reset the global instance when window closes
@@ -84,10 +87,15 @@ func NewSettingsWindow(app fyne.App, currentConfig storage.Config, onSettingsSav
 
 // saveSettings saves the settings
 func (sw *SettingsWindow) saveSettings() {
+	// Get current config to preserve existing keys
+	currentConfig := sw.configManager.GetConfig()
+
 	// Create a new config object with updated values
 	newConfig := storage.Config{
 		ComputerName:  sw.ComputerNameEntry.Text,
 		ServerAddress: sw.ServerAddressEntry.Text,
+		PublicKey:     currentConfig.PublicKey,
+		PrivateKey:    currentConfig.PrivateKey,
 	}
 
 	// Update theme

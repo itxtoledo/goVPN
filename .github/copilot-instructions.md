@@ -7,6 +7,7 @@ The client store things only on sqlite using the database_manager and config.
 All data must be sent to server using available structs on models package.
 Do not implement TLS!
 This project is located at github.com/itxtoledo/govpn
-To run server: cd cmd/server && go run .
-To run client: cd cmd/client && go run .
+To build server: cd cmd/server && go build .
+To build client: cd cmd/client && go build .
 DO NOT USE fyne.CurrentApp().Driver().RunOnMain because this method dont exist on new Fyne (v2.4+)!
+YOU MUST run build to test the code before end the conversation.
