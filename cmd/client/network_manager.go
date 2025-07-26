@@ -624,6 +624,23 @@ func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 		nm.RealtimeData.EmitEvent(data.EventNetworkDisconnected, networkID, nil)
 	}
 
+	// Update the IsOnline status of the current computer in the RealtimeData.Networks list
+	publicKey, _ := nm.ConfigManager.GetKeyPair()
+	networks := nm.RealtimeData.GetNetworks()
+	for i, network := range networks {
+		if network.NetworkID == networkID {
+			for j, computer := range network.Computers {
+				if computer.PublicKey == publicKey {
+					network.Computers[j].IsOnline = false
+					nm.RealtimeData.UpdateNetwork(i, network)
+					log.Printf("Updated current computer's online status to false for network %s", network.NetworkName)
+					break
+				}
+			}
+			break
+		}
+	}
+
 	// Refresh the network list UI
 	nm.refreshNetworkList()
 
@@ -842,6 +859,17 @@ func (nm *NetworkManager) Disconnect() error {
 		return nil
 	}
 
+	// Explicitly disconnect from all joined networks before disconnecting from the signaling server
+	// This ensures the server is notified of our disconnection from each network.
+	networksToDisconnect := nm.RealtimeData.GetNetworks()
+	for _, network := range networksToDisconnect {
+		log.Printf("Explicitly disconnecting from network %s before full client disconnect.", network.NetworkID)
+		err := nm.DisconnectNetwork(network.NetworkID)
+		if err != nil {
+			log.Printf("Error explicitly disconnecting from network %s: %v", network.NetworkID, err)
+		}
+	}
+
 	// Disconnect from signaling server
 	if nm.SignalingServer != nil {
 		err := nm.SignalingServer.Disconnect()
@@ -873,6 +901,7 @@ func (nm *NetworkManager) Disconnect() error {
 
 	// Update UI
 	nm.refreshUI()
+	nm.refreshNetworkList() // Added this line
 
 	return nil
 }

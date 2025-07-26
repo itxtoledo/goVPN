@@ -562,7 +562,12 @@ func (s *SignalingClient) listenForMessages() {
 
 		_, message, err := s.Conn.ReadMessage()
 		if err != nil {
-			log.Printf("Error reading message: %v", err)
+			// Check if the error is due to a closed connection
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) || websocket.IsUnexpectedCloseError(err) {
+				log.Printf("WebSocket connection closed: %v", err)
+			} else {
+				log.Printf("Error reading message: %v", err)
+			}
 			s.Connected = false
 			s.Conn = nil
 			return
