@@ -87,6 +87,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 
 	// Create a handler function for signaling client messages
 	signalingHandler := func(messageType smodels.MessageType, payload []byte) {
+		log.Printf("Received message: Type=%s, Payload=%s", messageType, string(payload))
 		switch messageType {
 		case smodels.TypeError:
 			var errorPayload map[string]string
@@ -135,6 +136,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 		case smodels.TypeKicked:
 			nm.refreshNetworkList()
 		case smodels.TypeComputerJoined:
+			log.Printf("Received TypeComputerJoined message.")
 			var computerJoinedNotification smodels.ComputerJoinedNotification
 			if err := json.Unmarshal(payload, &computerJoinedNotification); err != nil {
 				log.Printf("Failed to unmarshal computer joined notification: %v", err)
@@ -171,6 +173,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 			nm.refreshNetworkList()
 		case smodels.TypeComputerLeft:
+			log.Printf("Received TypeComputerLeft message.")
 			var computerLeftNotification smodels.ComputerLeftNotification
 			if err := json.Unmarshal(payload, &computerLeftNotification); err != nil {
 				log.Printf("Failed to unmarshal computer left notification: %v", err)
@@ -197,6 +200,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 			nm.refreshNetworkList()
 		case smodels.TypeComputerNetworks:
+			log.Printf("Received TypeComputerNetworks message.")
 			// For TypeComputerNetworks, we need to unmarshal the payload to update the networks list
 			var computerNetworksResponse smodels.ComputerNetworksResponse
 			if err := json.Unmarshal(payload, &computerNetworksResponse); err != nil {
@@ -216,6 +220,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			nm.RealtimeData.SetNetworks(computerNetworksResponse.Networks)
 			nm.refreshNetworkList()
 		case smodels.TypeComputerConnected:
+			log.Printf("Received TypeComputerConnected message.")
 			var notification smodels.ComputerConnectedNotification
 			if err := json.Unmarshal(payload, &notification); err != nil {
 				log.Printf("Failed to unmarshal computer connected notification: %v", err)

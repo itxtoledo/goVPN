@@ -59,9 +59,10 @@ func NewWebSocketServer(cfg Config) (*WebSocketServer, error) {
 	statsManager := NewStatsManager(cfg)
 
 	return &WebSocketServer{
-		clients:            make(map[*websocket.Conn]string),
-		networks:           make(map[string][]*websocket.Conn),
-		clientToPublicKey:  make(map[*websocket.Conn]string),
+		clients:           make(map[*websocket.Conn]string),
+		networks:          make(map[string][]*websocket.Conn),
+		clientToPublicKey: make(map[*websocket.Conn]string),
+
 		connectedComputers: make(map[string]map[string]bool),
 		config:             cfg,
 		supabaseManager:    supaMgr,
@@ -450,6 +451,12 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 	}
 	s.networks[networkID] = append(s.networks[networkID], conn)
 
+	// Add creator to connectedComputers map
+	if _, ok := s.connectedComputers[networkID]; !ok {
+		s.connectedComputers[networkID] = make(map[string]bool)
+	}
+	s.connectedComputers[networkID][req.PublicKey] = true
+
 	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
 		logger.Info("Network created",
 			"networkID", networkID,
@@ -526,6 +533,11 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 			s.sendErrorSignal(conn, "Error adding computer to network", originalID)
 			return
 		}
+		// Update connection status in memory
+		if _, ok := s.connectedComputers[req.NetworkID]; !ok {
+			s.connectedComputers[req.NetworkID] = make(map[string]bool)
+		}
+		s.connectedComputers[req.NetworkID][req.PublicKey] = true
 	} else {
 		// If already in network, retrieve existing IP
 		computer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, req.PublicKey)
@@ -676,7 +688,7 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 			notification := smodels.ComputerConnectedNotification{
 				NetworkID:    req.NetworkID,
 				PublicKey:    req.PublicKey,
-				ComputerName: req.ComputerName,
+				ComputerName: computer.ComputerName, // Use computer.ComputerName from DB
 				ComputerIP:   computer.PeerIP,
 			}
 			s.sendSignal(computerConn, smodels.TypeComputerConnected, notification, "")
@@ -1241,6 +1253,16 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, networkID string) {
 }
 
 // handleStatsEndpoint is the HTTP handler for the /stats endpoint
+func (s *WebSocketServer) isComputerOnline(networkID, publicKey string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if connectedMap, ok := s.connectedComputers[networkID]; ok {
+		return connectedMap[publicKey]
+	}
+	return false
+}
+
 func (s *WebSocketServer) handleStatsEndpoint(w http.ResponseWriter, r *http.Request) {
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
@@ -1315,11 +1337,7 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 
 		var computerInfos []smodels.ComputerInfo
 		for _, computer := range computersInNetwork {
-			// Check if the computer is currently online by looking at the connectedComputers map
-			isOnline := false
-			if connectedMap, ok := s.connectedComputers[computerNetwork.NetworkID]; ok {
-				isOnline = connectedMap[computer.PublicKey]
-			}
+			isOnline := s.isComputerOnline(computerNetwork.NetworkID, computer.PublicKey)
 
 			computerInfos = append(computerInfos, smodels.ComputerInfo{
 				Name:       computer.ComputerName,

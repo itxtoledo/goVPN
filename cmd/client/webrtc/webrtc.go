@@ -2,6 +2,7 @@ package clientwebrtc_impl
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -155,14 +156,14 @@ func (w *WebRTCManager) CreateDataChannel() error {
 
 	// Set up the event handlers
 	w.dataChannel.OnOpen(func() {
-		fmt.Println("Data channel opened")
+		log.Println("Data channel opened")
 		if w.onDataChannelOpen != nil {
 			w.onDataChannelOpen()
 		}
 	})
 
 	w.dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		fmt.Printf("Message from data channel: %s\n", string(msg.Data))
+		log.Printf("Message from data channel: %s\n", string(msg.Data))
 		if w.onDataChannelMessage != nil {
 			w.onDataChannelMessage(msg.Data)
 		}

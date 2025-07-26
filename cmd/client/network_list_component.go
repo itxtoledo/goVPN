@@ -12,6 +12,7 @@ import (
 
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/dialogs"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
 	"github.com/itxtoledo/govpn/cmd/client/ui"
@@ -62,8 +63,23 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 		// Clear the content container before adding new content
 		ntc.contentContainer.RemoveAll()
 
-		// Sort the networks by name
-		networks := ntc.UI.RealtimeData.GetNetworks()
+		// Get networks directly from the binding
+		networksList, err := ntc.UI.RealtimeData.Networks.Get()
+		if err != nil {
+			log.Printf("Error getting networks from binding: %v", err)
+			return
+		}
+
+		// Convert to a slice of Network for sorting
+		networks := make([]data.Network, len(networksList))
+		for i, item := range networksList {
+			if networkPtr, ok := item.(*data.Network); ok {
+				networks[i] = *networkPtr
+			} else {
+				log.Printf("Type assertion failed for network at index %d", i)
+			}
+		}
+
 		if networks != nil {
 			sort.Slice(networks, func(i, j int) bool {
 				return networks[i].NetworkName < networks[j].NetworkName

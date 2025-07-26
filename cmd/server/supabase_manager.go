@@ -262,23 +262,7 @@ func (sm *SupabaseManager) UpdateComputerNetworkConnection(networkID, publicKey 
 	return nil
 }
 
-// UpdateComputerOnlineStatus updates the online status of a computer in a network
-func (sm *SupabaseManager) UpdateComputerOnlineStatus(networkID, publicKey string, isOnline bool) error {
-	updateData := map[string]interface{}{
-		"is_online": isOnline,
-	}
 
-	if sm.logLevel == "debug" {
-		logger.Debug("Updating computer online status", "networkID", networkID, "publicKey", publicKey, "isOnline", isOnline)
-	}
-
-	_, _, err := sm.client.From("computer_networks").Update(updateData, "", "").Eq("network_id", networkID).Eq("public_key", publicKey).Execute()
-	if err != nil {
-		return fmt.Errorf("failed to update computer online status: %w", err)
-	}
-
-	return nil
-}
 
 // RemoveComputerFromNetwork removes a computer from a network
 func (sm *SupabaseManager) RemoveComputerFromNetwork(networkID, publicKey string) error {

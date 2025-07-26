@@ -26,7 +26,7 @@ type Config struct {
 // ConfigManager gerencia as configurações da aplicação
 type ConfigManager struct {
 	config     Config
-	configPath string
+	dataPath   string // Add dataPath field
 	mutex      sync.Mutex
 }
 
@@ -45,10 +45,8 @@ func NewConfigManager(customConfigPath string) *ConfigManager {
 		dataPath = filepath.Join(homeDir, ".govpn")
 	}
 
-	configPath := filepath.Join(dataPath, "config.json")
-
 	cm := &ConfigManager{
-		configPath: configPath,
+		dataPath:   dataPath, // Initialize dataPath
 		config: Config{
 			ComputerName:  "Computer",
 			ServerAddress: "wss://govpn-k6ql.onrender.com/ws",
@@ -132,9 +130,10 @@ func (cm *ConfigManager) GetKeyPair() (string, string) {
 
 // LoadConfig carrega as configurações do arquivo
 func (cm *ConfigManager) LoadConfig() {
-	log.Printf("Loading config from: %s", cm.configPath)
+	configPath := filepath.Join(cm.dataPath, "config.json")
+	log.Printf("Loading config from: %s", configPath)
 
-	file, err := os.Open(cm.configPath)
+	file, err := os.Open(configPath)
 	if err != nil {
 		// Se o arquivo não existe, cria com valores padrão
 		if os.IsNotExist(err) {
@@ -187,9 +186,17 @@ func (cm *ConfigManager) LoadConfig() {
 	}
 }
 
+
+
+// GetDataPath returns the data directory path
+func (cm *ConfigManager) GetDataPath() string {
+	return cm.dataPath
+}
+
 // SaveConfig salva as configurações no arquivo
 func (cm *ConfigManager) SaveConfig() error {
-	file, err := os.Create(cm.configPath)
+	configPath := filepath.Join(cm.dataPath, "config.json")
+	file, err := os.Create(configPath)
 	if err != nil {
 		log.Printf("Error creating config file: %v", err)
 		return err

@@ -5,28 +5,40 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/driver/desktop"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
-	
 )
 
 func main() {
-	logFile, _ := os.OpenFile("govpn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if logFile != nil {
-		mw := io.MultiWriter(os.Stdout, logFile)
-		log.SetOutput(mw)
-		log.SetFlags(log.Lshortfile | log.LstdFlags)
-	}
-
 	var configPath string
 	flag.StringVar(&configPath, "config", "", "Path to custom configuration directory")
 	flag.Parse()
 
 	configManager := NewConfigManager(configPath)
+
+	// Determine log file path (always in the data directory)
+	logFilePath := filepath.Join(configManager.GetDataPath(), "govpn.log")
+
+	// Create a multi-writer that always includes os.Stdout
+	var writers []io.Writer
+	writers = append(writers, os.Stdout)
+
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Printf("Error opening log file %s: %v", logFilePath, err)
+		// If log file cannot be opened, logging will only go to stdout (which is already in writers)
+	} else {
+		writers = append(writers, logFile)
+	}
+
+	mw := io.MultiWriter(writers...)
+	log.SetOutput(mw)
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	computername := configManager.GetConfig().ComputerName
 		ui := NewUIManager(DefaultServerAddress, computername, configPath)
 

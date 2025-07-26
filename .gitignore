@@ -2,3 +2,4 @@ cmd/server/.env
 cmd/client/client
 cmd/server/server
 cmd/client/tmp
+cmd/client/govpn.log
