@@ -8,7 +8,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
+	
 	sclient "github.com/itxtoledo/govpn/libs/signaling/client"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 	"github.com/pion/webrtc/v4"
@@ -47,14 +47,14 @@ type NetworkManager struct {
 
 	// Dependencies
 	RealtimeData            *data.RealtimeDataLayer
-	ConfigManager           *storage.ConfigManager
+	ConfigManager           *ConfigManager
 	refreshNetworkList      func()
 	refreshUI               func()
 	onWebRTCMessageReceived OnWebRTCMessageReceived
 }
 
 // NewNetworkManager creates a new instance of NetworkManager
-func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *storage.ConfigManager, refreshNetworkList func(), refreshUI func(), onWebRTCMessageReceived OnWebRTCMessageReceived) *NetworkManager {
+func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *ConfigManager, refreshNetworkList func(), refreshUI func(), onWebRTCMessageReceived OnWebRTCMessageReceived) *NetworkManager {
 	nm := &NetworkManager{
 		peerConnections:    make(map[string]*clientwebrtc_impl.WebRTCManager),
 		connectionState:    ConnectionStateDisconnected,

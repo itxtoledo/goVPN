@@ -14,7 +14,7 @@ A Virtual Local Area Network (VLAN) solution for games that allows players to co
 - NAT traversal using STUN/TURN for P2P connections
 - End-to-end encryption
 - Cross-platform support (Windows, macOS, Linux)
-- Local data storage using SQLite
+
 
 ## System Architecture
 
@@ -55,7 +55,7 @@ GoVPN is organized in a modular client-server architecture, with P2P communicati
 - **cmd/client**: The client application with a graphical user interface (GUI) that allows users to:
   - Create and join virtual game networks.
   - Manage P2P connections to other clients within a network.
-  - Store local configurations and data using SQLite.
+  
   - Provides a user-friendly interface built with Fyne (v2.0+).
   - Composed of modular components like `NetworkManager`, `SignalingClient`, etc., for clear separation of concerns.
 
@@ -148,7 +148,6 @@ cmd/                             # Main application components
         dialogs/                 # UI dialogs and modal windows
         icon/                    # Application icons and graphic resources
             assets/              # Image files for icons
-        storage/                 # Local database (SQLite) and configuration management
         *.go                     # Core UI components and client-side logic
     server/                      # GoVPN signaling server
         docs/                    # API documentation for the server's WebSocket interface

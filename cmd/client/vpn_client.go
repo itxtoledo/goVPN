@@ -9,7 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	st "github.com/itxtoledo/govpn/cmd/client/storage"
+	
 	clientwebrtc_impl "github.com/itxtoledo/govpn/cmd/client/webrtc"
 )
 
@@ -22,12 +22,12 @@ type VPNClient struct {
 	CurrentNetwork string
 	IsConnected    bool
 	NetworkManager *NetworkManager
-	ConfigManager  *st.ConfigManager
+	ConfigManager  *ConfigManager
 	WebRTCManager  *clientwebrtc_impl.WebRTCManager
 }
 
 // NewVPNClient creates a new VPN client
-func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
+func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
 	var privateKey ed25519.PrivateKey
 	var publicKey ed25519.PublicKey
 	var publicKeyStr string

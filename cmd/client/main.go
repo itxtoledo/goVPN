@@ -10,7 +10,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	"github.com/itxtoledo/govpn/cmd/client/icon"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
+	
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 	flag.StringVar(&configPath, "config", "", "Path to custom configuration directory")
 	flag.Parse()
 
-	configManager := storage.NewConfigManager(configPath)
+	configManager := NewConfigManager(configPath)
 	computername := configManager.GetConfig().ComputerName
 		ui := NewUIManager(DefaultServerAddress, computername, configPath)
 

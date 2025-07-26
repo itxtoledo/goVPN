@@ -12,7 +12,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	dialogs "github.com/itxtoledo/govpn/cmd/client/dialogs"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
@@ -21,8 +20,7 @@ type UIManager struct {
 	App                 fyne.App
 	MainWindow          fyne.Window
 	VPN                 *VPNClient
-	ConfigManager       *storage.ConfigManager
-	DatabaseManager     *storage.DatabaseManager
+	ConfigManager       *ConfigManager
 	NetworkListComp     *NetworkListComponent
 	HomeScreenComponent    *HomeScreenComponent
 	HeaderComponent     *HeaderComponent
@@ -49,14 +47,9 @@ func NewUIManager(websocketURL string, computername string, configPath string) *
 	ui.App = app.NewWithID("com.itxtoledo.govpn")
 
 	// Initialize configuration manager
-	ui.ConfigManager = storage.NewConfigManager(configPath)
+	ui.ConfigManager = NewConfigManager(configPath)
 
-	// Initialize database manager
-	ui.DatabaseManager = storage.NewDatabaseManager(configPath)
-	err := ui.DatabaseManager.Open()
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
-	}
+	
 
 	// Create main window
 	ui.MainWindow = ui.App.NewWindow("GoVPN")
@@ -200,12 +193,7 @@ func (ui *UIManager) ShowSettingsWindow() {
 // handleAppQuit handles application quit
 func (ui *UIManager) handleAppQuit() {
 	log.Println("Quitting app...")
-	if ui.DatabaseManager != nil {
-		err := ui.DatabaseManager.Close()
-		if err != nil {
-			log.Printf("Error closing database: %v", err)
-		}
-	}
+	
 }
 
 // refreshUI refreshes the UI components
@@ -307,7 +295,7 @@ func (ui *UIManager) HandleNetworkJoined(networkID, pin string) {
 }
 
 // Run runs the application
-func (ui *UIManager) HandleSettingsSaved(config storage.Config) {
+func (ui *UIManager) HandleSettingsSaved(config Config) {
 	// Save new settings
 	err := ui.ConfigManager.UpdateConfig(config)
 	if err != nil {
@@ -319,7 +307,7 @@ func (ui *UIManager) HandleSettingsSaved(config storage.Config) {
 }
 
 // applySettings applies the settings
-func (ui *UIManager) applySettings(config storage.Config) {
+func (ui *UIManager) applySettings(config Config) {
 	// Update theme
 	switch config.Theme {
 	case "light":

@@ -1,4 +1,4 @@
-package storage
+package main
 
 import (
 	"crypto/ed25519"
