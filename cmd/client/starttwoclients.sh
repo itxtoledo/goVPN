@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 # Start the first client
 go run . --config tmp/client1 &
