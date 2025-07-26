@@ -481,6 +481,7 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 		},
 	}
 
+	logger.Debug("Sending TypeNetworkCreated response", "networkID", networkID, "originalID", originalID)
 	s.sendSignal(conn, smodels.TypeNetworkCreated, responsePayload, originalID)
 }
 
@@ -686,28 +687,34 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	for _, computerConn := range s.networks[req.NetworkID] {
 		if computerConn != conn {
 			notification := smodels.ComputerConnectedNotification{
-				NetworkID:    req.NetworkID,
-				PublicKey:    req.PublicKey,
-				ComputerName: computer.ComputerName, // Use computer.ComputerName from DB
-				ComputerIP:   computer.PeerIP,
+				NetworkID:		req.NetworkID,
+				PublicKey:		req.PublicKey,
+				ComputerName:	computer.ComputerName, // Use computer.ComputerName from DB
+				ComputerIP:		computer.PeerIP,
 			}
 			s.sendSignal(computerConn, smodels.TypeComputerConnected, notification, "")
 		}
 	}
 
 	// Send existing computers' info to the newly connected client
-	for _, existingConn := range s.networks[req.NetworkID] {
-		if existingConn != conn {
-			existingPublicKey := s.clientToPublicKey[existingConn]
-			existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
-			if err == nil {
-				notification := smodels.ComputerConnectedNotification{
-					NetworkID:    req.NetworkID,
-					PublicKey:    existingPublicKey,
-					ComputerName: existingComputer.ComputerName,
-					ComputerIP:   existingComputer.PeerIP,
+	computersInNetwork, err := s.supabaseManager.GetComputersInNetwork(req.NetworkID)
+	if err != nil {
+		logger.Error("Error fetching computers for network to notify new client", "error", err, "networkID", req.NetworkID)
+		// Continue, as this is not critical for the connecting client's own connection
+	} else {
+		for _, existingComputer := range computersInNetwork {
+			// Don't send notification about self to self
+			if existingComputer.PublicKey != req.PublicKey {
+				// Only send if the existing computer is currently online
+				if s.isComputerOnline(req.NetworkID, existingComputer.PublicKey) {
+					notification := smodels.ComputerConnectedNotification{
+						NetworkID:		existingComputer.NetworkID,
+						PublicKey:		existingComputer.PublicKey,
+						ComputerName:	existingComputer.ComputerName,
+						ComputerIP:		existingComputer.PeerIP,
+					}
+					s.sendSignal(conn, smodels.TypeComputerConnected, notification, "")
 				}
-				s.sendSignal(conn, smodels.TypeComputerConnected, notification, "")
 			}
 		}
 	}
@@ -1359,7 +1366,7 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 		response.Networks = append(response.Networks, networkInfo)
 	}
 
-	if s.config.LogLevel == "debug" {
+			if s.config.LogLevel == "debug" {
 		logger.Debug("Sending computer networks",
 			"publicKey", req.PublicKey,
 			"networkCount", len(response.Networks))
