@@ -576,33 +576,31 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 	s.sendSignal(conn, smodels.TypeNetworkJoined, responsePayload, originalID)
 
 	// Notify other clients in the network about the new computer
-	for _, computer := range s.networks[req.NetworkID] {
-		if computer != conn {
-			computerJoinedPayload := map[string]interface{}{
-				"network_id":   req.NetworkID,
-				"public_key":   req.PublicKey,
-				"computername": req.ComputerName,
-				"computer_ip":  assignedIP,
+	for _, computerConn := range s.networks[req.NetworkID] {
+		if computerConn != conn {
+			notification := smodels.ComputerConnectedNotification{
+				NetworkID:    req.NetworkID,
+				PublicKey:    req.PublicKey,
+				ComputerName: req.ComputerName,
+				ComputerIP:   assignedIP,
 			}
-			s.sendSignal(computer, smodels.TypeComputerJoined, computerJoinedPayload, "")
+			s.sendSignal(computerConn, smodels.TypeComputerConnected, notification, "")
 		}
 	}
 
 	// Send existing computers' info to the newly joined client
 	for _, existingConn := range s.networks[req.NetworkID] {
 		if existingConn != conn {
-			existingPublicKey, hasExistingKey := s.clientToPublicKey[existingConn]
-			if hasExistingKey {
-				existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
-				if err == nil {
-					existingComputerPayload := map[string]interface{}{
-						"network_id":   req.NetworkID,
-						"public_key":   existingPublicKey,
-						"computername": existingComputer.ComputerName,
-						"computer_ip":  existingComputer.PeerIP,
-					}
-					s.sendSignal(conn, smodels.TypeComputerJoined, existingComputerPayload, "")
+			existingPublicKey := s.clientToPublicKey[existingConn]
+			existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
+			if err == nil {
+				notification := smodels.ComputerConnectedNotification{
+					NetworkID:    req.NetworkID,
+					PublicKey:    existingPublicKey,
+					ComputerName: existingComputer.ComputerName,
+					ComputerIP:   existingComputer.PeerIP,
 				}
+				s.sendSignal(conn, smodels.TypeComputerConnected, notification, "")
 			}
 		}
 	}
@@ -675,31 +673,29 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	// Notify other clients in the network about the new computer
 	for _, computerConn := range s.networks[req.NetworkID] {
 		if computerConn != conn {
-			computerConnectedPayload := map[string]interface{}{
-				"network_id":   req.NetworkID,
-				"public_key":   req.PublicKey,
-				"computername": req.ComputerName,
-				"computer_ip":  computer.PeerIP,
+			notification := smodels.ComputerConnectedNotification{
+				NetworkID:    req.NetworkID,
+				PublicKey:    req.PublicKey,
+				ComputerName: req.ComputerName,
+				ComputerIP:   computer.PeerIP,
 			}
-			s.sendSignal(computerConn, smodels.TypeComputerConnected, computerConnectedPayload, "")
+			s.sendSignal(computerConn, smodels.TypeComputerConnected, notification, "")
 		}
 	}
 
 	// Send existing computers' info to the newly connected client
 	for _, existingConn := range s.networks[req.NetworkID] {
 		if existingConn != conn {
-			existingPublicKey, hasExistingKey := s.clientToPublicKey[existingConn]
-			if hasExistingKey {
-				existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
-				if err == nil {
-					existingComputerPayload := map[string]interface{}{
-						"network_id":   req.NetworkID,
-						"public_key":   existingPublicKey,
-						"computername": existingComputer.ComputerName,
-						"computer_ip":  existingComputer.PeerIP,
-					}
-					s.sendSignal(conn, smodels.TypeComputerConnected, existingComputerPayload, "")
+			existingPublicKey := s.clientToPublicKey[existingConn]
+			existingComputer, err := s.supabaseManager.GetComputerInNetwork(req.NetworkID, existingPublicKey)
+			if err == nil {
+				notification := smodels.ComputerConnectedNotification{
+					NetworkID:    req.NetworkID,
+					PublicKey:    existingPublicKey,
+					ComputerName: existingComputer.ComputerName,
+					ComputerIP:   existingComputer.PeerIP,
 				}
+				s.sendSignal(conn, smodels.TypeComputerConnected, notification, "")
 			}
 		}
 	}
@@ -1018,17 +1014,17 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 						}
 
 							// Notify other clients in this network about the disconnection
-							if connectionsInNetwork, ok := s.networks[cn.NetworkID]; ok {
-								for _, clientConn := range connectionsInNetwork {
-									if clientConn != conn { // Don't send to the disconnected client itself
-										notification := smodels.ComputerDisconnectedNotification{
-											NetworkID: cn.NetworkID,
-											PublicKey: publicKey,
+										if connectionsInNetwork, ok := s.networks[cn.NetworkID]; ok {
+											for _, clientConn := range connectionsInNetwork {
+												if clientConn != conn { // Don't send to the disconnected client itself
+													notification := smodels.ComputerDisconnectedNotification{
+														NetworkID: cn.NetworkID,
+														PublicKey: publicKey,
+													}
+													s.sendSignal(clientConn, smodels.TypeComputerDisconnected, notification, "")
+												}
+											}
 										}
-										s.sendSignal(clientConn, smodels.TypeComputerDisconnected, notification, "")
-									}
-								}
-							}
 						}
 					}
 				}

@@ -804,7 +804,7 @@ func (s *SignalingClient) sendPing() error {
 	pingMessage := map[string]interface{}{}
 	pingMessage["action"] = "ping"
 	pingMessage["timestamp"] = time.Now().UnixNano()
-	pingMessage["publicKey"] = s.PublicKeyStr
+	
 
 	// Use the existing message sending infrastructure
 	_, err := s.sendPackagedMessage(signaling_models.TypePing, pingMessage)

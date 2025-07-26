@@ -2,7 +2,8 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"io"
+	"log"
 	"os"
 
 	"fyne.io/fyne/v2"
@@ -16,7 +17,9 @@ import (
 func main() {
 	logFile, _ := os.OpenFile("govpn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if logFile != nil {
-		// log.SetOutput(logFile)
+		mw := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(mw)
+		log.SetFlags(log.Lshortfile | log.LstdFlags)
 	}
 
 	var configPath string
@@ -100,5 +103,5 @@ func main() {
 }
 
 func tidyUp() {
-	fmt.Println("Exited")
+	log.Println("Exited")
 }

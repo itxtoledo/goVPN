@@ -164,6 +164,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 						})
 						nm.RealtimeData.UpdateNetwork(i, network)
 						log.Printf("Added computer %s to network %s", computerJoinedNotification.ComputerName, network.NetworkName)
+						nm.RealtimeData.EmitEvent(data.EventComputerJoined, fmt.Sprintf("Computer %s joined network %s", computerJoinedNotification.ComputerName, network.NetworkName), computerJoinedNotification)
 					}
 					break
 				}
@@ -232,6 +233,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 							network.Computers[j].IsOnline = true
 							nm.RealtimeData.UpdateNetwork(i, network)
 							log.Printf("Updated computer online status in UI for network %s", network.NetworkName)
+							nm.RealtimeData.EmitEvent(data.EventComputerConnected, fmt.Sprintf("Computer %s connected to network %s", notification.ComputerName, network.NetworkName), notification)
 							break
 						}
 					}
@@ -554,8 +556,12 @@ func (nm *NetworkManager) ConnectNetwork(networkID string) error {
 		return fmt.Errorf("not connected to server")
 	}
 
+	// Get computer name from config
+	config := nm.ConfigManager.GetConfig()
+	computerName := config.ComputerName
+
 	// Connect to network
-	res, err := nm.SignalingServer.ConnectNetwork(networkID, "Computer")
+	res, err := nm.SignalingServer.ConnectNetwork(networkID, computerName)
 	if err != nil {
 		return fmt.Errorf("failed to connect to network: %v", err)
 	}

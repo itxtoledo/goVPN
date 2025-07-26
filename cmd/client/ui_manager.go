@@ -104,6 +104,12 @@ func (ui *UIManager) listenForDataEvents() {
 		case data.EventSettingsChanged:
 			// Atualizar configurações quando forem alteradas
 			ui.refreshUI()
+		case data.EventComputerJoined:
+			// Exibir notificação de computador conectado
+			dialog.ShowInformation("Computer Connected", event.Message, ui.MainWindow)
+		case data.EventComputerConnected:
+			// Exibir notificação de computador conectado
+			dialog.ShowInformation("Computer Connected", event.Message, ui.MainWindow)
 		case data.EventError:
 			// Exibir erro
 			log.Printf("Error event: %s", event.Message)

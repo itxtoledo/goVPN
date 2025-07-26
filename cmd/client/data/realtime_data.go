@@ -35,6 +35,8 @@ const (
 	EventNetworkCreated      EventType = "network_created" // Add this constant for network creation event
 	EventNetworkDeleted      EventType = "network_deleted" // Add this constant for network deletion event
 	EventNetworksChanged     EventType = "networks_changed" // Add this constant for networks list changed event
+	EventComputerJoined      EventType = "computer_joined" // Add this constant for computer joined event
+	EventComputerConnected   EventType = "computer_connected" // Add this constant for computer connected event
 	EventSettingsChanged     EventType = "settings_changed"
 	// EventError é emitido quando ocorre um erro
 	EventError EventType = "error"
