@@ -166,7 +166,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 						}
 					}
 				}
-				titleLabel := widget.NewLabelWithStyle(localNetwork.NetworkName, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+				titleLabel := widget.NewLabelWithStyle(fmt.Sprintf("%s (%s)", localNetwork.NetworkName, localNetwork.NetworkID), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 				computerCountLabel := widget.NewLabelWithStyle(fmt.Sprintf("(%d/10)", connectedComputers), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
 				customTitle := container.NewHBox(
@@ -175,6 +175,14 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 
 				// Create custom accordion item with context menu support and computer count
 				accordionItem := ui.NewCustomAccordionItemWithEndContentAndCallbacks(customTitle, content, computerCountLabel, nil, func(pe *fyne.PointEvent) {
+					copyIDItem := fyne.NewMenuItem("Copy network ID", func() {
+						fyne.CurrentApp().Clipboard().SetContent(localNetwork.NetworkID)
+						fyne.CurrentApp().SendNotification(&fyne.Notification{
+							Title:   "Copied!",
+							Content: "Network ID copied to clipboard.",
+						})
+					})
+
 					leaveItem := fyne.NewMenuItem("Leave Network", func() {
 						// Delegate deletion to NetworkManager
 						if ntc.UI.VPN.NetworkManager != nil {
@@ -198,6 +206,11 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 								}
 							}()
 						}
+					})
+
+					chatItem := fyne.NewMenuItem("Chat", func() {
+						// Open chat window
+						ntc.UI.OpenChatWindow(&localNetwork)
 					})
 
 					connectItemLabel := "Connect"
@@ -229,7 +242,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 						}
 					})
 
-					menu := fyne.NewMenu(localNetwork.NetworkName, connectItem, leaveItem)
+					menu := fyne.NewMenu(localNetwork.NetworkName, connectItem, chatItem, copyIDItem, fyne.NewMenuItemSeparator(), leaveItem)
 					popUp := widget.NewPopUpMenu(menu, ntc.UI.MainWindow.Canvas())
 					popUp.ShowAtPosition(pe.AbsolutePosition)
 				})

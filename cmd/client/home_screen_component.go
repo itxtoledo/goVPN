@@ -11,7 +11,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	st "github.com/itxtoledo/govpn/cmd/client/storage"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
@@ -65,14 +64,14 @@ type HomeScreenComponent struct {
 	NetworksContainer *fyne.Container
 
 	// Dependencies
-	ConfigManager   *st.ConfigManager
+	ConfigManager   *ConfigManager
 	RealtimeData    *data.RealtimeDataLayer
 	NetworkListComp *NetworkListComponent // Add NetworkListComp here
 	UI              *UIManager
 }
 
 // NewHomeScreenComponent cria uma nova instância do componente da tela principal
-func NewHomeScreenComponent(configManager *st.ConfigManager, realtimeData *data.RealtimeDataLayer, networkListComp *NetworkListComponent, ui *UIManager) *HomeScreenComponent {
+func NewHomeScreenComponent(configManager *ConfigManager, realtimeData *data.RealtimeDataLayer, networkListComp *NetworkListComponent, ui *UIManager) *HomeScreenComponent {
 	htc := &HomeScreenComponent{
 		ConfigManager:   configManager,
 		RealtimeData:    realtimeData,

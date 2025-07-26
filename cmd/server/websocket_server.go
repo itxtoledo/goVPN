@@ -998,11 +998,40 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		delete(s.clients, conn)
 		delete(s.clientToPublicKey, conn)
 
-		// Update connection status in memory
-		if computers, ok := s.connectedComputers[networkID]; ok {
-			delete(computers, publicKey)
-			if len(computers) == 0 {
-				delete(s.connectedComputers, networkID)
+		// Update connection status in memory for all networks this client was part of
+		if hasPublicKey {
+			// Get all networks the computer is part of from Supabase
+			computerNetworks, err := s.supabaseManager.GetComputerNetworks(publicKey)
+			if err != nil {
+				logger.Error("Error getting computer networks for disconnected client", "error", err, "publicKey", publicKey)
+			} else {
+				for _, cn := range computerNetworks {
+					if computers, ok := s.connectedComputers[cn.NetworkID]; ok {
+											if _, exists := computers[publicKey]; exists {
+						computers[publicKey] = false // Set IsOnline to false
+						logger.Info("Computer status set to offline", "publicKey", publicKey, "networkID", cn.NetworkID)
+
+						// Update status in database
+						err := s.supabaseManager.UpdateComputerOnlineStatus(cn.NetworkID, publicKey, false)
+						if err != nil {
+							logger.Error("Error updating computer online status in DB", "error", err, "publicKey", publicKey, "networkID", cn.NetworkID)
+						}
+
+							// Notify other clients in this network about the disconnection
+							if connectionsInNetwork, ok := s.networks[cn.NetworkID]; ok {
+								for _, clientConn := range connectionsInNetwork {
+									if clientConn != conn { // Don't send to the disconnected client itself
+										notification := smodels.ComputerDisconnectedNotification{
+											NetworkID: cn.NetworkID,
+											PublicKey: publicKey,
+										}
+										s.sendSignal(clientConn, smodels.TypeComputerDisconnected, notification, "")
+									}
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 

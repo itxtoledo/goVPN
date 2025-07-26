@@ -9,7 +9,8 @@ import (
 
 	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	st "github.com/itxtoledo/govpn/cmd/client/storage"
+	
+	clientwebrtc_impl "github.com/itxtoledo/govpn/cmd/client/webrtc"
 )
 
 // VPNClient é a estrutura principal do cliente VPN
@@ -21,11 +22,12 @@ type VPNClient struct {
 	CurrentNetwork string
 	IsConnected    bool
 	NetworkManager *NetworkManager
-	ConfigManager  *st.ConfigManager
+	ConfigManager  *ConfigManager
+	WebRTCManager  *clientwebrtc_impl.WebRTCManager
 }
 
 // NewVPNClient creates a new VPN client
-func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
+func NewVPNClient(configManager *ConfigManager, defaultWebsocketURL string, computername string) *VPNClient {
 	var privateKey ed25519.PrivateKey
 	var publicKey ed25519.PublicKey
 	var publicKeyStr string
@@ -66,6 +68,13 @@ func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, c
 		ConfigManager: configManager,
 	}
 
+	// Initialize WebRTCManager
+	webrtcManager, err := clientwebrtc_impl.NewWebRTCManager()
+	if err != nil {
+		log.Fatalf("Failed to create WebRTCManager: %v", err)
+	}
+	client.WebRTCManager = webrtcManager
+
 	// TODO client.PublicKeyStr esta vazio
 	// Check if PublicKeyStr has content
 	if client.PublicKeyStr == "" {
@@ -81,7 +90,12 @@ func NewVPNClient(configManager *st.ConfigManager, defaultWebsocketURL string, c
 
 // SetupNetworkManager creates and configures the NetworkManager for the VPN client
 func (v *VPNClient) SetupNetworkManager(realtimeData *data.RealtimeDataLayer, refreshNetworkList func(), refreshUI func()) {
-	v.NetworkManager = NewNetworkManager(realtimeData, v.ConfigManager, refreshNetworkList, refreshUI)
+	v.NetworkManager = NewNetworkManager(realtimeData, v.ConfigManager, refreshNetworkList, refreshUI, v.handleWebRTCMessageReceived)
+}
+
+// handleWebRTCMessageReceived handles incoming WebRTC messages from NetworkManager
+func (v *VPNClient) handleWebRTCMessageReceived(peerPublicKey string, message string) {
+	v.WebRTCManager.ReceiveMessage(message)
 }
 
 // loadSettings carrega as configurações salvas do banco de dados

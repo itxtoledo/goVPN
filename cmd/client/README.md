@@ -24,10 +24,7 @@ The GoVPN client follows a modular architecture with the following main componen
 
 ### Data Storage
 
-1. **DatabaseManager**: Manages the local SQLite database.
-   - Stores information about saved networks
-   - Keeps a record of previous connections
-   - Stores cryptographic keys
+
 
 2. **ConfigManager**: Manages computer settings.
    - Stores preferences like language and theme
@@ -78,7 +75,7 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
     ↑                      ↓                                   ↑
     └──── RealtimeData ← Events                                |
                                                               ↓
-            Data Storage ← DatabaseManager ←→ ConfigManager
+            Data Storage ← ConfigManager
 ```
 
 ## Technologies Used
@@ -89,9 +86,7 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
   - Responsive layout system
   - Light/dark theme support
 
-- **SQLite**: Local database
-  - Storage of configurations and persistent data
-  - Via `database/sql` package and SQLite driver
+
 
 - **WebSocket**: Real-time communication
   - Persistent connection with the signaling server
@@ -128,9 +123,7 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
 - **icon/**: Visual resources and icons
   - **icon.go**: Icon definitions
   - **assets/**: Icon assets (e.g., `app.png`, `link_off.svg`)
-- **storage/**: Persistent storage management
-  - **config.go**: Configuration storage
-  - **database_manager.go**: Database management
+- **config.go**: Configuration storage
 
 ## Important Features
 

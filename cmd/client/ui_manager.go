@@ -12,7 +12,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	dialogs "github.com/itxtoledo/govpn/cmd/client/dialogs"
-	"github.com/itxtoledo/govpn/cmd/client/storage"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 )
 
@@ -21,7 +20,7 @@ type UIManager struct {
 	App                 fyne.App
 	MainWindow          fyne.Window
 	VPN                 *VPNClient
-	ConfigManager       *storage.ConfigManager
+	ConfigManager       *ConfigManager
 	NetworkListComp     *NetworkListComponent
 	HomeScreenComponent    *HomeScreenComponent
 	HeaderComponent     *HeaderComponent
@@ -36,7 +35,7 @@ type UIManager struct {
 }
 
 // NewUIManager creates a new instance of UIManager
-func NewUIManager(websocketURL string, computername string) *UIManager {
+func NewUIManager(websocketURL string, computername string, configPath string) *UIManager {
 	ui := &UIManager{
 		defaultWebsocketURL: websocketURL,
 	}
@@ -48,7 +47,9 @@ func NewUIManager(websocketURL string, computername string) *UIManager {
 	ui.App = app.NewWithID("com.itxtoledo.govpn")
 
 	// Initialize configuration manager
-	ui.ConfigManager = storage.NewConfigManager()
+	ui.ConfigManager = NewConfigManager(configPath)
+
+	
 
 	// Create main window
 	ui.MainWindow = ui.App.NewWindow("GoVPN")
@@ -134,6 +135,25 @@ func (ui *UIManager) setupComponents() {
 }
 
 // ShowSettingsWindow creates and shows the settings window
+// OpenChatWindow creates and shows the chat window
+func (ui *UIManager) OpenChatWindow(network *data.Network) {
+	// Create and show the chat window (singleton pattern per network)
+	// For simplicity, let's assume only one chat window can be open at a time for now.
+	// In a real application, you might want a map of chat windows per network ID.
+	if globalChatWindow != nil && globalChatWindow.BaseWindow.Window != nil {
+		// Focus on existing window if already open
+		globalChatWindow.BaseWindow.Window.RequestFocus()
+		return
+	}
+
+	globalChatWindow = NewChatWindow(
+		ui.App,
+		network,
+		ui.VPN.WebRTCManager, // Pass the WebRTCManager
+	)
+	globalChatWindow.Show()
+}
+
 func (ui *UIManager) ShowAboutWindow() {
 	// Create and show the about window (singleton pattern)
 	if ui.AboutWindow != nil && ui.AboutWindow.BaseWindow.Window != nil {
@@ -173,6 +193,7 @@ func (ui *UIManager) ShowSettingsWindow() {
 // handleAppQuit handles application quit
 func (ui *UIManager) handleAppQuit() {
 	log.Println("Quitting app...")
+	
 }
 
 // refreshUI refreshes the UI components
@@ -274,7 +295,7 @@ func (ui *UIManager) HandleNetworkJoined(networkID, pin string) {
 }
 
 // Run runs the application
-func (ui *UIManager) HandleSettingsSaved(config storage.Config) {
+func (ui *UIManager) HandleSettingsSaved(config Config) {
 	// Save new settings
 	err := ui.ConfigManager.UpdateConfig(config)
 	if err != nil {
@@ -286,7 +307,7 @@ func (ui *UIManager) HandleSettingsSaved(config storage.Config) {
 }
 
 // applySettings applies the settings
-func (ui *UIManager) applySettings(config storage.Config) {
+func (ui *UIManager) applySettings(config Config) {
 	// Update theme
 	switch config.Theme {
 	case "light":
