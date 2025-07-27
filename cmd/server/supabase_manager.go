@@ -319,16 +319,20 @@ func (sm *SupabaseManager) GetUsedIPsForNetwork(networkID string) ([]string, err
 
 // GetComputerNetworks gets all networks a computer has joined
 func (sm *SupabaseManager) GetComputerNetworks(publicKey string) ([]ComputerNetwork, error) {
+	logger.Debug("GetComputerNetworks: Fetching networks for public key", "publicKey", publicKey)
 	var computerNetworks []ComputerNetwork
 	data, _, err := sm.client.From("computer_networks").Select("*", "", false).Eq("public_key", publicKey).Execute()
 	if err != nil {
+		logger.Error("GetComputerNetworks: Failed to get computer networks from Supabase", "error", err, "publicKey", publicKey)
 		return nil, fmt.Errorf("failed to get computer networks: %w", err)
 	}
 
 	if err := json.Unmarshal(data, &computerNetworks); err != nil {
+		logger.Error("GetComputerNetworks: Failed to parse computer network data", "error", err, "publicKey", publicKey)
 		return nil, fmt.Errorf("failed to parse computer network data: %w", err)
 	}
 
+	logger.Debug("GetComputerNetworks: Found networks", "publicKey", publicKey, "count", len(computerNetworks))
 	return computerNetworks, nil
 }
 
