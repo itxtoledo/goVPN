@@ -309,6 +309,16 @@ func (s *SignalingClient) parseResponse(requestType signaling_models.MessageType
 	case signaling_models.TypePing:
 		// For ping, we just return a simple success message
 		return map[string]interface{}{"status": "success"}, nil
+
+	case signaling_models.TypeUpdateClientInfo:
+		// The server responds with TypeComputerNetworks after updating client info
+		if response.Type == signaling_models.TypeComputerNetworks {
+			var resp signaling_models.ComputerNetworksResponse
+			if err := json.Unmarshal(response.Payload, &resp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal computer networks response for update client info: %v", err)
+			}
+			return resp, nil
+		}
 	}
 
 	// If we can't determine the response type, return the raw payload as a map
@@ -329,9 +339,9 @@ func (s *SignalingClient) CreateNetwork(name string, pin string, computerName st
 
 	// Criar payload para a requisição
 	payload := &signaling_models.CreateNetworkRequest{
-		BaseRequest: signaling_models.BaseRequest{},
-		NetworkName: name,
-		PIN:         pin,
+		BaseRequest:  signaling_models.BaseRequest{},
+		NetworkName:  name,
+		PIN:          pin,
 		ComputerName: computerName,
 	}
 
@@ -556,32 +566,29 @@ func (s *SignalingClient) listenForMessages() {
 
 	for {
 		if !s.Connected || s.Conn == nil {
-			log.Println("Connection closed, stopping message listener")
+			log.Println("listenForMessages: Connection closed, stopping message listener")
 			return
 		}
 
-		_, message, err := s.Conn.ReadMessage()
+		log.Println("listenForMessages: Attempting to read JSON message...")
+		var sigMsg signaling_models.SignalingMessage
+		err := s.Conn.ReadJSON(&sigMsg)
 		if err != nil {
 			// Check if the error is due to a closed connection
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) || websocket.IsUnexpectedCloseError(err) {
-				log.Printf("WebSocket connection closed: %v", err)
+				log.Printf("listenForMessages: WebSocket connection closed with error: %v", err)
 			} else {
-				log.Printf("Error reading message: %v", err)
+				log.Printf("listenForMessages: Unhandled error reading JSON message: %v", err)
 			}
 			s.Connected = false
 			s.Conn = nil
 			return
 		}
 
-		// Process the message here before passing to custom handler
-		var sigMsg signaling_models.SignalingMessage
-		err = json.Unmarshal(message, &sigMsg)
-		if err != nil {
-			log.Printf("Error parsing message: %v", err)
-			continue
-		}
+		log.Printf("listenForMessages: Successfully read JSON message. Type: %s, ID: %s", sigMsg.Type, sigMsg.ID)
 
-		log.Printf("Received message of type %s with ID %s", sigMsg.Type, sigMsg.ID)
+		// Process the message here before passing to custom handler
+		// The message is already unmarshaled by ReadJSON, so no need for json.Unmarshal here.
 
 		// First check if this is a response to a pending request
 		// If it is, handlePendingResponse will deliver it to the waiting goroutine
@@ -804,7 +811,6 @@ func (s *SignalingClient) sendPing() error {
 	pingMessage := map[string]interface{}{}
 	pingMessage["action"] = "ping"
 	pingMessage["timestamp"] = time.Now().UnixNano()
-	
 
 	// Use the existing message sending infrastructure
 	_, err := s.sendPackagedMessage(signaling_models.TypePing, pingMessage)

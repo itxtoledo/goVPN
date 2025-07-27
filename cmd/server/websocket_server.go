@@ -297,6 +297,7 @@ func (s *WebSocketServer) handleWebRTCSignal(senderConn *websocket.Conn, msgType
 }
 
 func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smodels.UpdateClientInfoRequest, originalID string) {
+	logger.Debug("handleUpdateClientInfo: Received request", "originalID", originalID, "publicKey", req.PublicKey, "clientName", req.ClientName)
 	s.mu.Lock()
 
 	publicKey := req.PublicKey
@@ -309,6 +310,7 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 	// Associate public key with connection if not already present
 	if _, ok := s.clientToPublicKey[conn]; !ok {
 		s.clientToPublicKey[conn] = publicKey
+		logger.Debug("handleUpdateClientInfo: Associated public key with connection", "publicKey", publicKey)
 	}
 
 	if req.ClientName == "" {
@@ -321,15 +323,16 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 	// Update client name in all networks
 	err := s.supabaseManager.UpdateClientNameInNetworks(publicKey, req.ClientName)
 	if err != nil {
-		logger.Error("Error updating client name in networks", "error", err)
+		logger.Error("handleUpdateClientInfo: Error updating client name in networks", "error", err, "publicKey", publicKey)
 		clientErrorMessage := fmt.Sprintf("Failed to update client name: %s", err.Error())
 		s.sendErrorSignal(conn, clientErrorMessage, originalID)
 		return
 	}
 
-	logger.Info("Client name updated", "publicKey", publicKey, "newName", req.ClientName)
+	logger.Info("handleUpdateClientInfo: Client name updated successfully", "publicKey", publicKey, "newName", req.ClientName)
 
 	// Send updated network list back to the client
+	logger.Debug("handleUpdateClientInfo: Calling handleGetComputerNetworks to send updated network list", "publicKey", publicKey, "originalID", originalID)
 	getNetworksReq := smodels.GetComputerNetworksRequest{
 		BaseRequest: smodels.BaseRequest{
 			PublicKey: publicKey,
@@ -338,9 +341,10 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 	s.handleGetComputerNetworks(conn, getNetworksReq, originalID)
 
 	// Notify other clients in the networks about the name change
+	logger.Debug("handleUpdateClientInfo: Notifying other clients about name change", "publicKey", publicKey)
 	computerNetworks, err := s.supabaseManager.GetComputerNetworks(publicKey)
 	if err != nil {
-		logger.Error("Error getting computer networks for notification", "error", err)
+		logger.Error("handleUpdateClientInfo: Error getting computer networks for notification", "error", err, "publicKey", publicKey)
 		return
 	}
 
@@ -359,13 +363,16 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 					PublicKey:       publicKey,
 					NewComputerName: req.ClientName,
 				}
+				logger.Debug("handleUpdateClientInfo: Sending TypeComputerRenamed notification", "networkID", networkID, "targetClient", clientPublicKey)
 				s.sendSignal(clientConn, smodels.TypeComputerRenamed, notification, "")
 			}
 		}
 	}
+	logger.Debug("handleUpdateClientInfo: Finished processing request", "originalID", originalID)
 }
 
 func (s *WebSocketServer) sendErrorSignal(conn *websocket.Conn, errorMsg string, originalID string) {
+	logger.Debug("sendErrorSignal: Sending error signal", "errorMsg", errorMsg, "originalID", originalID)
 	errPayload, _ := json.Marshal(map[string]string{"error": errorMsg})
 
 	conn.WriteJSON(smodels.SignalingMessage{
@@ -376,16 +383,22 @@ func (s *WebSocketServer) sendErrorSignal(conn *websocket.Conn, errorMsg string,
 }
 
 func (s *WebSocketServer) sendSignal(conn *websocket.Conn, msgType smodels.MessageType, payload interface{}, originalID string) error {
+	logger.Debug("sendSignal: Attempting to send signal", "type", msgType, "originalID", originalID)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
+		logger.Error("sendSignal: Failed to marshal payload", "error", err, "type", msgType, "originalID", originalID)
 		return err
 	}
 
-	return conn.WriteJSON(smodels.SignalingMessage{
+	err = conn.WriteJSON(smodels.SignalingMessage{
 		ID:      originalID,
 		Type:    msgType,
 		Payload: payloadBytes,
 	})
+	if err != nil {
+		logger.Error("sendSignal: Failed to write JSON to connection", "error", err, "type", msgType, "originalID", originalID)
+	}
+	return err
 }
 
 func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.CreateNetworkRequest, originalID string) {
@@ -973,58 +986,56 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Quando ocorre uma desconexão (fechamento do app ou perda de conexão),
-	networkID := s.clients[conn]
-	if networkID != "" {
-		// Recupera a chave pública do cliente antes de removê-lo
-		publicKey, hasPublicKey := s.clientToPublicKey[conn]
-		isOwner := false
+	clientAddr := conn.RemoteAddr().String()
+	logger.Info("handleDisconnect: Client disconnected", "clientAddr", clientAddr)
 
-		// Verifica se o cliente que está saindo é o dono da sala com base na chave pública
+	networkID := s.clients[conn]
+	publicKey, hasPublicKey := s.clientToPublicKey[conn]
+
+	if networkID != "" {
+		logger.Debug("handleDisconnect: Client was in a network", "networkID", networkID, "publicKey", publicKey)
+
+		isOwner := false
 		if hasPublicKey {
-			// Busca a sala no banco de dados
 			network, err := s.supabaseManager.GetNetwork(networkID)
 			if err == nil && publicKey == network.OwnerPublicKey {
-				// A chave pública do cliente que está saindo coincide com a do criador da sala
 				isOwner = true
-				logger.Info("Network owner disconnected",
-					"keyPrefix", publicKey[:10]+"...")
-
-				// Update network activity to prevent it from being removed during cleanup
+				logger.Info("handleDisconnect: Network owner disconnected", "publicKey", publicKey[:10]+"...")
 				err := s.supabaseManager.UpdateNetworkActivity(networkID)
 				if err != nil {
-					logger.Error("Error updating network activity", "error", err)
+					logger.Error("handleDisconnect: Error updating network activity for owner", "error", err)
 				}
 			}
 		}
 
-		// Notifica outros membros da sala sobre a saída deste cliente
+		// Notify other members in the network about this client's departure
 		for _, computer := range s.networks[networkID] {
 			if computer != conn {
 				computerLeftPayload := map[string]interface{}{
 					"network_id": networkID,
 					"public_key": publicKey,
 				}
+				logger.Debug("handleDisconnect: Notifying other clients of computer left", "networkID", networkID, "targetConn", computer.RemoteAddr().String())
 				s.sendSignal(computer, smodels.TypeComputerLeft, computerLeftPayload, "")
 			}
 		}
 
-		// Limpa as referências do cliente
+		// Clean up client references
 		delete(s.clients, conn)
 		delete(s.clientToPublicKey, conn)
+		logger.Debug("handleDisconnect: Removed client from internal maps", "clientAddr", clientAddr)
 
 		// Update connection status in memory for all networks this client was part of
 		if hasPublicKey {
-			// Get all networks the computer is part of from Supabase
 			computerNetworks, err := s.supabaseManager.GetComputerNetworks(publicKey)
 			if err != nil {
-				logger.Error("Error getting computer networks for disconnected client", "error", err, "publicKey", publicKey)
+				logger.Error("handleDisconnect: Error getting computer networks for disconnected client", "error", err, "publicKey", publicKey)
 			} else {
 				for _, cn := range computerNetworks {
 					if computers, ok := s.connectedComputers[cn.NetworkID]; ok {
 						if _, exists := computers[publicKey]; exists {
 							computers[publicKey] = false // Set IsOnline to false
-							logger.Info("Computer status set to offline", "publicKey", publicKey, "networkID", cn.NetworkID)
+							logger.Info("handleDisconnect: Computer status set to offline", "publicKey", publicKey, "networkID", cn.NetworkID)
 
 							// Notify other clients in this network about the disconnection
 							if connectionsInNetwork, ok := s.networks[cn.NetworkID]; ok {
@@ -1034,6 +1045,7 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 											NetworkID: cn.NetworkID,
 											PublicKey: publicKey,
 										}
+										logger.Debug("handleDisconnect: Notifying other clients of computer disconnected", "networkID", cn.NetworkID, "targetConn", clientConn.RemoteAddr().String())
 										s.sendSignal(clientConn, smodels.TypeComputerDisconnected, notification, "")
 									}
 								}
@@ -1044,36 +1056,35 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 			}
 		}
 
-		// Se a sala não existe no networks, não há nada mais a fazer
-		network, exists := s.networks[networkID]
+		// If the network doesn't exist in memory, nothing more to do
+		networkConns, exists := s.networks[networkID]
 		if !exists {
+			logger.Debug("handleDisconnect: Network not found in memory, skipping further cleanup", "networkID", networkID)
 			return
 		}
 
-		// Remove o cliente da lista de conexões da sala
-		for i, computer := range network {
+		// Remove the client from the network's connection list
+		for i, computer := range networkConns {
 			if computer == conn {
-				s.networks[networkID] = append(network[:i], network[i+1:]...)
+				s.networks[networkID] = append(networkConns[:i], networkConns[i+1:]...)
+				logger.Debug("handleDisconnect: Removed client from network connection list", "networkID", networkID, "clientAddr", clientAddr)
 				break
 			}
 		}
 
-		// Se não houver mais clientes na sala, remove apenas da memória mas mantém no banco
+		// If no more clients in the network, remove the network from memory (but keep in DB)
 		if len(s.networks[networkID]) == 0 {
 			delete(s.networks, networkID)
+			logger.Info("handleDisconnect: Network now empty, removed from memory", "networkID", networkID)
 		}
 
 		if isOwner {
-			logger.Info("Owner disconnected but network preserved",
-				"clientAddr", conn.RemoteAddr().String(),
-				"networkID", networkID)
+			logger.Info("handleDisconnect: Owner disconnected but network preserved", "clientAddr", clientAddr, "networkID", networkID)
 		} else {
-			logger.Info("Client disconnected from network",
-				"clientAddr", conn.RemoteAddr().String(),
-				"networkID", networkID)
+			logger.Info("handleDisconnect: Client disconnected from network", "clientAddr", clientAddr, "networkID", networkID)
 		}
 	} else {
-		// Cliente não estava em nenhuma sala
+		logger.Info("handleDisconnect: Client not in any network", "clientAddr", clientAddr)
 		delete(s.clientToPublicKey, conn)
 	}
 
@@ -1372,6 +1383,7 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 			"networkCount", len(response.Networks))
 	}
 
+	logger.Debug("Server: Attempting to send TypeComputerNetworks response", "publicKey", req.PublicKey, "originalID", originalID)
 	// Send networks response
 	s.sendSignal(conn, smodels.TypeComputerNetworks, response, originalID)
 }
