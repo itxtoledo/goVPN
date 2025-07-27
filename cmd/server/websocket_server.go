@@ -109,7 +109,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
 	publicKeyHeader := r.Header.Get("X-Client-ID")
-	if publicKeyHeader != "" && s.config.LogLevel == "debug" {
+	if publicKeyHeader != "" {
 		logger.Debug("Client connected with public key", "publicKey", publicKeyHeader)
 
 		msgID, _ := utils.GenerateMessageID()
@@ -126,6 +126,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	for {
 		var sigMsg smodels.SignalingMessage
 		err := conn.ReadJSON(&sigMsg)
+		logger.Debug("Received message", "type", sigMsg.Type, "payload", string(sigMsg.Payload))
 		if err != nil {
 			s.handleDisconnect(conn)
 			return
@@ -234,7 +235,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 				s.sendErrorSignal(conn, "Invalid SDP answer format", originalID)
 				continue
 			}
-			s.handleWebRTCSignal(conn, sigMsg.Type, sdpAnswer.TargetPublicKey, sigMsg.Payload, originalID)
+			s.handleWebRTCSignal(conn, smodels.TypeSdpAnswer, sdpAnswer.TargetPublicKey, sigMsg.Payload, originalID)
 
 		case smodels.TypeIceCandidate:
 			var iceCandidate smodels.IceCandidate
@@ -242,7 +243,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 				s.sendErrorSignal(conn, "Invalid ICE candidate format", originalID)
 				continue
 			}
-			s.handleWebRTCSignal(conn, sigMsg.Type, iceCandidate.TargetPublicKey, sigMsg.Payload, originalID)
+			s.handleWebRTCSignal(conn, smodels.TypeIceCandidate, iceCandidate.TargetPublicKey, sigMsg.Payload, originalID)
 
 		default:
 			logger.Warn("Unknown message type", "type", sigMsg.Type)
@@ -397,6 +398,8 @@ func (s *WebSocketServer) sendSignal(conn *websocket.Conn, msgType smodels.Messa
 	})
 	if err != nil {
 		logger.Error("sendSignal: Failed to write JSON to connection", "error", err, "type", msgType, "originalID", originalID)
+	} else {
+		logger.Debug("sendSignal: Successfully sent signal", "type", msgType, "originalID", originalID, "payload", string(payloadBytes))
 	}
 	return err
 }
@@ -470,13 +473,11 @@ func (s *WebSocketServer) handleCreateNetwork(conn *websocket.Conn, req smodels.
 	}
 	s.connectedComputers[networkID][req.PublicKey] = true
 
-	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Network created",
-			"networkID", networkID,
-			"networkName", req.NetworkName,
-			"clientAddr", conn.RemoteAddr().String(),
-			"computerName", req.ComputerName)
-	}
+	logger.Info("Network created",
+		"networkID", networkID,
+		"networkName", req.NetworkName,
+		"clientAddr", conn.RemoteAddr().String(),
+		"computerName", req.ComputerName)
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
@@ -580,17 +581,15 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 	clientCount := len(s.networks[req.NetworkID])
 
 	err = s.supabaseManager.UpdateNetworkActivity(req.NetworkID)
-	if err != nil && (s.config.LogLevel == "debug") {
+	if err != nil {
 		logger.Debug("Error updating network activity", "error", err)
 	}
 
-	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Client joined network",
-			"clientAddr", conn.RemoteAddr().String(),
-			"networkID", req.NetworkID,
-			"activeClients", clientCount,
-			"assignedIP", assignedIP)
-	}
+	logger.Info("Client joined network",
+		"clientAddr", conn.RemoteAddr().String(),
+		"networkID", req.NetworkID,
+		"activeClients", clientCount,
+		"assignedIP", assignedIP)
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
@@ -675,17 +674,15 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	s.networks[req.NetworkID] = append(s.networks[req.NetworkID], conn)
 
 	err = s.supabaseManager.UpdateNetworkActivity(req.NetworkID)
-	if err != nil && (s.config.LogLevel == "debug") {
+	if err != nil {
 		logger.Debug("Error updating network activity", "error", err)
 	}
 
-	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Client connected to network (reconnect)",
-			"clientAddr", conn.RemoteAddr().String(),
-			"networkID", req.NetworkID,
-			"activeClients", len(s.networks[req.NetworkID]),
-			"assignedIP", computer.PeerIP)
-	}
+	logger.Info("Client connected to network (reconnect)",
+		"clientAddr", conn.RemoteAddr().String(),
+		"networkID", req.NetworkID,
+		"activeClients", len(s.networks[req.NetworkID]),
+		"assignedIP", computer.PeerIP)
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 
@@ -700,10 +697,10 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 	for _, computerConn := range s.networks[req.NetworkID] {
 		if computerConn != conn {
 			notification := smodels.ComputerConnectedNotification{
-				NetworkID:		req.NetworkID,
-				PublicKey:		req.PublicKey,
-				ComputerName:	computer.ComputerName, // Use computer.ComputerName from DB
-				ComputerIP:		computer.PeerIP,
+				NetworkID:    req.NetworkID,
+				PublicKey:    req.PublicKey,
+				ComputerName: computer.ComputerName, // Use computer.ComputerName from DB
+				ComputerIP:   computer.PeerIP,
 			}
 			s.sendSignal(computerConn, smodels.TypeComputerConnected, notification, "")
 		}
@@ -721,10 +718,10 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 				// Only send if the existing computer is currently online
 				if s.isComputerOnline(req.NetworkID, existingComputer.PublicKey) {
 					notification := smodels.ComputerConnectedNotification{
-						NetworkID:		existingComputer.NetworkID,
-						PublicKey:		existingComputer.PublicKey,
-						ComputerName:	existingComputer.ComputerName,
-						ComputerIP:		existingComputer.PeerIP,
+						NetworkID:    existingComputer.NetworkID,
+						PublicKey:    existingComputer.PublicKey,
+						ComputerName: existingComputer.ComputerName,
+						ComputerIP:   existingComputer.PeerIP,
 					}
 					s.sendSignal(conn, smodels.TypeComputerConnected, notification, "")
 				}
@@ -768,7 +765,7 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req smod
 
 	if isOwner {
 		err = s.supabaseManager.UpdateNetworkActivity(networkID)
-		if err != nil && (s.config.LogLevel == "debug") {
+		if err != nil {
 			logger.Debug("Error updating network activity", "error", err)
 		}
 	}
@@ -807,12 +804,10 @@ func (s *WebSocketServer) handleDisconnectNetwork(conn *websocket.Conn, req smod
 	}
 	s.sendSignal(conn, smodels.TypeNetworkDisconnected, disconnectResponse, originalID)
 
-	if s.config.LogLevel == "info" || s.config.LogLevel == "debug" {
-		logger.Info("Client disconnected from network (but still a member)",
-			"clientAddr", conn.RemoteAddr().String(),
-			"networkID", networkID,
-			"isOwner", isOwner)
-	}
+	logger.Info("Client disconnected from network (but still a member)",
+		"clientAddr", conn.RemoteAddr().String(),
+		"networkID", networkID,
+		"isOwner", isOwner)
 
 	s.statsManager.UpdateStats(len(s.clients), len(s.networks))
 }
@@ -1181,11 +1176,7 @@ func (s *WebSocketServer) handlePing(conn *websocket.Conn, payload []byte, origi
 		"status":           "ok",
 	}
 
-	// Log ping if in debug mode
-	if s.config.LogLevel == "debug" {
-		clientAddr := conn.RemoteAddr().String()
-		logger.Debug("Received ping from client", "clientAddr", clientAddr)
-	}
+	logger.Debug("Received ping from client", "clientAddr", conn.RemoteAddr().String())
 
 	// Send pong response with the same message ID
 	s.sendSignal(conn, smodels.TypePing, pongPayload, originalID)
@@ -1237,7 +1228,7 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, networkID string) {
 	// Se for o criador, deleta a sala do banco de dados
 	if isCreator {
 		err := s.supabaseManager.DeleteNetwork(networkID)
-		if err != nil && (s.config.LogLevel == "debug") {
+		if err != nil {
 			logger.Debug("Error deleting network from Supabase on creator disconnect", "error", err)
 		}
 
@@ -1377,12 +1368,16 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 		response.Networks = append(response.Networks, networkInfo)
 	}
 
-			if s.config.LogLevel == "debug" {
-		logger.Debug("Sending computer networks",
-			"publicKey", req.PublicKey,
-			"networkCount", len(response.Networks))
-	}
+	logger.Debug("Sending computer networks",
+		"publicKey", req.PublicKey,
+		"networkCount", len(response.Networks))
 
+	jsonPayload, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		logger.Error("Failed to marshal ComputerNetworksResponse for logging", "error", err)
+	} else {
+		logger.Debug("Server: Sending TypeComputerNetworks response payload", "publicKey", req.PublicKey, "originalID", originalID, "payload", string(jsonPayload))
+	}
 	logger.Debug("Server: Attempting to send TypeComputerNetworks response", "publicKey", req.PublicKey, "originalID", originalID)
 	// Send networks response
 	s.sendSignal(conn, smodels.TypeComputerNetworks, response, originalID)

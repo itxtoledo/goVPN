@@ -220,7 +220,11 @@ func (rdl *RealtimeDataLayer) SetNetworks(networks []Network) {
 	rdl.mu.Lock()
 	defer rdl.mu.Unlock()
 
-	log.Printf("SetNetworks: Setting %d networks", len(networks))
+	log.Printf("SetNetworks: Received %d networks to set.", len(networks))
+	for i, net := range networks {
+		log.Printf("SetNetworks: Network %d: ID=%s, Name=%s, Computers=%d", i, net.NetworkID, net.NetworkName, len(net.Computers))
+	}
+
 
 	// Convert []Network to []interface{} of *Network
 	var untypedNetworks []interface{}

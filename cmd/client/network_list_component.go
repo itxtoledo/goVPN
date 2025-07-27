@@ -69,6 +69,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			log.Printf("Error getting networks from binding: %v", err)
 			return
 		}
+		log.Printf("UpdateNetworkList: Retrieved %d networks from binding.", len(networksList))
 
 		// Convert to a slice of Network for sorting
 		networks := make([]data.Network, len(networksList))
@@ -86,7 +87,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			})
 		}
 
-		log.Printf("Updating network list. Total: %d", len(networks))
+		log.Printf("UpdateNetworkList: Processed %d networks for display.", len(networks))
 
 		if len(networks) > 0 {
 			// Clear the accordion before adding new items

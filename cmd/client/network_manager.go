@@ -208,11 +208,11 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				return
 			}
 
-			log.Println("Received ComputerNetworks update:")
-			for _, network := range computerNetworksResponse.Networks {
-				log.Printf("  Network: %s (ID: %s)", network.NetworkName, network.NetworkID)
-				for _, computer := range network.Computers {
-					log.Printf("    Computer: %s (IP: %s)", computer.Name, computer.ComputerIP)
+			log.Printf("Received ComputerNetworks update. Number of networks: %d", len(computerNetworksResponse.Networks))
+			for i, network := range computerNetworksResponse.Networks {
+				log.Printf("  Network %d: Name=%s, ID=%s, Computers=%d", i, network.NetworkName, network.NetworkID, len(network.Computers))
+				for j, computer := range network.Computers {
+					log.Printf("    Computer %d: Name=%s, IP=%s, PublicKey=%s, IsOnline=%t", j, computer.Name, computer.ComputerIP, computer.PublicKey, computer.IsOnline)
 				}
 			}
 
