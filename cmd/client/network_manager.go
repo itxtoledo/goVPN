@@ -8,11 +8,11 @@ import (
 
 	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	
+
+	clientwebrtc_impl "github.com/itxtoledo/govpn/cmd/client/webrtc"
 	sclient "github.com/itxtoledo/govpn/libs/signaling/client"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
 	"github.com/pion/webrtc/v4"
-	clientwebrtc_impl "github.com/itxtoledo/govpn/cmd/client/webrtc"
 )
 
 // NetworkInterface define a interface mínima para a rede virtual
@@ -56,14 +56,14 @@ type NetworkManager struct {
 // NewNetworkManager creates a new instance of NetworkManager
 func NewNetworkManager(realtimeData *data.RealtimeDataLayer, configManager *ConfigManager, refreshNetworkList func(), refreshUI func(), onWebRTCMessageReceived OnWebRTCMessageReceived) *NetworkManager {
 	nm := &NetworkManager{
-		peerConnections:    make(map[string]*clientwebrtc_impl.WebRTCManager),
-		connectionState:    ConnectionStateDisconnected,
-		ReconnectAttempts:  0,
-		MaxReconnects:      5,
-		RealtimeData:       realtimeData,
-		ConfigManager:      configManager,
-		refreshNetworkList: refreshNetworkList,
-		refreshUI:          refreshUI,
+		peerConnections:         make(map[string]*clientwebrtc_impl.WebRTCManager),
+		connectionState:         ConnectionStateDisconnected,
+		ReconnectAttempts:       0,
+		MaxReconnects:           5,
+		RealtimeData:            realtimeData,
+		ConfigManager:           configManager,
+		refreshNetworkList:      refreshNetworkList,
+		refreshUI:               refreshUI,
 		onWebRTCMessageReceived: onWebRTCMessageReceived,
 	}
 
@@ -124,9 +124,9 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 			fyne.Do(func() {
 				network := data.Network{
-					NetworkID:   createNetworkResponse.NetworkID,
-					NetworkName: createNetworkResponse.NetworkName,
-					Computers:   createNetworkResponse.Computers,
+					NetworkID:     createNetworkResponse.NetworkID,
+					NetworkName:   createNetworkResponse.NetworkName,
+					Computers:     createNetworkResponse.Computers,
 					LastConnected: time.Now(),
 				}
 				nm.RealtimeData.AddNetwork(network)
@@ -390,10 +390,10 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 
 			if err := peerWebRTCManager.AddICECandidate(webrtc.ICECandidateInit{
-					Candidate:     candidate.Candidate,
-					SDPMid:        &candidate.SDPMid,
-					SDPMLineIndex: &candidate.SDPMLineIndex,
-				}); err != nil {
+				Candidate:     candidate.Candidate,
+				SDPMid:        &candidate.SDPMid,
+				SDPMLineIndex: &candidate.SDPMLineIndex,
+			}); err != nil {
 				log.Printf("failed to add ICE candidate for peer %s: %v", candidate.SenderPublicKey, err)
 				return
 			}
@@ -415,9 +415,7 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 	nm.RealtimeData.SetConnectionState(data.StateConnected)
 	nm.RealtimeData.SetStatusMessage("Connected")
 
-	// O servidor já envia automaticamente a lista de salas do usuário ao conectar,
-	// então não precisamos chamar GetComputerNetworks explicitamente
-	log.Println("Aguardando lista de salas do servidor...")
+	log.Println("Awaiting network list from server...")
 
 	return nil
 }
@@ -916,7 +914,3 @@ func (nm *NetworkManager) Disconnect() error {
 
 	return nil
 }
-
-
-
-

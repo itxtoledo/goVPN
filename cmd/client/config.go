@@ -48,8 +48,9 @@ func NewConfigManager(customConfigPath string) *ConfigManager {
 	cm := &ConfigManager{
 		dataPath: dataPath, // Initialize dataPath
 		config: Config{
-			ComputerName:  "Computer",
-			ServerAddress: "wss://govpn-k6ql.onrender.com:8080/ws",
+			ComputerName: "Computer",
+			// ServerAddress: "wss://govpn-k6ql.onrender.com:8080/ws",
+			ServerAddress: "wss://localhost:8080/ws",
 			Theme:         "system",
 			Language:      "en",
 		},

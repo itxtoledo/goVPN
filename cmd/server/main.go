@@ -58,7 +58,7 @@ func main() {
 		MaxClientsPerNetwork:  50,
 		NetworkExpiryDays:     7,
 		AllowAllOrigins:       true,
-		CleanupInterval:       24 * time.Hour, // Run cleanup once a day
+		CleanupInterval:       24 * time.Hour,   // Run cleanup once a day
 		ShutdownTimeout:       15 * time.Second, // Default timeout for graceful shutdown
 	}
 

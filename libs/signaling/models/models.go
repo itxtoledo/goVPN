@@ -20,28 +20,29 @@ const (
 	TypeUpdateClientInfo    MessageType = "UpdateClientInfo"
 
 	// Server to client message types
-	TypeError                MessageType = "Error"
-	TypeNetworkCreated       MessageType = "NetworkCreated"
-	TypeNetworkJoined        MessageType = "NetworkJoined"
-	TypeNetworkConnected     MessageType = "NetworkConnected"
-	TypeNetworkDisconnected  MessageType = "NetworkDisconnected"
-	TypeNetworkDeleted       MessageType = "NetworkDeleted"
-	TypeNetworkRenamed       MessageType = "NetworkRenamed"
-	TypeComputerJoined       MessageType = "ComputerJoined"
-	TypeComputerLeft         MessageType = "ComputerLeft"
-	TypeComputerConnected    MessageType = "ComputerConnected"
-	TypeComputerDisconnected MessageType = "ComputerDisconnected"
-	TypeComputerRenamed      MessageType = "ComputerRenamed"
-	TypeKicked               MessageType = "Kicked"
-	TypeKickSuccess          MessageType = "KickSuccess"
-	TypeRenameSuccess        MessageType = "RenameSuccess"
-	TypeDeleteSuccess        MessageType = "DeleteSuccess"
-	TypeServerShutdown       MessageType = "ServerShutdown"
-	TypeComputerNetworks     MessageType = "ComputerNetworks"
+	TypeError                    MessageType = "Error"
+	TypeNetworkCreated           MessageType = "NetworkCreated"
+	TypeNetworkJoined            MessageType = "NetworkJoined"
+	TypeNetworkConnected         MessageType = "NetworkConnected"
+	TypeNetworkDisconnected      MessageType = "NetworkDisconnected"
+	TypeNetworkDeleted           MessageType = "NetworkDeleted"
+	TypeNetworkRenamed           MessageType = "NetworkRenamed"
+	TypeComputerJoined           MessageType = "ComputerJoined"
+	TypeComputerLeft             MessageType = "ComputerLeft"
+	TypeComputerConnected        MessageType = "ComputerConnected"
+	TypeComputerDisconnected     MessageType = "ComputerDisconnected"
+	TypeComputerRenamed          MessageType = "ComputerRenamed"
+	TypeKicked                   MessageType = "Kicked"
+	TypeKickResponse             MessageType = "KickResponse"
+	TypeRenameResponse           MessageType = "RenameResponse"
+	TypeDeleteResponse           MessageType = "DeleteResponse"
+	TypeServerShutdown           MessageType = "ServerShutdown"
+	TypeComputerNetworks         MessageType = "ComputerNetworks"
+	TypeUpdateClientInfoResponse MessageType = "UpdateClientInfoResponse"
 
 	// WebRTC signaling message types
-	TypeSdpOffer    MessageType = "SdpOffer"
-	TypeSdpAnswer   MessageType = "SdpAnswer"
+	TypeSdpOffer     MessageType = "SdpOffer"
+	TypeSdpAnswer    MessageType = "SdpAnswer"
 	TypeIceCandidate MessageType = "IceCandidate"
 )
 
@@ -90,8 +91,8 @@ type ErrorResponse struct {
 // CreateNetworkRequest represents a request to create a new network
 type CreateNetworkRequest struct {
 	BaseRequest
-	NetworkName string `json:"network_name"`
-	PIN         string `json:"pin"`
+	NetworkName  string `json:"network_name"`
+	PIN          string `json:"pin"`
 	ComputerName string `json:"computer_name,omitempty"`
 }
 
@@ -214,8 +215,8 @@ type ComputerDisconnectedNotification struct {
 
 // ComputerRenamedNotification notifies that a computer has been renamed
 type ComputerRenamedNotification struct {
-	NetworkID    string `json:"network_id"`
-	PublicKey    string `json:"public_key"`
+	NetworkID       string `json:"network_id"`
+	PublicKey       string `json:"public_key"`
 	NewComputerName string `json:"new_computer_name"`
 }
 
@@ -270,6 +271,12 @@ type ComputerNetworkInfo struct {
 // ComputerNetworksResponse represents a response containing all networks a computer has joined
 type ComputerNetworksResponse struct {
 	Networks []ComputerNetworkInfo `json:"networks"`
+}
+
+// UpdateClientInfoResponse confirms a client info update
+type UpdateClientInfoResponse struct {
+	PublicKey  string `json:"public_key"`
+	ClientName string `json:"client_name"`
 }
 
 // Computer represents a computer connected to a network

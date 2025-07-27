@@ -218,7 +218,6 @@ type ComputerNetwork struct {
 	JoinedAt      time.Time `json:"joined_at"`
 	LastConnected time.Time `json:"last_connected"`
 	PeerIP        string    `json:"peer_ip"`
-	IsOnline      bool      `json:"is_online"`
 }
 
 // AddComputerToNetwork adds a computer to a network in the computer_networks table
@@ -261,8 +260,6 @@ func (sm *SupabaseManager) UpdateComputerNetworkConnection(networkID, publicKey 
 
 	return nil
 }
-
-
 
 // RemoveComputerFromNetwork removes a computer from a network
 func (sm *SupabaseManager) RemoveComputerFromNetwork(networkID, publicKey string) error {
@@ -333,6 +330,14 @@ func (sm *SupabaseManager) GetComputerNetworks(publicKey string) ([]ComputerNetw
 	}
 
 	logger.Debug("GetComputerNetworks: Found networks", "publicKey", publicKey, "count", len(computerNetworks))
+
+	// Exibe o log em JSON das redes encontradas
+	networksJSON, err := json.Marshal(computerNetworks)
+	if err != nil {
+		logger.Error("GetComputerNetworks: Failed to marshal networks to JSON", "error", err)
+	} else {
+		logger.Debug("GetComputerNetworks: Networks JSON", "publicKey", publicKey, "networks", string(networksJSON))
+	}
 	return computerNetworks, nil
 }
 

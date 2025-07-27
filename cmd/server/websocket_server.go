@@ -112,15 +112,16 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	if publicKeyHeader != "" {
 		logger.Debug("Client connected with public key", "publicKey", publicKeyHeader)
 
-		msgID, _ := utils.GenerateMessageID()
+		// msgID, _ := utils.GenerateMessageID()
 
-		req := smodels.GetComputerNetworksRequest{
-			BaseRequest: smodels.BaseRequest{
-				PublicKey: publicKeyHeader,
-			},
-		}
+		// req := smodels.GetComputerNetworksRequest{
+		// 	BaseRequest: smodels.BaseRequest{
+		// 		PublicKey: publicKeyHeader,
+		// 	},
+		// }
 
-		go s.handleGetComputerNetworksWithIP(conn, req, msgID)
+		// TODO enviar sem request id pois isso deve ser uma notificacao e nao resposta
+		// go s.handleGetComputerNetworksWithIP(conn, req, msgID)
 	}
 
 	for {
@@ -298,29 +299,25 @@ func (s *WebSocketServer) handleWebRTCSignal(senderConn *websocket.Conn, msgType
 }
 
 func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smodels.UpdateClientInfoRequest, originalID string) {
-	logger.Debug("handleUpdateClientInfo: Received request", "originalID", originalID, "publicKey", req.PublicKey, "clientName", req.ClientName)
+	logger.Info("handleUpdateClientInfo: Received request", "originalID", originalID, "publicKey", req.PublicKey, "clientName", req.ClientName)
+	logger.Debug("handleUpdateClientInfo: Attempting to acquire Lock", "originalID", originalID, "publicKey", req.PublicKey)
 	s.mu.Lock()
+	logger.Debug("handleUpdateClientInfo: Lock acquired", "originalID", originalID, "publicKey", req.PublicKey)
+	logger.Debug("handleUpdateClientInfo: Releasing Lock", "originalID", originalID, "publicKey", req.PublicKey)
+	defer s.mu.Unlock()
 
 	publicKey := req.PublicKey
 	if publicKey == "" {
-		s.mu.Unlock()
+		logger.Warn("handleUpdateClientInfo: Public key is empty", "originalID", originalID)
 		s.sendErrorSignal(conn, "Public key is required for updating client info", originalID)
 		return
 	}
 
-	// Associate public key with connection if not already present
-	if _, ok := s.clientToPublicKey[conn]; !ok {
-		s.clientToPublicKey[conn] = publicKey
-		logger.Debug("handleUpdateClientInfo: Associated public key with connection", "publicKey", publicKey)
-	}
-
 	if req.ClientName == "" {
-		s.mu.Unlock()
+		logger.Warn("handleUpdateClientInfo: Client name is empty", "originalID", originalID)
 		s.sendErrorSignal(conn, "Client name is required", originalID)
 		return
 	}
-	s.mu.Unlock() // Unlock before DB call
-
 	// Update client name in all networks
 	err := s.supabaseManager.UpdateClientNameInNetworks(publicKey, req.ClientName)
 	if err != nil {
@@ -329,31 +326,29 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 		s.sendErrorSignal(conn, clientErrorMessage, originalID)
 		return
 	}
+	logger.Info("handleUpdateClientInfo: Client name updated successfully in networks", "publicKey", publicKey, "newName", req.ClientName)
 
-	logger.Info("handleUpdateClientInfo: Client name updated successfully", "publicKey", publicKey, "newName", req.ClientName)
-
-	// Send updated network list back to the client
-	logger.Debug("handleUpdateClientInfo: Calling handleGetComputerNetworks to send updated network list", "publicKey", publicKey, "originalID", originalID)
-	getNetworksReq := smodels.GetComputerNetworksRequest{
-		BaseRequest: smodels.BaseRequest{
-			PublicKey: publicKey,
-		},
+	// Send confirmation back to the client
+	responsePayload := smodels.UpdateClientInfoResponse{
+		PublicKey:  publicKey,
+		ClientName: req.ClientName,
 	}
-	s.handleGetComputerNetworks(conn, getNetworksReq, originalID)
+	logger.Info("handleUpdateClientInfo: Sending TypeUpdateClientInfoSuccess response", "originalID", originalID)
+	s.sendSignal(conn, smodels.TypeUpdateClientInfoResponse, responsePayload, originalID)
 
 	// Notify other clients in the networks about the name change
-	logger.Debug("handleUpdateClientInfo: Notifying other clients about name change", "publicKey", publicKey)
+	logger.Info("handleUpdateClientInfo: Notifying other clients about name change", "publicKey", publicKey)
 	computerNetworks, err := s.supabaseManager.GetComputerNetworks(publicKey)
 	if err != nil {
 		logger.Error("handleUpdateClientInfo: Error getting computer networks for notification", "error", err, "publicKey", publicKey)
 		return
 	}
+	logger.Info("handleUpdateClientInfo: Successfully retrieved computer networks for notification", "publicKey", publicKey, "networkCount", len(computerNetworks))
 
 	for _, cn := range computerNetworks {
 		networkID := cn.NetworkID
-		s.mu.RLock()
+
 		connectionsInNetwork := s.networks[networkID]
-		s.mu.RUnlock()
 
 		for _, clientConn := range connectionsInNetwork {
 			clientPublicKey, ok := s.clientToPublicKey[clientConn]
@@ -364,12 +359,12 @@ func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smode
 					PublicKey:       publicKey,
 					NewComputerName: req.ClientName,
 				}
-				logger.Debug("handleUpdateClientInfo: Sending TypeComputerRenamed notification", "networkID", networkID, "targetClient", clientPublicKey)
+				logger.Info("handleUpdateClientInfo: Sending TypeComputerRenamed notification", "networkID", networkID, "targetClient", clientPublicKey)
 				s.sendSignal(clientConn, smodels.TypeComputerRenamed, notification, "")
 			}
 		}
 	}
-	logger.Debug("handleUpdateClientInfo: Finished processing request", "originalID", originalID)
+	logger.Info("handleUpdateClientInfo: Finished processing request", "originalID", originalID)
 }
 
 func (s *WebSocketServer) sendErrorSignal(conn *websocket.Conn, errorMsg string, originalID string) {
@@ -926,7 +921,7 @@ func (s *WebSocketServer) handleKick(conn *websocket.Conn, req smodels.KickReque
 				"network_id": req.NetworkID,
 				"target_id":  req.TargetID,
 			}
-			s.sendSignal(conn, smodels.TypeKickSuccess, kickSuccessPayload, originalID)
+			s.sendSignal(conn, smodels.TypeKickResponse, kickSuccessPayload, originalID)
 			return
 		}
 	}
@@ -972,7 +967,7 @@ func (s *WebSocketServer) handleRename(conn *websocket.Conn, req smodels.RenameR
 	}
 
 	// Additional successful rename notification to the requester
-	s.sendSignal(conn, smodels.TypeRenameSuccess, renamePayload, originalID)
+	s.sendSignal(conn, smodels.TypeRenameResponse, renamePayload, originalID)
 }
 
 // handleDisconnect manages cleanup when a client disconnects
@@ -1307,7 +1302,9 @@ func (s *WebSocketServer) handleGetComputerNetworks(conn *websocket.Conn, req sm
 
 // handleGetComputerNetworksWithIP processes a request to get all networks a computer has joined and optionally sends IP info
 func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req smodels.GetComputerNetworksRequest, originalID string) {
+	logger.Debug("handleGetComputerNetworksWithIP: Attempting to acquire RLock", "originalID", originalID, "publicKey", req.PublicKey)
 	s.mu.RLock()
+	logger.Debug("handleGetComputerNetworksWithIP: RLock acquired", "originalID", originalID, "publicKey", req.PublicKey)
 	defer s.mu.RUnlock()
 
 	if req.PublicKey == "" {
@@ -1385,7 +1382,19 @@ func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, 
 
 // InitiateGracefulShutdown starts the graceful shutdown process
 func (s *WebSocketServer) InitiateGracefulShutdown(timeout time.Duration, restartInfo string) {
-	if s.isShutdown {
+	staticOnce := func() func() bool {
+		var once sync.Once
+		// var done bool
+		return func() bool {
+			called := false
+			once.Do(func() {
+				// done = true
+				called = true
+			})
+			return called
+		}
+	}()
+	if !staticOnce() || s.isShutdown {
 		logger.Warn("Shutdown already in progress")
 		return
 	}
@@ -1416,8 +1425,13 @@ func (s *WebSocketServer) InitiateGracefulShutdown(timeout time.Duration, restar
 		}
 	}
 
-	// Signal successful shutdown
-	close(s.shutdownChan)
+	// Signal successful shutdown (close only if not already closed)
+	select {
+	case <-s.shutdownChan:
+		// already closed
+	default:
+		close(s.shutdownChan)
+	}
 	logger.Info("Graceful shutdown completed")
 }
 

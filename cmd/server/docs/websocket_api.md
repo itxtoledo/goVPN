@@ -91,10 +91,10 @@ The GoVPN system uses a message format that encapsulates all communications:
 - `ComputerDisconnected`: A computer disconnected from the network (without leaving)
 - `ComputerRenamed`: A computer in the network has been renamed
 - `Kicked`: You were kicked from a network
-- `KickSuccess`: Successfully kicked a computer
-- `RenameSuccess`: Successfully renamed a network
-- `DeleteSuccess`: Successfully deleted a network
-- `LeaveNetworkSuccess`: Successfully left a network
+- `KickResponse`: Successfully kicked a computer
+- `RenameResponse`: Successfully renamed a network
+- `DeleteResponse`: Successfully deleted a network
+- `LeaveNetworkResponse`: Successfully left a network
 
 ## Authentication and Security
 
@@ -126,7 +126,7 @@ Network passwords must match the following pattern: exactly 4 numeric digits (e.
 - `password`: A password for the network (must be 4 digits)
 - `public_key`: Base64-encoded Ed25519 public key
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {
@@ -183,7 +183,7 @@ Common error messages include:
 - `public_key`: Base64-encoded Ed25519 public key
 - `computername`: Optional computername to display
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {
@@ -246,7 +246,7 @@ Common error messages include:
 - `network_id`: ID of the network to leave (if not provided, the server will use the network ID associated with the connection)
 - `public_key`: Base64-encoded Ed25519 public key
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {
@@ -291,7 +291,7 @@ Common error messages include:
 - `network_name`: New name for the network
 - `public_key`: Base64-encoded Ed25519 public key
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {
@@ -340,7 +340,7 @@ Network deletion happens automatically when the owner leaves a network. There's 
 - `public_key`: Base64-encoded Ed25519 public key
 - `computername`: Optional computername to display
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {
@@ -401,7 +401,7 @@ Common error messages include:
 - `network_id`: ID of the network to disconnect from (if not provided, the server will use the network ID associated with the connection)
 - `public_key`: Base64-encoded Ed25519 public key
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {
@@ -445,7 +445,7 @@ This message is sent by the client to update its `computername` across all netwo
 - `public_key`: Base64-encoded Ed25519 public key of the client.
 - `client_name`: The new name for the client.
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 Upon successful update, the server will send a `ComputerNetworks` message back to the client with the updated information.
 
@@ -500,7 +500,7 @@ Common error messages include:
 - `target_id`: Connection ID of the computer to kick
 - `public_key`: Base64-encoded Ed25519 public key
 
-**Response (Success - ServerMessage):**
+**Response (ServerMessage):**
 
 ```json
 {

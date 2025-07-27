@@ -9,7 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"github.com/itxtoledo/govpn/cmd/client/data"
-	
+
 	clientwebrtc_impl "github.com/itxtoledo/govpn/cmd/client/webrtc"
 )
 
@@ -167,7 +167,6 @@ func (v *VPNClient) Run(defaultWebsocketURL string, realtimeData *data.RealtimeD
 			// Enviar informações do cliente para o servidor
 			v.NetworkManager.UpdateClientInfo()
 
-			// Atualizar a lista de salas
 			refreshNetworkList()
 		}
 	}()

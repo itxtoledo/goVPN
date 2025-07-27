@@ -280,7 +280,7 @@ func (s *SignalingClient) parseResponse(requestType signaling_models.MessageType
 		}
 
 	case signaling_models.TypeKick:
-		if response.Type == signaling_models.TypeKickSuccess {
+		if response.Type == signaling_models.TypeKickResponse {
 			var resp signaling_models.KickResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal kick response: %v", err)
@@ -289,7 +289,7 @@ func (s *SignalingClient) parseResponse(requestType signaling_models.MessageType
 		}
 
 	case signaling_models.TypeRename:
-		if response.Type == signaling_models.TypeRenameSuccess {
+		if response.Type == signaling_models.TypeRenameResponse {
 			var resp signaling_models.RenameResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal rename response: %v", err)
@@ -311,11 +311,11 @@ func (s *SignalingClient) parseResponse(requestType signaling_models.MessageType
 		return map[string]interface{}{"status": "success"}, nil
 
 	case signaling_models.TypeUpdateClientInfo:
-		// The server responds with TypeComputerNetworks after updating client info
-		if response.Type == signaling_models.TypeComputerNetworks {
-			var resp signaling_models.ComputerNetworksResponse
+		// The server responds with TypeUpdateClientInfoSuccess after updating client info
+		if response.Type == signaling_models.TypeUpdateClientInfoResponse {
+			var resp signaling_models.UpdateClientInfoResponse
 			if err := json.Unmarshal(response.Payload, &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal computer networks response for update client info: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal update client info success response: %v", err)
 			}
 			return resp, nil
 		}
@@ -905,7 +905,7 @@ func (s *SignalingClient) injectPublicKey(payload interface{}) bool {
 }
 
 // GetComputerNetworks requests all networks the computer has joined from the server
-func (s *SignalingClient) GetComputerNetworks() (*signaling_models.ComputerNetworksResponse, error) {
+func (s *SignalingClient) RequestComputerNetworks() (*signaling_models.ComputerNetworksResponse, error) {
 	if !s.Connected || s.Conn == nil {
 		return nil, errors.New("not connected to server")
 	}
