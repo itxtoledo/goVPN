@@ -25,9 +25,9 @@ type Config struct {
 
 // ConfigManager gerencia as configurações da aplicação
 type ConfigManager struct {
-	config     Config
-	dataPath   string // Add dataPath field
-	mutex      sync.Mutex
+	config   Config
+	dataPath string // Add dataPath field
+	mutex    sync.Mutex
 }
 
 // NewConfigManager cria uma nova instância do gerenciador de configurações
@@ -46,10 +46,10 @@ func NewConfigManager(customConfigPath string) *ConfigManager {
 	}
 
 	cm := &ConfigManager{
-		dataPath:   dataPath, // Initialize dataPath
+		dataPath: dataPath, // Initialize dataPath
 		config: Config{
 			ComputerName:  "Computer",
-			ServerAddress: "wss://govpn-k6ql.onrender.com/ws",
+			ServerAddress: "wss://govpn-k6ql.onrender.com:8080/ws",
 			Theme:         "system",
 			Language:      "en",
 		},
@@ -185,8 +185,6 @@ func (cm *ConfigManager) LoadConfig() {
 		cm.SaveConfig()
 	}
 }
-
-
 
 // GetDataPath returns the data directory path
 func (cm *ConfigManager) GetDataPath() string {

@@ -29,7 +29,7 @@ const (
 )
 
 // Init initializes the logger with the specified log level
-func Init(level LogLevel) {
+func Init() {
 	once.Do(func() {
 		// Create encoder configuration
 		encoderConfig := zapcore.EncoderConfig{
@@ -41,41 +41,20 @@ func Init(level LogLevel) {
 			MessageKey:     "message",
 			StacktraceKey:  "stacktrace",
 			LineEnding:     zapcore.DefaultLineEnding,
-			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeLevel:    zapcore.LowercaseColorLevelEncoder, // Use color for console
 			EncodeTime:     zapcore.ISO8601TimeEncoder,
 			EncodeDuration: zapcore.MillisDurationEncoder,
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		}
 
-		// Create JSON encoder
-		// jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
-
 		// Create console encoder for terminal output
 		consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
 
-		// Convert log level
-		var zapLevel zapcore.Level
-		switch level {
-		case DebugLevel:
-			zapLevel = zapcore.DebugLevel
-		case InfoLevel:
-			zapLevel = zapcore.InfoLevel
-		case WarnLevel:
-			zapLevel = zapcore.WarnLevel
-		case ErrorLevel:
-			zapLevel = zapcore.ErrorLevel
-		case FatalLevel:
-			zapLevel = zapcore.FatalLevel
-		default:
-			zapLevel = zapcore.InfoLevel
-		}
+		// Always set log level to Debug to capture all messages
+		zapLevel := zapcore.DebugLevel
 
-		// Create log file
-		// logFile, _ := os.Create("./server.log")
-
-		// Create core for both console and file output
+		// Create core for console output
 		core := zapcore.NewTee(
-			// zapcore.NewCore(jsonEncoder, zapcore.AddSync(logFile), zapLevel),
 			zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), zapLevel),
 		)
 
@@ -84,8 +63,7 @@ func Init(level LogLevel) {
 		sugar = logger.Sugar()
 
 		// Log initialization
-		sugar.Infow("Logger initialized",
-			"level", level,
+		sugar.Infow("Logger initialized (all levels to console)",
 			"time", time.Now().Format(time.RFC3339),
 		)
 	})

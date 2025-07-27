@@ -43,7 +43,7 @@ func main() {
 	err := godotenv.Load(envPath)
 	if err != nil {
 		// Will initialize logger first with default level before accessing config
-		logger.Init(logger.InfoLevel)
+		logger.Init()
 		logger.Warn("Could not load .env file", "error", err)
 	}
 
@@ -59,12 +59,11 @@ func main() {
 		NetworkExpiryDays:     7,
 		AllowAllOrigins:       true,
 		CleanupInterval:       24 * time.Hour, // Run cleanup once a day
-		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		ShutdownTimeout:       15 * time.Second, // Default timeout for graceful shutdown
 	}
 
-	// Initialize logger with configured log level
-	logger.Init(logger.LogLevel(cfg.LogLevel))
+	// Initialize logger (no level needed, always debug to console)
+	logger.Init()
 
 	// Parse numeric environment variables
 	if readSize := getEnv("READ_BUFFER_SIZE", ""); readSize != "" {
