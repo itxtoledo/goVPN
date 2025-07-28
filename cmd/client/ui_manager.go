@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	
+
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	dialogs "github.com/itxtoledo/govpn/cmd/client/dialogs"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
@@ -22,7 +22,7 @@ type UIManager struct {
 	VPN                 *VPNClient
 	ConfigManager       *ConfigManager
 	NetworkListComp     *NetworkListComponent
-	HomeScreenComponent    *HomeScreenComponent
+	HomeScreenComponent *HomeScreenComponent
 	HeaderComponent     *HeaderComponent
 	AboutWindow         *AboutWindow
 	ConnectDialog       *dialogs.ConnectDialog
@@ -48,8 +48,6 @@ func NewUIManager(websocketURL string, computername string, configPath string) *
 
 	// Initialize configuration manager
 	ui.ConfigManager = NewConfigManager(configPath)
-
-	
 
 	// Create main window
 	ui.MainWindow = ui.App.NewWindow("GoVPN")
@@ -133,7 +131,7 @@ func (ui *UIManager) setupComponents() {
 		nil,
 		nil,
 		nil,
-				ui.HomeScreenComponent.CreateHomeScreenContainer(),
+		ui.HomeScreenComponent.CreateHomeScreenContainer(),
 	)
 
 	// Set content
@@ -199,7 +197,7 @@ func (ui *UIManager) ShowSettingsWindow() {
 // handleAppQuit handles application quit
 func (ui *UIManager) handleAppQuit() {
 	log.Println("Quitting app...")
-	
+
 }
 
 // refreshUI refreshes the UI components
@@ -314,7 +312,6 @@ func (ui *UIManager) HandleSettingsSaved(config Config) {
 
 // applySettings applies the settings
 func (ui *UIManager) applySettings(config Config) {
-	
 
 	// Update computer name in realtime data layer
 	ui.RealtimeData.SetComputerName(config.ComputerName)
@@ -324,7 +321,10 @@ func (ui *UIManager) applySettings(config Config) {
 
 	// Send updated client info to the server
 	if ui.VPN != nil && ui.VPN.NetworkManager != nil {
-		ui.VPN.NetworkManager.UpdateClientInfo()
+		// Update client info on the server only if the computer name has changed
+		if config.ComputerName != ui.ConfigManager.GetConfig().ComputerName {
+			ui.VPN.NetworkManager.UpdateClientInfo()
+		}
 	}
 
 	// Emit settings changed event
@@ -348,9 +348,6 @@ func (ui *UIManager) Run(defaultWebsocketURL string) {
 	// Verificar o tamanho da janela principal - fixar em 300x600 conforme requisitos
 	ui.MainWindow.Resize(fyne.NewSize(300, 600))
 	ui.MainWindow.SetFixedSize(true)
-
-	
-	
 
 	// Atualizar a interface antes de exibir
 	ui.refreshUI()

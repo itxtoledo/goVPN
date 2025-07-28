@@ -103,6 +103,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 		logger.Error("Failed to upgrade connection", "error", err)
 		return
 	}
+	logger.Info("WebSocket handshake successful", "remoteAddr", conn.RemoteAddr().String())
 	defer conn.Close()
 
 	s.statsManager.IncrementConnectionsTotal()
@@ -127,7 +128,7 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 	for {
 		var sigMsg smodels.SignalingMessage
 		err := conn.ReadJSON(&sigMsg)
-		logger.Debug("Received message", "type", sigMsg.Type, "payload", string(sigMsg.Payload))
+		logger.Info("Received message", "remoteAddr", conn.RemoteAddr().String(), "type", sigMsg.Type, "payload", string(sigMsg.Payload))
 		if err != nil {
 			s.handleDisconnect(conn)
 			return
@@ -1145,6 +1146,7 @@ func (s *WebSocketServer) Start(port string) error {
 
 	// Start HTTP server in a separate goroutine so we can return errors
 	go func() {
+		logger.Info("WebSocket server listening", "port", port)
 		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 			logger.Error("HTTP server error", "error", err)
 		}
