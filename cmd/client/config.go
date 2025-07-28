@@ -15,7 +15,6 @@ import (
 type Config struct {
 	ComputerName  string `json:"computername"`
 	ServerAddress string `json:"server_address"`
-	Theme         string `json:"theme"`
 	Language      string `json:"language"`
 	PublicKey     string `json:"public_key"`
 	PrivateKey    string `json:"private_key"`
@@ -51,7 +50,6 @@ func NewConfigManager(customConfigPath string) *ConfigManager {
 			ComputerName: "Computer",
 			// ServerAddress: "wss://govpn-k6ql.onrender.com:8080/ws",
 			ServerAddress: "wss://localhost:8080/ws",
-			Theme:         "system",
 			Language:      "en",
 		},
 	}
@@ -103,14 +101,7 @@ func (cm *ConfigManager) UpdateServerAddress(address string) error {
 	return cm.SaveConfig()
 }
 
-// UpdateTheme atualiza o tema
-func (cm *ConfigManager) UpdateTheme(theme string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
 
-	cm.config.Theme = theme
-	return cm.SaveConfig()
-}
 
 // UpdateLanguage atualiza o idioma
 func (cm *ConfigManager) UpdateLanguage(language string) error {
@@ -155,8 +146,8 @@ func (cm *ConfigManager) LoadConfig() {
 	}
 
 	// Log config details
-	log.Printf("Config loaded successfully - ComputerName: %s, Theme: %s, Language: %s",
-		cm.config.ComputerName, cm.config.Theme, cm.config.Language)
+	log.Printf("Config loaded successfully - ComputerName: %s, Language: %s",
+		cm.config.ComputerName, cm.config.Language)
 
 	// Check for public/private keys
 	if cm.config.PublicKey != "" && cm.config.PrivateKey != "" {

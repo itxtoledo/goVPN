@@ -8,7 +8,6 @@ require (
 	fyne.io/fyne/v2 v2.6.0
 	github.com/itxtoledo/govpn/libs/signaling/client v0.0.0
 	github.com/itxtoledo/govpn/libs/signaling/models v0.0.0
-	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/pion/webrtc/v4 v4.1.3
 )
 

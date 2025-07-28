@@ -18,7 +18,7 @@ type SettingsWindow struct {
 	*ui.BaseWindow
 	ComputerNameEntry  *widget.Entry
 	ServerAddressEntry *widget.Entry
-	ThemeSelect        *widget.Select
+	
 	SaveButton         *widget.Button
 
 	configManager *ConfigManager // Add ConfigManager field
@@ -61,21 +61,7 @@ func NewSettingsWindow(app fyne.App, configManager *ConfigManager, currentConfig
 	sw.ServerAddressEntry.SetText(currentConfig.ServerAddress)
 	sw.ServerAddressEntry.SetPlaceHolder("Enter server address (ws://host:port)")
 
-	// Theme Selector
-	themeOptions := []string{"System", "Light", "Dark"}
-	sw.ThemeSelect = widget.NewSelect(themeOptions, func(selected string) {
-		// Change is applied only when Save is clicked
-	})
-
-	// Select current theme
-	themeIndex := 0 // System by default
-	switch currentConfig.Theme {
-	case "light":
-		themeIndex = 1
-	case "dark":
-		themeIndex = 2
-	}
-	sw.ThemeSelect.SetSelectedIndex(themeIndex)
+	
 
 	// Save Button
 	sw.SaveButton = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
@@ -98,15 +84,7 @@ func (sw *SettingsWindow) saveSettings() {
 		PrivateKey:    currentConfig.PrivateKey,
 	}
 
-	// Update theme
-	switch sw.ThemeSelect.SelectedIndex() {
-	case 0:
-		newConfig.Theme = "system"
-	case 1:
-		newConfig.Theme = "light"
-	case 2:
-		newConfig.Theme = "dark"
-	}
+	
 
 	// Invoke the callback with the new config
 	sw.OnSettingsSaved(newConfig)
@@ -125,7 +103,6 @@ func (sw *SettingsWindow) Show() {
 		Items: []*widget.FormItem{
 			{Text: "ComputerName", Widget: sw.ComputerNameEntry, HintText: "Your display name in the VPN"},
 			{Text: "Server", Widget: sw.ServerAddressEntry, HintText: "Address of the signaling server"},
-			{Text: "Theme", Widget: sw.ThemeSelect, HintText: "Application theme"},
 		},
 	}
 

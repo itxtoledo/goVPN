@@ -127,7 +127,7 @@ func (htc *HomeScreenComponent) CreateHomeScreenContainer() *fyne.Container {
 	})
 
 	// Criar um botão para entrar em uma sala
-	joinNetworkButton := widget.NewButtonWithIcon("Join Network", fyne.Theme.Icon(fyne.CurrentApp().Settings().Theme(), "mail-reply"), func() {
+	joinNetworkButton := widget.NewButtonWithIcon("Join Network", theme.LoginIcon(), func() {
 		log.Println("Join network button clicked")
 
 		// Check network connection status

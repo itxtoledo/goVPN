@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/theme"
+	
 	"github.com/itxtoledo/govpn/cmd/client/data"
 	dialogs "github.com/itxtoledo/govpn/cmd/client/dialogs"
 	smodels "github.com/itxtoledo/govpn/libs/signaling/models"
@@ -314,15 +314,7 @@ func (ui *UIManager) HandleSettingsSaved(config Config) {
 
 // applySettings applies the settings
 func (ui *UIManager) applySettings(config Config) {
-	// Update theme
-	switch config.Theme {
-	case "light":
-		ui.App.Settings().SetTheme(theme.LightTheme())
-	case "dark":
-		ui.App.Settings().SetTheme(theme.DarkTheme())
-	default:
-		ui.App.Settings().SetTheme(ui.App.Settings().Theme())
-	}
+	
 
 	// Update computer name in realtime data layer
 	ui.RealtimeData.SetComputerName(config.ComputerName)
@@ -357,9 +349,8 @@ func (ui *UIManager) Run(defaultWebsocketURL string) {
 	ui.MainWindow.Resize(fyne.NewSize(300, 600))
 	ui.MainWindow.SetFixedSize(true)
 
-	// Configurar tema baseado nas configurações
-	config := ui.ConfigManager.GetConfig()
-	log.Printf("Applying theme: %s", config.Theme)
+	
+	
 
 	// Atualizar a interface antes de exibir
 	ui.refreshUI()

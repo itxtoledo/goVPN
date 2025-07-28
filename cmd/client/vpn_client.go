@@ -117,8 +117,8 @@ func (v *VPNClient) loadSettings(realtimeData *data.RealtimeDataLayer) {
 		realtimeData.SetLanguage(config.Language)
 	}
 
-	log.Printf("Settings loaded: ComputerName=%s, Theme=%s, Language=%s, Server=%s, PublicKey=%s",
-		config.ComputerName, config.Theme, config.Language, config.ServerAddress, v.PublicKeyStr)
+	log.Printf("Settings loaded: ComputerName=%s, Language=%s, Server=%s, PublicKey=%s",
+		config.ComputerName, config.Language, config.ServerAddress, v.PublicKeyStr)
 }
 
 // Run inicia o cliente VPN

@@ -27,7 +27,7 @@ The GoVPN client follows a modular architecture with the following main componen
 
 
 2. **ConfigManager**: Manages computer settings.
-   - Stores preferences like language and theme
+   - Stores preferences like language
    - Handles server address and other configurations
 
 3. **RealtimeDataLayer**: Real-time data layer for the interface.
@@ -84,7 +84,7 @@ UI Events → UIManager → NetworkManager → SignalingClient → WebSocket →
 - **Fyne v2**: Cross-platform UI framework
   - Native widgets for various platforms
   - Responsive layout system
-  - Light/dark theme support
+  
 
 
 

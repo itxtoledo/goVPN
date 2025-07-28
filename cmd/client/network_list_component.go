@@ -81,11 +81,9 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 			}
 		}
 
-		if networks != nil {
-			sort.Slice(networks, func(i, j int) bool {
-				return networks[i].NetworkName < networks[j].NetworkName
-			})
-		}
+		sort.Slice(networks, func(i, j int) bool {
+			return networks[i].NetworkName < networks[j].NetworkName
+		})
 
 		log.Printf("UpdateNetworkList: Processed %d networks for display.", len(networks))
 
