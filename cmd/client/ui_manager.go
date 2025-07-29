@@ -17,6 +17,7 @@ import (
 
 // UIManager represents the UI manager for the VPN client app
 type UIManager struct {
+	openAccordionStates map[string]bool
 	App                 fyne.App
 	MainWindow          fyne.Window
 	VPN                 *VPNClient
@@ -38,6 +39,7 @@ type UIManager struct {
 func NewUIManager(websocketURL string, computername string, configPath string) *UIManager {
 	ui := &UIManager{
 		defaultWebsocketURL: websocketURL,
+		openAccordionStates: make(map[string]bool),
 	}
 
 	// Criar a camada de dados em tempo real - ensure this is properly initialized
@@ -265,7 +267,7 @@ func (ui *UIManager) refreshNetworkList() {
 	// Update network tree component
 	fyne.Do(func() {
 		if ui.NetworkListComp != nil {
-			ui.NetworkListComp.UpdateNetworkList()
+			ui.NetworkListComp.UpdateNetworkList(ui.openAccordionStates)
 		}
 	})
 

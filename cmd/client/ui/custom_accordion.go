@@ -51,24 +51,27 @@ type CustomAccordionItem struct {
 	Content        fyne.CanvasObject
 	EndContent     fyne.CanvasObject // Content that stays at the end of the line (e.g., user counter)
 	IsOpen         bool
+	Key            string // Used to identify the item
 	container      *fyne.Container
 	expandLabel    *widget.Label
 	OnTap          func()                    // Optional callback for title tap
 	OnTapSecondary func(pe *fyne.PointEvent) // Callback for secondary tap
 }
 
-// NewCustomAccordionItem creates a new custom accordion item
-func NewCustomAccordionItem(title, content fyne.CanvasObject) *CustomAccordionItem {
-	return NewCustomAccordionItemWithEndContent(title, content, nil)
-}
+// TODO remove commented code if not needed
+// // NewCustomAccordionItem creates a new custom accordion item
+// func NewCustomAccordionItem(title, content fyne.CanvasObject) *CustomAccordionItem {
+// 	return NewCustomAccordionItemWithEndContent(title, content, nil, "")
+// }
 
 // NewCustomAccordionItemWithEndContent creates a new custom accordion item with end content
-func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.CanvasObject) *CustomAccordionItem {
+func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.CanvasObject, key string) *CustomAccordionItem {
 	item := &CustomAccordionItem{
 		Title:      title,
 		Content:    content,
 		EndContent: endContent,
 		IsOpen:     false,
+		Key:        key,
 	}
 
 	// Create label for expansion indicator
@@ -81,12 +84,12 @@ func NewCustomAccordionItemWithEndContent(title, content, endContent fyne.Canvas
 
 // NewCustomAccordionItemWithCallbacks creates a new custom accordion item with callbacks
 func NewCustomAccordionItemWithCallbacks(title, content fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *CustomAccordionItem {
-	return NewCustomAccordionItemWithEndContentAndCallbacks(title, content, nil, onTap, onTapSecondary)
+	return NewCustomAccordionItemWithEndContentAndCallbacks(title, content, nil, onTap, onTapSecondary, "")
 }
 
 // NewCustomAccordionItemWithEndContentAndCallbacks creates a new custom accordion item with end content and callbacks
-func NewCustomAccordionItemWithEndContentAndCallbacks(title, content, endContent fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent)) *CustomAccordionItem {
-	item := NewCustomAccordionItemWithEndContent(title, content, endContent)
+func NewCustomAccordionItemWithEndContentAndCallbacks(title, content, endContent fyne.CanvasObject, onTap func(), onTapSecondary func(pe *fyne.PointEvent), key string) *CustomAccordionItem {
+	item := NewCustomAccordionItemWithEndContent(title, content, endContent, key)
 	item.OnTap = onTap
 	item.OnTapSecondary = onTapSecondary
 	return item

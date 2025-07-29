@@ -54,7 +54,7 @@ func (ntc *NetworkListComponent) init() {
 }
 
 // UpdateNetworkList atualiza a lista de redes
-func (ntc *NetworkListComponent) UpdateNetworkList() {
+func (ntc *NetworkListComponent) UpdateNetworkList(openStates map[string]bool) {
 	// Use mutex to prevent concurrent modifications
 	ntc.updateMutex.Lock()
 	defer ntc.updateMutex.Unlock()
@@ -88,6 +88,13 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 		log.Printf("UpdateNetworkList: Processed %d networks for display.", len(networks))
 
 		if len(networks) > 0 {
+			// Store the open state of current accordion items in the passed map
+			for _, item := range ntc.NetworkAccordion.Items {
+				if item.Key != "" {
+					openStates[item.Key] = item.IsOpen
+				}
+			}
+
 			// Clear the accordion before adding new items
 			ntc.NetworkAccordion.RemoveAll()
 
@@ -261,10 +268,13 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 					menu := fyne.NewMenu(localNetwork.NetworkName, connectItem, chatItem, copyIDItem, fyne.NewMenuItemSeparator(), leaveItem)
 					popUp := widget.NewPopUpMenu(menu, ntc.UI.MainWindow.Canvas())
 					popUp.ShowAtPosition(pe.AbsolutePosition)
-				})
+				}, localNetwork.NetworkID)
 
-				// Auto-open if connected
-				if isConnected {
+				// Restore open state if it was previously open
+				if wasOpen, ok := openStates[localNetwork.NetworkID]; ok && wasOpen {
+					accordionItem.Open()
+				} else if isConnected {
+					// Auto-open if connected and not previously open
 					accordionItem.Open()
 				}
 

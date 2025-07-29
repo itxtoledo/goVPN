@@ -28,8 +28,8 @@ type SignalingClient struct {
 	ServerAddress  string
 	Connected      bool
 	LastHeartbeat  time.Time
-	MessageHandler SignalingMessageHandler // Usar o novo tipo de função
-	PublicKeyStr   string                  // Public key string to identify this client
+	MessageHandler SignalingMessageHandler
+	PublicKeyStr   string // Public key string to identify this client
 
 	// System to track pending requests by message ID
 	pendingRequests     map[string]chan signaling_models.SignalingMessage
@@ -598,204 +598,220 @@ func (s *SignalingClient) listenForMessages() {
 			continue
 		}
 
+		s.MessageHandler(sigMsg.Type, sigMsg.Payload)
+
+		// TODO delete the code below
 		// Handle specific message types (for notifications and unsolicited messages)
-		switch sigMsg.Type {
-		case signaling_models.TypeError:
-			{
-				// Decode error message from base64
-				var errorPayload map[string]string
-				if err := json.Unmarshal(sigMsg.Payload, &errorPayload); err == nil {
-					if errorMsg, ok := errorPayload["error"]; ok {
-						log.Printf("Server error: %s", errorMsg)
-						// Notify the handler about the error
-						if s.MessageHandler != nil {
-							s.MessageHandler(signaling_models.TypeError, sigMsg.Payload)
-						}
-					}
-				} else {
-					log.Printf("Failed to decode error payload: %v", err)
-				}
-			}
+		// switch sigMsg.Type {
+		// case signaling_models.TypeError:
+		// 	{
+		// 		// Decode error message from base64
+		// 		var errorPayload map[string]string
+		// 		if err := json.Unmarshal(sigMsg.Payload, &errorPayload); err == nil {
+		// 			if errorMsg, ok := errorPayload["error"]; ok {
+		// 				log.Printf("Server error: %s", errorMsg)
+		// 				// Notify the handler about the error
+		// 				if s.MessageHandler != nil {
+		// 					s.MessageHandler(signaling_models.TypeError, sigMsg.Payload)
+		// 				}
+		// 			}
+		// 		} else {
+		// 			log.Printf("Failed to decode error payload: %v", err)
+		// 		}
+		// 	}
 
-		case signaling_models.TypeNetworkDisconnected:
-			{
-				var response signaling_models.DisconnectNetworkResponse
-				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal network disconnected response: %v", err)
-				} else {
-					log.Printf("Successfully disconnected from network: %s", response.NetworkID)
-					// Notify the handler about the network disconnection
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeNetworkDisconnected, sigMsg.Payload)
-					}
-				}
-			}
+		// case signaling_models.TypeNetworkDisconnected:
+		// 	{
+		// 		var response signaling_models.DisconnectNetworkResponse
+		// 		if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+		// 			log.Printf("Failed to unmarshal network disconnected response: %v", err)
+		// 		} else {
+		// 			log.Printf("Successfully disconnected from network: %s", response.NetworkID)
+		// 			// Notify the handler about the network disconnection
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeNetworkDisconnected, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeNetworkJoined:
-			{
-				var response signaling_models.JoinNetworkResponse
-				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal network joined response: %v", err)
-				} else {
-					log.Printf("Successfully joined network: %s (%s)", response.NetworkName, response.NetworkID)
-					// Notify the handler about the network joined event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeNetworkJoined, sigMsg.Payload)
-					}
-				}
-			}
+		// case signaling_models.TypeNetworkJoined:
+		// 	{
+		// 		var response signaling_models.JoinNetworkResponse
+		// 		if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+		// 			log.Printf("Failed to unmarshal network joined response: %v", err)
+		// 		} else {
+		// 			log.Printf("Successfully joined network: %s (%s)", response.NetworkName, response.NetworkID)
+		// 			// Notify the handler about the network joined event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeNetworkJoined, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeNetworkCreated:
-			{
-				var response signaling_models.CreateNetworkResponse
-				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal network created response: %v", err)
-				} else {
-					log.Printf("Successfully created network: %s (%s)", response.NetworkName, response.NetworkID)
-					// Notify the handler about the network created event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeNetworkCreated, sigMsg.Payload)
-					}
-				}
-			}
+		// case signaling_models.TypeNetworkCreated:
+		// 	{
+		// 		var response signaling_models.CreateNetworkResponse
+		// 		if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+		// 			log.Printf("Failed to unmarshal network created response: %v", err)
+		// 		} else {
+		// 			log.Printf("Successfully created network: %s (%s)", response.NetworkName, response.NetworkID)
+		// 			// Notify the handler about the network created event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeNetworkCreated, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeLeaveNetwork:
-			{
-				var response signaling_models.LeaveNetworkResponse
-				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal leave network response: %v", err)
-				} else {
-					log.Printf("Successfully left network: %s", response.NetworkID)
-					// Notify the handler about the network left event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeLeaveNetwork, sigMsg.Payload)
-					}
-				}
-			}
+		// case signaling_models.TypeLeaveNetwork:
+		// 	{
+		// 		var response signaling_models.LeaveNetworkResponse
+		// 		if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+		// 			log.Printf("Failed to unmarshal leave network response: %v", err)
+		// 		} else {
+		// 			log.Printf("Successfully left network: %s", response.NetworkID)
+		// 			// Notify the handler about the network left event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeLeaveNetwork, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeKicked:
-			{
-				var notification signaling_models.KickedNotification
-				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-					log.Printf("Failed to unmarshal kicked notification: %v", err)
-				} else {
-					reason := notification.Reason
-					if reason == "" {
-						reason = "No reason provided"
-					}
-					log.Printf("Kicked from network %s: %s", notification.NetworkID, reason)
-					// Notify the handler about the kicked event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeKicked, sigMsg.Payload)
-					}
-				}
-			}
+		// case signaling_models.TypeKicked:
+		// 	{
+		// 		var notification signaling_models.KickedNotification
+		// 		if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+		// 			log.Printf("Failed to unmarshal kicked notification: %v", err)
+		// 		} else {
+		// 			reason := notification.Reason
+		// 			if reason == "" {
+		// 				reason = "No reason provided"
+		// 			}
+		// 			log.Printf("Kicked from network %s: %s", notification.NetworkID, reason)
+		// 			// Notify the handler about the kicked event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeKicked, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeComputerJoined:
-			{
-				var notification signaling_models.ComputerJoinedNotification
-				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-					log.Printf("Failed to unmarshal computer joined notification: %v", err)
-				} else {
-					computerName := notification.ComputerName
-					if computerName == "" {
-						computerName = "Unknown computer"
-					}
-					log.Printf("New computer joined network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.ComputerIP)
+		// case signaling_models.TypeComputerJoined:
+		// 	{
+		// 		var notification signaling_models.ComputerJoinedNotification
+		// 		if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+		// 			log.Printf("Failed to unmarshal computer joined notification: %v", err)
+		// 		} else {
+		// 			computerName := notification.ComputerName
+		// 			if computerName == "" {
+		// 				computerName = "Unknown computer"
+		// 			}
+		// 			log.Printf("New computer joined network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.ComputerIP)
 
-					// Notify the handler about the computer joined event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeComputerJoined, sigMsg.Payload)
-					}
-				}
-			}
+		// 			// Notify the handler about the computer joined event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeComputerJoined, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeComputerConnected:
-			{
-				var notification signaling_models.ComputerConnectedNotification
-				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-					log.Printf("Failed to unmarshal computer connected notification: %v", err)
-				} else {
-					computerName := notification.ComputerName
-					if computerName == "" {
-						computerName = "Unknown computer"
-					}
-					log.Printf("Computer connected to network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.ComputerIP)
+		// case signaling_models.TypeComputerConnected:
+		// 	{
+		// 		var notification signaling_models.ComputerConnectedNotification
+		// 		if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+		// 			log.Printf("Failed to unmarshal computer connected notification: %v", err)
+		// 		} else {
+		// 			computerName := notification.ComputerName
+		// 			if computerName == "" {
+		// 				computerName = "Unknown computer"
+		// 			}
+		// 			log.Printf("Computer connected to network %s: %s (Key: %s, IP: %s)", notification.NetworkID, computerName, notification.PublicKey, notification.ComputerIP)
 
-					// Notify the handler about the computer connected event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeComputerConnected, sigMsg.Payload)
-					}
-				}
-			}
+		// 			// Notify the handler about the computer connected event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeComputerConnected, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeComputerLeft:
-			var notification signaling_models.ComputerLeftNotification
-			if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-				log.Printf("Failed to unmarshal computer left notification: %v", err)
-			} else {
-				log.Printf("Computer left network %s: %s", notification.NetworkID, notification.PublicKey)
+		// case signaling_models.TypeComputerLeft:
+		// 	var notification signaling_models.ComputerLeftNotification
+		// 	if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+		// 		log.Printf("Failed to unmarshal computer left notification: %v", err)
+		// 	} else {
+		// 		log.Printf("Computer left network %s: %s", notification.NetworkID, notification.PublicKey)
 
-				// Notify the handler about the computer left event
-				if s.MessageHandler != nil {
-					s.MessageHandler(signaling_models.TypeComputerLeft, sigMsg.Payload)
-				}
-			}
+		// 		// Notify the handler about the computer left event
+		// 		if s.MessageHandler != nil {
+		// 			s.MessageHandler(signaling_models.TypeComputerLeft, sigMsg.Payload)
+		// 		}
+		// 	}
 
-		case signaling_models.TypeNetworkDeleted:
-			{
-				var notification signaling_models.NetworkDeletedNotification
-				if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
-					log.Printf("Failed to unmarshal network deleted notification: %v", err)
-				} else {
-					log.Printf("Network deleted: %s", notification.NetworkID)
-					// Notify the handler about the network deleted event
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeNetworkDeleted, sigMsg.Payload)
-					}
-				}
-			}
+		// case signaling_models.TypeNetworkDeleted:
+		// 	{
+		// 		var notification signaling_models.NetworkDeletedNotification
+		// 		if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+		// 			log.Printf("Failed to unmarshal network deleted notification: %v", err)
+		// 		} else {
+		// 			log.Printf("Network deleted: %s", notification.NetworkID)
+		// 			// Notify the handler about the network deleted event
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeNetworkDeleted, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-		case signaling_models.TypeComputerNetworks:
-			{
-				var response signaling_models.ComputerNetworksResponse
-				if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
-					log.Printf("Failed to unmarshal computer networks response: %v", err)
-				} else {
-					log.Printf("=================== COMPUTER NETWORKS RECEIVED ===================")
-					log.Printf("Total networks found: %d", len(response.Networks))
-					log.Printf("==================================================================")
+		// case signaling_models.TypeComputerDisconnected:
+		// 	{
+		// 		var notification signaling_models.ComputerDisconnectedNotification
+		// 		if err := json.Unmarshal(sigMsg.Payload, &notification); err != nil {
+		// 			log.Printf("Failed to unmarshal computer disconnected notification: %v", err)
+		// 		} else {
+		// 			log.Printf("Computer disconnected from network %s: %s", notification.NetworkID, notification.PublicKey)
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeComputerDisconnected, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
 
-					for i, network := range response.Networks {
-						log.Printf("Network %d: %s", i+1, network.NetworkName)
-						log.Printf("  Network ID: %s", network.NetworkID)
-						log.Printf("  Admin Public Key: %s", network.AdminPublicKey)
-						log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
-						log.Printf("  Last connected: %s", network.LastConnected.Format(time.RFC1123))
-						log.Printf("  Your Computer IP: %s", network.ComputerIP)
+		// case signaling_models.TypeComputerNetworks:
+		// 	{
+		// 		var response signaling_models.ComputerNetworksResponse
+		// 		if err := json.Unmarshal(sigMsg.Payload, &response); err != nil {
+		// 			log.Printf("Failed to unmarshal computer networks response: %v", err)
+		// 		} else {
+		// 			log.Printf("=================== COMPUTER NETWORKS RECEIVED ===================")
+		// 			log.Printf("Total networks found: %d", len(response.Networks))
+		// 			log.Printf("==================================================================")
 
-						log.Printf("  Connected computers (%d):", len(network.Computers))
-						if len(network.Computers) > 0 {
-							for j, computer := range network.Computers {
-								log.Printf("    Computer %d: %s", j+1, computer.Name)
-								log.Printf("      Public Key: %s", computer.PublicKey)
-								log.Printf("      IP Address: %s", computer.ComputerIP)
-								log.Printf("      Online: %t", computer.IsOnline)
-							}
-						} else {
-							log.Printf("    No computers currently connected")
-						}
-						log.Printf("  ==================================================================")
-					}
+		// 			for i, network := range response.Networks {
+		// 				log.Printf("Network %d: %s", i+1, network.NetworkName)
+		// 				log.Printf("  Network ID: %s", network.NetworkID)
+		// 				log.Printf("  Admin Public Key: %s", network.AdminPublicKey)
+		// 				log.Printf("  Joined at: %s", network.JoinedAt.Format(time.RFC1123))
+		// 				log.Printf("  Last connected: %s", network.LastConnected.Format(time.RFC1123))
+		// 				log.Printf("  Your Computer IP: %s", network.ComputerIP)
 
-					// Notify the handler about the updated network list
-					if s.MessageHandler != nil {
-						s.MessageHandler(signaling_models.TypeComputerNetworks, sigMsg.Payload)
-					}
-				}
-			}
+		// 				log.Printf("  Connected computers (%d):", len(network.Computers))
+		// 				if len(network.Computers) > 0 {
+		// 					for j, computer := range network.Computers {
+		// 						log.Printf("    Computer %d: %s", j+1, computer.Name)
+		// 						log.Printf("      Public Key: %s", computer.PublicKey)
+		// 						log.Printf("      IP Address: %s", computer.ComputerIP)
+		// 						log.Printf("      Online: %t", computer.IsOnline)
+		// 					}
+		// 				} else {
+		// 					log.Printf("    No computers currently connected")
+		// 				}
+		// 				log.Printf("  ==================================================================")
+		// 			}
 
-		}
+		// 			// Notify the handler about the updated network list
+		// 			if s.MessageHandler != nil {
+		// 				s.MessageHandler(signaling_models.TypeComputerNetworks, sigMsg.Payload)
+		// 			}
+		// 		}
+		// 	}
+
+		// }
 	}
 }
 
