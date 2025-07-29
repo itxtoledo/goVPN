@@ -132,6 +132,7 @@ func (ntc *NetworkListComponent) UpdateNetworkList() {
 
 						// Se este computador for o nosso e estivermos conectados a esta rede,
 						// mostrar como conectado independentemente do status online
+						// log.Printf("NetworkListComponent: Computer %s (Network %s) IsOnline: %t", computer.Name, localNetwork.NetworkName, computer.IsOnline)
 						if isConnected && myPublicKey != "" && computer.PublicKey == myPublicKey {
 							activity = icon.ConnectionOn
 						} else if computer.IsOnline {

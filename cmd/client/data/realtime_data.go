@@ -32,10 +32,10 @@ const (
 	EventNetworkLeft EventType = "network_left"
 	// EventNetworkDisconnected é emitido quando desconecta de uma sala sem sair dela
 	EventNetworkDisconnected EventType = "network_disconnected"
-	EventNetworkCreated      EventType = "network_created" // Add this constant for network creation event
-	EventNetworkDeleted      EventType = "network_deleted" // Add this constant for network deletion event
-	EventNetworksChanged     EventType = "networks_changed" // Add this constant for networks list changed event
-	EventComputerJoined      EventType = "computer_joined" // Add this constant for computer joined event
+	EventNetworkCreated      EventType = "network_created"    // Add this constant for network creation event
+	EventNetworkDeleted      EventType = "network_deleted"    // Add this constant for network deletion event
+	EventNetworksChanged     EventType = "networks_changed"   // Add this constant for networks list changed event
+	EventComputerJoined      EventType = "computer_joined"    // Add this constant for computer joined event
 	EventComputerConnected   EventType = "computer_connected" // Add this constant for computer connected event
 	EventSettingsChanged     EventType = "settings_changed"
 	// EventError é emitido quando ocorre um erro
@@ -225,7 +225,6 @@ func (rdl *RealtimeDataLayer) SetNetworks(networks []Network) {
 		log.Printf("SetNetworks: Network %d: ID=%s, Name=%s, Computers=%d", i, net.NetworkID, net.NetworkName, len(net.Computers))
 	}
 
-
 	// Convert []Network to []interface{} of *Network
 	var untypedNetworks []interface{}
 	for i := range networks {
@@ -247,7 +246,7 @@ func (rdl *RealtimeDataLayer) AddNetwork(network Network) {
 			return
 		}
 	}
-	
+
 	newNetworks := append(currentNetworks, &network)
 	rdl.Networks.Set(newNetworks)
 	rdl.EmitEvent(EventNetworksChanged, "Network added", nil)

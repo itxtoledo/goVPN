@@ -115,14 +115,13 @@ func (s *WebSocketServer) HandleWebSocketEndpoint(w http.ResponseWriter, r *http
 
 		// msgID, _ := utils.GenerateMessageID()
 
-		// req := smodels.GetComputerNetworksRequest{
-		// 	BaseRequest: smodels.BaseRequest{
-		// 		PublicKey: publicKeyHeader,
-		// 	},
-		// }
+		req := smodels.GetComputerNetworksRequest{
+			BaseRequest: smodels.BaseRequest{
+				PublicKey: publicKeyHeader,
+			},
+		}
 
-		// TODO enviar sem request id pois isso deve ser uma notificacao e nao resposta
-		// go s.handleGetComputerNetworksWithIP(conn, req, msgID)
+		go s.handleGetComputerNetworksWithIP(conn, req, "")
 	}
 
 	for {
@@ -301,11 +300,6 @@ func (s *WebSocketServer) handleWebRTCSignal(senderConn *websocket.Conn, msgType
 
 func (s *WebSocketServer) handleUpdateClientInfo(conn *websocket.Conn, req smodels.UpdateClientInfoRequest, originalID string) {
 	logger.Info("handleUpdateClientInfo: Received request", "originalID", originalID, "publicKey", req.PublicKey, "clientName", req.ClientName)
-	logger.Debug("handleUpdateClientInfo: Attempting to acquire Lock", "originalID", originalID, "publicKey", req.PublicKey)
-	s.mu.Lock()
-	logger.Debug("handleUpdateClientInfo: Lock acquired", "originalID", originalID, "publicKey", req.PublicKey)
-	logger.Debug("handleUpdateClientInfo: Releasing Lock", "originalID", originalID, "publicKey", req.PublicKey)
-	defer s.mu.Unlock()
 
 	publicKey := req.PublicKey
 	if publicKey == "" {
@@ -628,9 +622,8 @@ func (s *WebSocketServer) handleJoinNetwork(conn *websocket.Conn, req smodels.Jo
 }
 
 func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels.ConnectNetworkRequest, originalID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	// Perform Supabase reads outside the lock
+	logger.Debug("handleConnectNetwork: Received request", "originalID", originalID, "networkID", req.NetworkID, "publicKey", req.PublicKey)
 	network, err := s.supabaseManager.GetNetwork(req.NetworkID)
 	if err != nil {
 		s.sendErrorSignal(conn, "Network does not exist", originalID)
@@ -648,6 +641,10 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 		s.sendErrorSignal(conn, "You must join this network first", originalID)
 		return
 	}
+
+	// Acquire lock for in-memory state modifications
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	connections := s.networks[req.NetworkID]
 	if len(connections) >= s.config.MaxClientsPerNetwork {
@@ -668,6 +665,9 @@ func (s *WebSocketServer) handleConnectNetwork(conn *websocket.Conn, req smodels
 		s.networks[req.NetworkID] = []*websocket.Conn{}
 	}
 	s.networks[req.NetworkID] = append(s.networks[req.NetworkID], conn)
+
+	// Release lock before potentially long-running operations like DB updates or sending signals
+	// The defer will handle unlocking when the function returns.
 
 	err = s.supabaseManager.UpdateNetworkActivity(req.NetworkID)
 	if err != nil {
@@ -986,19 +986,6 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 	if networkID != "" {
 		logger.Debug("handleDisconnect: Client was in a network", "networkID", networkID, "publicKey", publicKey)
 
-		isOwner := false
-		if hasPublicKey {
-			network, err := s.supabaseManager.GetNetwork(networkID)
-			if err == nil && publicKey == network.OwnerPublicKey {
-				isOwner = true
-				logger.Info("handleDisconnect: Network owner disconnected", "publicKey", publicKey[:10]+"...")
-				err := s.supabaseManager.UpdateNetworkActivity(networkID)
-				if err != nil {
-					logger.Error("handleDisconnect: Error updating network activity for owner", "error", err)
-				}
-			}
-		}
-
 		// Notify other members in the network about this client's departure
 		for _, computer := range s.networks[networkID] {
 			if computer != conn {
@@ -1016,32 +1003,35 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		delete(s.clientToPublicKey, conn)
 		logger.Debug("handleDisconnect: Removed client from internal maps", "clientAddr", clientAddr)
 
-		// Update connection status in memory for all networks this client was part of
+		// Update connection status in memory for the network the client just disconnected from
 		if hasPublicKey {
-			computerNetworks, err := s.supabaseManager.GetComputerNetworks(publicKey)
-			if err != nil {
-				logger.Error("handleDisconnect: Error getting computer networks for disconnected client", "error", err, "publicKey", publicKey)
-			} else {
-				for _, cn := range computerNetworks {
-					if computers, ok := s.connectedComputers[cn.NetworkID]; ok {
-						if _, exists := computers[publicKey]; exists {
-							computers[publicKey] = false // Set IsOnline to false
-							logger.Info("handleDisconnect: Computer status set to offline", "publicKey", publicKey, "networkID", cn.NetworkID)
+			if computers, ok := s.connectedComputers[networkID]; ok { // Use networkID directly
+				if _, exists := computers[publicKey]; exists {
+					computers[publicKey] = false // Set IsOnline to false
+					logger.Info("handleDisconnect: Computer status set to offline", "publicKey", publicKey, "networkID", networkID)
 
-							// Notify other clients in this network about the disconnection
-							if connectionsInNetwork, ok := s.networks[cn.NetworkID]; ok {
-								for _, clientConn := range connectionsInNetwork {
-									if clientConn != conn { // Don't send to the disconnected client itself
-										notification := smodels.ComputerDisconnectedNotification{
-											NetworkID: cn.NetworkID,
-											PublicKey: publicKey,
-										}
-										logger.Debug("handleDisconnect: Notifying other clients of computer disconnected", "networkID", cn.NetworkID, "targetConn", clientConn.RemoteAddr().String())
-										s.sendSignal(clientConn, smodels.TypeComputerDisconnected, notification, "")
+					// Notify other clients in this network about the disconnection
+					if connectionsInNetwork, ok := s.networks[networkID]; ok { // Use networkID directly
+						logger.Debug("handleDisconnect: Iterating through connections in network to notify of disconnection", "networkID", networkID, "numConnections", len(connectionsInNetwork))
+						for _, clientConn := range connectionsInNetwork {
+							if clientConn != conn { // Don't send to the disconnected client itself
+								targetPublicKey, targetOk := s.clientToPublicKey[clientConn]
+								if targetOk {
+									notification := smodels.ComputerDisconnectedNotification{
+										NetworkID: networkID, // Use networkID directly
+										PublicKey: publicKey,
 									}
+									logger.Debug("handleDisconnect: Notifying client of computer disconnected", "networkID", networkID, "disconnectedPublicKey", publicKey, "targetClientPublicKey", targetPublicKey)
+									s.sendSignal(clientConn, smodels.TypeComputerDisconnected, notification, "")
+								} else {
+									logger.Warn("handleDisconnect: Could not find public key for client connection in network", "networkID", networkID, "clientAddr", clientConn.RemoteAddr().String())
 								}
+							} else {
+								logger.Debug("handleDisconnect: Skipping notification to the disconnected client itself", "networkID", networkID, "clientAddr", clientConn.RemoteAddr().String())
 							}
 						}
+					} else {
+						logger.Debug("handleDisconnect: No other connections found in network to notify of disconnection", "networkID", networkID)
 					}
 				}
 			}
@@ -1067,12 +1057,6 @@ func (s *WebSocketServer) handleDisconnect(conn *websocket.Conn) {
 		if len(s.networks[networkID]) == 0 {
 			delete(s.networks, networkID)
 			logger.Info("handleDisconnect: Network now empty, removed from memory", "networkID", networkID)
-		}
-
-		if isOwner {
-			logger.Info("handleDisconnect: Owner disconnected but network preserved", "clientAddr", clientAddr, "networkID", networkID)
-		} else {
-			logger.Info("handleDisconnect: Client disconnected from network", "clientAddr", clientAddr, "networkID", networkID)
 		}
 	} else {
 		logger.Info("handleDisconnect: Client not in any network", "clientAddr", clientAddr)
@@ -1260,9 +1244,6 @@ func (s *WebSocketServer) removeClient(conn *websocket.Conn, networkID string) {
 
 // handleStatsEndpoint is the HTTP handler for the /stats endpoint
 func (s *WebSocketServer) isComputerOnline(networkID, publicKey string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	if connectedMap, ok := s.connectedComputers[networkID]; ok {
 		return connectedMap[publicKey]
 	}
@@ -1304,10 +1285,6 @@ func (s *WebSocketServer) handleGetComputerNetworks(conn *websocket.Conn, req sm
 
 // handleGetComputerNetworksWithIP processes a request to get all networks a computer has joined and optionally sends IP info
 func (s *WebSocketServer) handleGetComputerNetworksWithIP(conn *websocket.Conn, req smodels.GetComputerNetworksRequest, originalID string) {
-	logger.Debug("handleGetComputerNetworksWithIP: Attempting to acquire RLock", "originalID", originalID, "publicKey", req.PublicKey)
-	s.mu.RLock()
-	logger.Debug("handleGetComputerNetworksWithIP: RLock acquired", "originalID", originalID, "publicKey", req.PublicKey)
-	defer s.mu.RUnlock()
 
 	if req.PublicKey == "" {
 		s.sendErrorSignal(conn, "Public key is required", originalID)

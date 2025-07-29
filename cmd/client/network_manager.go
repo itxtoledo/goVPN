@@ -247,13 +247,15 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			}
 			nm.refreshNetworkList()
 		case smodels.TypeComputerDisconnected:
+			log.Printf("Attempting to unmarshal TypeComputerDisconnected payload.")
 			var notification smodels.ComputerDisconnectedNotification
 			if err := json.Unmarshal(payload, &notification); err != nil {
-				log.Printf("Failed to unmarshal computer disconnected notification: %v", err)
+				log.Printf("Failed to unmarshal computer disconnected notification: %v. Payload: %s", err, string(payload))
 				return
 			}
 
-			log.Printf("Computer with public key %s disconnected from network %s", notification.PublicKey, notification.NetworkID)
+			log.Printf("Received TypeComputerDisconnected notification. NetworkID: %s, PublicKey: %s", notification.NetworkID, notification.PublicKey)
+			// Find the network and update the computer's online status
 
 			// Find the network and update the computer's online status
 			networks := nm.RealtimeData.GetNetworks()
@@ -261,7 +263,9 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				if network.NetworkID == notification.NetworkID {
 					for j, computer := range network.Computers {
 						if computer.PublicKey == notification.PublicKey {
+							log.Printf("Before update: Computer %s IsOnline: %t", computer.PublicKey, computer.IsOnline)
 							network.Computers[j].IsOnline = false
+							log.Printf("After update: Computer %s IsOnline: %t", network.Computers[j].PublicKey, network.Computers[j].IsOnline)
 							nm.RealtimeData.UpdateNetwork(i, network)
 							log.Printf("Updated computer online status in UI for network %s", network.NetworkName)
 							break
@@ -633,18 +637,15 @@ func (nm *NetworkManager) DisconnectNetwork(networkID string) error {
 		nm.RealtimeData.EmitEvent(data.EventNetworkDisconnected, networkID, nil)
 	}
 
-	// Update the IsOnline status of the current computer in the RealtimeData.Networks list
-	publicKey, _ := nm.ConfigManager.GetKeyPair()
+	// Update the IsOnline status of all computers in the RealtimeData.Networks list
 	networks := nm.RealtimeData.GetNetworks()
 	for i, network := range networks {
 		if network.NetworkID == networkID {
-			for j, computer := range network.Computers {
-				if computer.PublicKey == publicKey {
-					network.Computers[j].IsOnline = false
-					nm.RealtimeData.UpdateNetwork(i, network)
-					log.Printf("Updated current computer's online status to false for network %s", network.NetworkName)
-					break
-				}
+			for j := range network.Computers {
+
+				network.Computers[j].IsOnline = false
+				nm.RealtimeData.UpdateNetwork(i, network)
+
 			}
 			break
 		}

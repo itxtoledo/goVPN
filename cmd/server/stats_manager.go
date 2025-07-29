@@ -49,9 +49,6 @@ func NewStatsManager(cfg Config) *StatsManager {
 
 // UpdateStats atualiza as estatísticas com base nos dados atuais do servidor
 func (sm *StatsManager) UpdateStats(activeConnections, activeNetworks int) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	// Track if we hit a new peak for logging
 	connectionPeak := false
 	networksPeak := false
@@ -94,8 +91,6 @@ func (sm *StatsManager) UpdateStats(activeConnections, activeNetworks int) {
 
 // IncrementConnectionsTotal incrementa o contador de conexões totais
 func (sm *StatsManager) IncrementConnectionsTotal() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	sm.stats.ConnectionsTotal++
 
 	// Log connection milestones
@@ -107,8 +102,6 @@ func (sm *StatsManager) IncrementConnectionsTotal() {
 
 // IncrementMessagesProcessed incrementa o contador de mensagens processadas
 func (sm *StatsManager) IncrementMessagesProcessed() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	sm.stats.MessagesProcessed++
 
 	// Log message milestones
