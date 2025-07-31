@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -41,7 +42,19 @@ func NewConfigManager(customConfigPath string) *ConfigManager {
 			log.Printf("Error getting user home directory: %v", err)
 			homeDir = "."
 		}
-		dataPath = filepath.Join(homeDir, ".govpn")
+		
+		// Use appropriate config directory for each OS:
+		// - Windows: %LOCALAPPDATA%/govpn
+		// - macOS: ~/Library/Application Support/govpn
+		// - Linux: ~/.local/share/govpn
+		switch runtime.GOOS {
+		case "windows":
+			dataPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "govpn")
+		case "darwin": // macOS
+			dataPath = filepath.Join(homeDir, "Library", "Application Support", "govpn")
+		default: // Linux and others
+			dataPath = filepath.Join(homeDir, ".local", "share", "govpn")
+		}
 	}
 
 	cm := &ConfigManager{
