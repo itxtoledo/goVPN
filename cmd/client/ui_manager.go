@@ -66,7 +66,7 @@ func NewUIManager(websocketURL string, computername string, configPath string) *
 	ui.setupComponents()
 
 	// Setup NetworkManager for VPN client now that dependencies are available
-	ui.VPN.SetupNetworkManager(ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI)
+	ui.VPN.SetupNetworkManager(ui.RealtimeData, ui.refreshNetworkList, ui.refreshUI, ui.handleIncomingWebRTCMessage)
 
 	// Configure quit handler
 	ui.MainWindow.SetOnClosed(func() {
@@ -140,6 +140,25 @@ func (ui *UIManager) setupComponents() {
 	ui.MainWindow.SetContent(container.NewPadded(mainContainer))
 }
 
+func (ui *UIManager) handleIncomingWebRTCMessage(peerPublicKey string, message string) {
+	log.Printf("Received WebRTC message from %s: %s", peerPublicKey, message)
+	if globalChatWindow != nil && globalChatWindow.network != nil {
+		// Find the computer name from the network's computer list
+		var senderName string
+		for _, computer := range globalChatWindow.network.Computers {
+			if computer.PublicKey == peerPublicKey {
+				senderName = computer.Name
+				break
+			}
+		}
+
+		if senderName == "" {
+			senderName = "Unknown Peer"
+		}
+		globalChatWindow.addMessage(fmt.Sprintf("%s: %s", senderName, message))
+	}
+}
+
 // ShowSettingsWindow creates and shows the settings window
 // OpenChatWindow creates and shows the chat window
 func (ui *UIManager) OpenChatWindow(network *data.Network) {
@@ -152,10 +171,15 @@ func (ui *UIManager) OpenChatWindow(network *data.Network) {
 		return
 	}
 
+	// Get the current client's public key
+	clientPublicKey, _ := ui.ConfigManager.GetKeyPair()
+
 	globalChatWindow = NewChatWindow(
 		ui.App,
 		network,
-		ui.VPN.WebRTCManager, // Pass the WebRTCManager
+		ui.VPN.NetworkManager.SendMessageToPeer,
+		ui.handleIncomingWebRTCMessage,
+		clientPublicKey,
 	)
 	globalChatWindow.Show()
 }

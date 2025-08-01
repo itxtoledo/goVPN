@@ -34,6 +34,8 @@ type SignalingClient struct {
 	// System to track pending requests by message ID
 	pendingRequests     map[string]chan signaling_models.SignalingMessage
 	pendingRequestsLock sync.Mutex
+
+	writeChan chan signaling_models.SignalingMessage // Channel to queue messages for writing
 }
 
 // NewSignalingClient cria uma nova instância do servidor de sinalização
@@ -44,6 +46,7 @@ func NewSignalingClient(publicKey string, handler SignalingMessageHandler) *Sign
 		PublicKeyStr:    publicKey,
 		MessageHandler:  handler, // Assign the passed handler
 		pendingRequests: make(map[string]chan signaling_models.SignalingMessage),
+		writeChan:       make(chan signaling_models.SignalingMessage, 100), // Buffered channel for writes
 	}
 }
 
@@ -110,6 +113,9 @@ func (s *SignalingClient) Connect(serverAddress string) error {
 	// Configurar handler para mensagens recebidas
 	go s.listenForMessages()
 
+	// Start the write pump goroutine
+	go s.writePump()
+
 	// Marcar como conectado
 	s.Connected = true
 	s.LastHeartbeat = time.Now()
@@ -126,12 +132,39 @@ func (s *SignalingClient) Connect(serverAddress string) error {
 	return nil
 }
 
+func (s *SignalingClient) writePump() {
+	defer func() {
+		log.Println("writePump: Exiting")
+		s.Conn.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-s.writeChan:
+			if !ok {
+				// Channel closed, exit
+				log.Println("writePump: Write channel closed.")
+				return
+			}
+			log.Printf("writePump: Sending message of type %s with ID %s", message.Type, message.ID)
+			err := s.Conn.WriteJSON(message)
+			if err != nil {
+				log.Printf("writePump: Error writing JSON: %v", err)
+				return
+			}
+		}
+	}
+}
+
 // Disconnect desconecta do servidor de sinalização
 func (s *SignalingClient) Disconnect() error {
 	if !s.Connected {
 		// Já está desconectado
 		return nil
 	}
+
+	// Fechar o canal de escrita para sinalizar o writePump para sair
+	close(s.writeChan)
 
 	// Fechar a conexão se existir
 	if s.Conn != nil {
@@ -183,12 +216,9 @@ func (s *SignalingClient) sendPackagedMessage(msgType signaling_models.MessageTy
 		Payload: payloadBytes,
 	}
 
-	// Enviar a mensagem para o servidor
-	log.Printf("Sending message of type %s with ID %s", msgType, messageID)
-	err = s.Conn.WriteJSON(message)
-	if err != nil {
-		return nil, fmt.Errorf("error sending message: %v", err)
-	}
+	// Enviar a mensagem para o servidor através do canal de escrita
+	log.Printf("Queueing message of type %s with ID %s", msgType, messageID)
+	s.writeChan <- message
 
 	// Wait for response with timeout
 	select {

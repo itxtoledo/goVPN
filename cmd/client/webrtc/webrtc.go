@@ -181,19 +181,4 @@ func (w *WebRTCManager) SendMessage(message string) error {
 	return w.dataChannel.SendText(message)
 }
 
-// OnMessageReceived is a callback for when a message is received
-type OnMessageReceived func(message string)
 
-// SetOnMessageReceived sets the callback for incoming messages
-func (w *WebRTCManager) SetOnMessageReceived(callback OnMessageReceived) {
-	w.onDataChannelMessage = func(msg []byte) {
-		callback(string(msg))
-	}
-}
-
-// ReceiveMessage allows external components to inject messages into the WebRTCManager
-func (w *WebRTCManager) ReceiveMessage(message string) {
-	if w.onDataChannelMessage != nil {
-		w.onDataChannelMessage([]byte(message))
-	}
-}

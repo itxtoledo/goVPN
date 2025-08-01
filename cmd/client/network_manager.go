@@ -167,6 +167,17 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 						nm.RealtimeData.UpdateNetwork(i, network)
 						log.Printf("Added computer %s to network %s", computerJoinedNotification.ComputerName, network.NetworkName)
 						nm.RealtimeData.EmitEvent(data.EventComputerJoined, fmt.Sprintf("Computer %s joined network %s", computerJoinedNotification.ComputerName, network.NetworkName), computerJoinedNotification)
+
+						// Automatically connect to the newly joined peer
+						if computerJoinedNotification.PublicKey != nm.ConfigManager.GetConfig().PublicKey {
+							log.Printf("Attempting to connect to new peer: %s", computerJoinedNotification.PublicKey)
+							go func(pk string) {
+								err := nm.ConnectToPeer(pk)
+								if err != nil {
+									log.Printf("Failed to connect to peer %s: %v", pk, err)
+								}
+							}(computerJoinedNotification.PublicKey)
+						}
 					}
 					break
 				}
@@ -239,6 +250,17 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 							nm.RealtimeData.UpdateNetwork(i, network)
 							log.Printf("Updated computer online status in UI for network %s", network.NetworkName)
 							nm.RealtimeData.EmitEvent(data.EventComputerConnected, fmt.Sprintf("Computer %s connected to network %s", notification.ComputerName, network.NetworkName), notification)
+
+							// Automatically connect to the newly connected peer if not already connected
+							if notification.PublicKey != nm.ConfigManager.GetConfig().PublicKey {
+								log.Printf("Attempting to connect to newly connected peer: %s", notification.PublicKey)
+								go func(pk string) {
+									err := nm.ConnectToPeer(pk)
+									if err != nil {
+										log.Printf("Failed to connect to peer %s: %v", pk, err)
+									}
+								}(notification.PublicKey)
+							}
 							break
 						}
 					}
@@ -310,14 +332,15 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 			// Get or create WebRTCManager for this peer
 			peerWebRTCManager, ok := nm.peerConnections[offer.SenderPublicKey]
 			if !ok {
-				log.Printf("Creating new WebRTCManager for peer %s on receiving offer.", offer.SenderPublicKey)
+				log.Printf("TypeSdpOffer: Creating new WebRTCManager for peer %s on receiving offer.", offer.SenderPublicKey)
 				var err error // Declare err here
 				peerWebRTCManager, err = clientwebrtc_impl.NewWebRTCManager()
 				if err != nil {
-					log.Printf("failed to create WebRTC manager for peer %s: %v", offer.SenderPublicKey, err)
+					log.Printf("TypeSdpOffer: Failed to create WebRTC manager for peer %s: %v", offer.SenderPublicKey, err)
 					return
 				}
 				nm.peerConnections[offer.SenderPublicKey] = peerWebRTCManager
+				log.Printf("TypeSdpOffer: WebRTCManager created and added to map for peer %s.", offer.SenderPublicKey)
 
 				// Set up callbacks for this specific peer connection
 				peerWebRTCManager.SetOnICECandidate(func(c *webrtc.ICECandidate) {
@@ -352,10 +375,14 @@ func (nm *NetworkManager) Connect(serverAddress string) error {
 				return
 			}
 
-			_, err = nm.SignalingServer.SendMessage(smodels.TypeSdpAnswer, smodels.SdpAnswer{
-				TargetPublicKey: offer.SenderPublicKey,
-				SDP:             answer.SDP,
-			})
+							// Get the current client's public key
+				publicKey, _ := nm.ConfigManager.GetKeyPair()
+
+				_, err = nm.SignalingServer.SendMessage(smodels.TypeSdpAnswer, smodels.SdpAnswer{
+					SenderPublicKey: publicKey,
+					TargetPublicKey: offer.SenderPublicKey,
+					SDP:             answer.SDP,
+				})
 			if err != nil {
 				log.Printf("failed to send sdp answer for peer %s: %v", offer.SenderPublicKey, err)
 				return
@@ -765,11 +792,17 @@ func (nm *NetworkManager) HandleNetworkDeleted(networkID string) error {
 
 // handleICECandidate handles a new ICE candidate
 func (nm *NetworkManager) handleICECandidate(c *webrtc.ICECandidate, targetPublicKey string) {
+	log.Printf("handleICECandidate called for target: %s, candidate: %v", targetPublicKey, c)
 	if c == nil {
+		log.Printf("handleICECandidate: Received nil candidate for target: %s", targetPublicKey)
 		return
 	}
 
+	// Get the current client's public key
+	publicKey, _ := nm.ConfigManager.GetKeyPair()
+
 	_, err := nm.SignalingServer.SendMessage(smodels.TypeIceCandidate, smodels.IceCandidate{
+		SenderPublicKey: publicKey,
 		TargetPublicKey: targetPublicKey,
 		Candidate:       c.ToJSON().Candidate,
 		SDPMid:          *c.ToJSON().SDPMid,
@@ -808,19 +841,22 @@ func (nm *NetworkManager) handlePeerDataChannelMessage(peerPublicKey string, msg
 
 // ConnectToPeer initiates a WebRTC connection with a peer
 func (nm *NetworkManager) ConnectToPeer(peerPublicKey string) error {
+	log.Printf("ConnectToPeer called for peer: %s", peerPublicKey)
 	// Check if a connection already exists for this peer
 	if _, ok := nm.peerConnections[peerPublicKey]; ok {
-		log.Printf("Connection to peer %s already exists.", peerPublicKey)
+		log.Printf("ConnectToPeer: Connection to peer %s already exists in map.", peerPublicKey)
 		return nil
 	}
 
 	// Create a new WebRTCManager for this peer
 	peerWebRTCManager, err := clientwebrtc_impl.NewWebRTCManager()
 	if err != nil {
+		log.Printf("ConnectToPeer: Failed to create WebRTC manager for peer %s: %v", peerPublicKey, err)
 		return fmt.Errorf("failed to create WebRTC manager for peer %s: %w", peerPublicKey, err)
 	}
 
 	nm.peerConnections[peerPublicKey] = peerWebRTCManager
+	log.Printf("ConnectToPeer: WebRTCManager created and added to map for peer %s.", peerPublicKey)
 
 	// Set up callbacks for this specific peer connection
 	peerWebRTCManager.SetOnICECandidate(func(c *webrtc.ICECandidate) {
@@ -851,7 +887,9 @@ func (nm *NetworkManager) ConnectToPeer(peerPublicKey string) error {
 	}
 
 	// Send offer via signaling server
+	publicKey, _ := nm.ConfigManager.GetKeyPair()
 	_, err = nm.SignalingServer.SendMessage(smodels.TypeSdpOffer, smodels.SdpOffer{
+		SenderPublicKey: publicKey,
 		TargetPublicKey: peerPublicKey,
 		SDP:             offer.SDP,
 	})
@@ -861,6 +899,18 @@ func (nm *NetworkManager) ConnectToPeer(peerPublicKey string) error {
 
 	log.Printf("Initiated WebRTC connection with peer: %s", peerPublicKey)
 	return nil
+}
+
+func (nm *NetworkManager) SendMessageToPeer(peerPublicKey string, message string) error {
+	log.Printf("SendMessageToPeer called for peer: %s", peerPublicKey)
+	peerWebRTCManager, ok := nm.peerConnections[peerPublicKey]
+	if !ok {
+		log.Printf("SendMessageToPeer: No WebRTC connection found for peer %s in map.", peerPublicKey)
+		return fmt.Errorf("no WebRTC connection found for peer %s", peerPublicKey)
+	}
+
+	log.Printf("SendMessageToPeer: Found WebRTCManager for peer %s. Attempting to send message.", peerPublicKey)
+	return peerWebRTCManager.SendMessage(message)
 }
 
 // Disconnect disconnects from the VPN network
